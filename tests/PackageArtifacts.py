@@ -68,7 +68,7 @@ with zipfile.ZipFile(root / f"lyricbridge-source-{version}.zip") as archive:
         assert archive.read("frontend/assets/" + name), "Development demo missing from editable source"
     assert archive.getinfo("scripts/package.sh").external_attr >> 16 & 0o111
     assert ".github/workflows/validate.yml" in archive.namelist()
-    for name in ("package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", "pyproject.toml", "requirements-check.txt", "eslint.config.mjs", ".prettierrc.json", ".prettierignore", "knip.json"):
+    for name in ("package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", "pyproject.toml", "requirements-check.txt", "eslint.config.mjs", ".prettierrc.json", ".prettierignore", "knip.json", "release-please-config.json", ".release-please-manifest.json", "version.txt", "RELEASING.md", "scripts/release.py"):
         assert archive.read(name) == (repository / name).read_bytes(), (
             f"Missing or stale validation/workspace input: {name}"
         )

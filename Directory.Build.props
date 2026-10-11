@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <LyricBridgeVersion>0.1.0</LyricBridgeVersion>
+    <LyricBridgeVersion>0.1.0</LyricBridgeVersion> <!-- x-release-please-version -->
     <LyricBridgeGuid>70a9d327-7e98-4201-88a5-724d39366c40</LyricBridgeGuid>
     <LyricBridgeName>LyricBridge</LyricBridgeName>
     <LyricBridgeOwner>LyricBridge contributors</LyricBridgeOwner>
@@ -8,8 +8,6 @@
     <LyricBridgeDescription>Multilingual karaoke lyrics with a separately installed web renderer and
       writable plugin storage</LyricBridgeDescription>
     <LyricBridgeCategory>General</LyricBridgeCategory>
-    <LyricBridgeChangelog>Initial release; install with empty LyricBridge storage.</LyricBridgeChangelog>
-    <LyricBridgeReleaseTimestamp>2026-10-11T00:00:00Z</LyricBridgeReleaseTimestamp>
     <JellyfinTargetAbi>12.2.0.0</JellyfinTargetAbi>
     <JellyfinReferenceDir Condition="'$(JellyfinReferenceDir)' == ''">
       $(MSBuildThisFileDirectory).build/jellyfin</JellyfinReferenceDir>

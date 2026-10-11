@@ -10,6 +10,10 @@ LyricBridge storage directory, and select a new empty absolute storage directory
 before testing this revision. Keep backups outside the new directory. Never
 remove media or overwrite a production database to satisfy this requirement.
 
+## Automated GitHub releases
+
+See [RELEASING.md](RELEASING.md) for release-token setup, the first `0.1.0` release PR, draft artifact verification, publication and shared-catalog updates. Local build commands below remain available for development.
+
 ## Build and artifacts
 
 Install the SDK selected by `global.json`, the Node.js version selected by `.node-version`, pnpm 10.33.4 (pinned in the root `package.json`), Python 3, and Docker. Both JavaScript projects share the root `pnpm-lock.yaml`; run the frozen install from the repository root. Run:

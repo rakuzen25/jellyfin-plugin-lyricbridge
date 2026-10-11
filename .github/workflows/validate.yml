@@ -1,27 +1,50 @@
 name: Validate release candidate
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ""
+      release_tag:
+        type: string
+        default: ""
+      release_mode:
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      RELEASE_MODE: ${{ inputs.release_mode || false }}
+      RELEASE_TAG: ${{ inputs.release_tag || '' }}
+      REPOSITORY: ${{ github.repository }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - run: mkdir -p dist/evidence
+      - name: Prepare and verify release identity
+        run: python3 scripts/release.py prepare --repository "$REPOSITORY" --tag "$RELEASE_TAG" --environment "$GITHUB_ENV"
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           global-json-file: global.json
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           run_install: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: ".node-version"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
           cache: pip
@@ -33,19 +56,34 @@ jobs:
       - run: pnpm build && pnpm test
       - run: scripts/bootstrap-references.sh
       - run: dotnet restore tests/StorageTests.csproj --locked-mode -m:1 -p:NuGetAuditMode=all -p:WarningsAsErrors=NU1900
-      - run: dotnet test tests/StorageTests.csproj --no-restore -m:1
-      - run: scripts/test-browser.sh
+      - run: dotnet test tests/StorageTests.csproj --no-restore -m:1 2>&1 | tee dist/evidence/backend.log
+      - run: scripts/test-browser.sh --workers=1 2>&1 | tee dist/evidence/browser.log
       - run: python3 tests/WebInstallation.py && sh tests/WebAssetVersions.sh
       - run: pnpm audit
-      - run: python3 tests/ReleaseBoundaries.py && python3 tests/Catalog.py
-      - run: scripts/package.sh
+      - run: python3 tests/ReleaseBoundaries.py && python3 tests/Catalog.py && python3 tests/ReleaseAutomation.py
+      - name: Build archives
+        run: |
+          if [ "$RELEASE_MODE" = true ]; then
+            scripts/package.sh --release
+          else
+            scripts/package.sh
+          fi
       - run: python3 tests/PackageArtifacts.py
-      - run: python3 tests/ReproducibleBuild.py
-      - run: python3 tests/PackageInstallation.py
-      - uses: actions/upload-artifact@v4
+      - run: python3 tests/ReproducibleBuild.py 2>&1 | tee dist/evidence/reproducibility.log
+      - run: python3 tests/PackageInstallation.py 2>&1 | tee dist/evidence/installation.log
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: lyricbridge-candidate
           path: |
             dist/*.zip
             dist/manifest.json
             dist/SHA256SUMS
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: lyricbridge-validation-evidence
+          path: |
+            dist/evidence/
+            dist/reproducibility-*.log
+          if-no-files-found: warn

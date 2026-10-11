@@ -1,0 +1,152 @@
+"""Validate release identity and attach verified artifacts to an existing draft.
+
+Never creates/publishes releases, rewrites tags, overwrites assets, or changes catalogs.
+"""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import tempfile
+import urllib.error
+import urllib.request
+
+from release_metadata import load_release
+
+
+def check_identity(root: Path, tag: str = "") -> str:
+    release = load_release(root)
+    expected = "v" + release.version
+    if (root / "version.txt").read_text().strip() != release.version:
+        raise ValueError("version.txt and Directory.Build.props disagree")
+    if tag and tag != expected:
+        raise ValueError("Release tag does not match plugin metadata")
+    for path in ("src/packages.lock.json", "src/Infrastructure/packages.lock.json", "tests/packages.lock.json"):
+        lock = json.loads((root / path).read_text())
+        for framework in lock["dependencies"].values():
+            for dependency in framework.values():
+                if dependency.get("type") != "Project":
+                    continue
+                for name, value in dependency.get("dependencies", {}).items():
+                    if name in ("LyricBridge.Core", "LyricBridge.Infrastructure") and value != f"[{release.version}, )":
+                        raise ValueError("Project-version metadata is stale in " + path)
+    return expected
+
+
+def repository_name(value: str) -> str:
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", value):
+        raise ValueError("Expected a GitHub owner/repository name")
+    return value
+
+
+def prepare(root: Path, repository: str, tag: str, environment: Path) -> None:
+    repository = repository_name(repository)
+    tag = check_identity(root, tag)
+    with environment.open("a") as output:
+        output.write("LYRICBRIDGE_REPOSITORY_URL=https://github.com/" + repository + "\n")
+        output.write("LYRICBRIDGE_DOWNLOAD_BASE_URL=https://github.com/" + repository + "/releases/download/" + tag + "\n")
+
+
+def github_json(repository: str, endpoint: str):
+    token = os.environ.get("GH_TOKEN", "")
+    if not token:
+        raise ValueError("GH_TOKEN is required to inspect the draft release")
+    request = urllib.request.Request(
+        "https://api.github.com/repos/" + repository + endpoint,
+        headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json", "User-Agent": "LyricBridge-release", "X-GitHub-Api-Version": "2022-11-28"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        raise ValueError("GitHub release inspection failed (HTTP " + str(error.code) + ")") from None
+
+
+def artifact_hashes(root: Path, directory: Path, repository: str, tag: str) -> dict[str, str]:
+    release = load_release(root)
+    expected = {f"lyricbridge-{release.version}.zip", f"lyricbridge-web-{release.version}.zip", f"lyricbridge-source-{release.version}.zip", "manifest.json"}
+    hashes = {}
+    for line in (directory / "SHA256SUMS").read_text().splitlines():
+        digest, name = line.split("  ", 1)
+        if name not in expected or name in hashes or not re.fullmatch(r"[a-f0-9]{64}", digest):
+            raise ValueError("Unexpected or duplicate release checksum entry")
+        if hashlib.sha256((directory / name).read_bytes()).hexdigest() != digest:
+            raise ValueError("Release artifact checksum mismatch: " + name)
+        hashes[name] = digest
+    if set(hashes) != expected:
+        raise ValueError("Release checksums do not cover all required artifacts")
+    catalog = json.loads((directory / "manifest.json").read_text())
+    if len(catalog) != 1 or catalog[0]["guid"] != release.guid or len(catalog[0]["versions"]) != 1:
+        raise ValueError("Unexpected plugin catalog identity")
+    version = catalog[0]["versions"][0]
+    binary = f"lyricbridge-{release.version}.zip"
+    if (version["version"] != release.jellyfin_version or version["targetAbi"] != release.abi
+            or version["sourceUrl"] != f"https://github.com/{repository}/releases/download/{tag}/{binary}"
+            or version["checksum"].lower() != hashlib.md5((directory / binary).read_bytes()).hexdigest()):
+        raise ValueError("Release catalog version, ABI, URL or checksum mismatch")
+    hashes["SHA256SUMS"] = hashlib.sha256((directory / "SHA256SUMS").read_bytes()).hexdigest()
+    return hashes
+
+
+def upload(root: Path, directory: Path, repository: str, tag: str) -> None:
+    repository = repository_name(repository)
+    if not tag:
+        raise ValueError("A release tag is required for artifact upload")
+    check_identity(root, tag)
+    hashes = artifact_hashes(root, directory, repository, tag)
+    release = github_json(repository, "/releases/tags/" + tag)
+    if release.get("draft") is not True or release.get("tag_name") != tag:
+        raise ValueError("Only the matching existing draft release may receive artifacts")
+    reference = github_json(repository, "/git/ref/tags/" + tag)["object"]
+    while reference["type"] == "tag":
+        reference = github_json(repository, "/git/tags/" + reference["sha"])["object"]
+    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    if reference["type"] != "commit" or reference["sha"] != commit:
+        raise ValueError("Release tag moved or does not identify the tested checkout")
+    names = [asset["name"] for asset in release.get("assets", [])]
+    if len(set(names)) != len(names):
+        raise ValueError("Duplicate existing release assets")
+    missing = []
+    with tempfile.TemporaryDirectory(prefix="lyricbridge-existing-assets-") as temporary:
+        for name, digest in hashes.items():
+            if name not in names:
+                missing.append(str(directory / name))
+                continue
+            subprocess.run(["gh", "release", "download", tag, "--repo", repository, "--pattern", name, "--dir", temporary], check=True)
+            if hashlib.sha256((Path(temporary) / name).read_bytes()).hexdigest() != digest:
+                raise ValueError("Conflicting existing release asset: " + name)
+    if missing:
+        subprocess.run(["gh", "release", "upload", tag, *missing, "--repo", repository], check=True)
+    print("Verified artifacts attached; release remains a draft. Publish it after reviewing the successful workflow.")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    check = subparsers.add_parser("check")
+    check.add_argument("--tag", default="")
+    prep = subparsers.add_parser("prepare")
+    prep.add_argument("--repository", required=True)
+    prep.add_argument("--tag", default="")
+    prep.add_argument("--environment", type=Path, required=True)
+    attach = subparsers.add_parser("upload")
+    attach.add_argument("--repository", required=True)
+    attach.add_argument("--tag", required=True)
+    attach.add_argument("--directory", type=Path, default=Path("dist"))
+    args = parser.parse_args()
+    root = Path(__file__).resolve().parent.parent
+    try:
+        if args.command == "check":
+            print("Validated release identity: " + check_identity(root, args.tag))
+        elif args.command == "prepare":
+            prepare(root, args.repository, args.tag, args.environment)
+        else:
+            upload(root, args.directory, args.repository, args.tag)
+    except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
+        parser.exit(1, "Release verification failed: " + (str(error) if isinstance(error, ValueError) else type(error).__name__) + "\n")
+
+
+if __name__ == "__main__":
+    main()

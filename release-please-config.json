@@ -1,0 +1,35 @@
+{
+    "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+    "release-type": "simple",
+    "version-file": "version.txt",
+    "include-component-in-tag": false,
+    "draft": true,
+    "force-tag-creation": true,
+    "bump-minor-pre-major": true,
+    "bump-patch-for-minor-pre-major": true,
+    "packages": {
+        ".": {
+            "extra-files": [
+                {
+                    "type": "generic",
+                    "path": "Directory.Build.props"
+                },
+                {
+                    "type": "json",
+                    "path": "src/packages.lock.json",
+                    "jsonpath": "$..dependencies[?(@property === 'LyricBridge.Core' || @property === 'LyricBridge.Infrastructure')]"
+                },
+                {
+                    "type": "json",
+                    "path": "src/Infrastructure/packages.lock.json",
+                    "jsonpath": "$..dependencies[?(@property === 'LyricBridge.Core' || @property === 'LyricBridge.Infrastructure')]"
+                },
+                {
+                    "type": "json",
+                    "path": "tests/packages.lock.json",
+                    "jsonpath": "$..dependencies[?(@property === 'LyricBridge.Core' || @property === 'LyricBridge.Infrastructure')]"
+                }
+            ]
+        }
+    }
+}

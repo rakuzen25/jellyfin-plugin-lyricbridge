@@ -73,3 +73,7 @@ Implementation follows the [Jellyfin plugin template](https://github.com/jellyfi
 Python validation uses pinned Ruff and Mypy versions. Set up once with `python3 -m venv .venv` and `.venv/bin/python -m pip install -r requirements-check.txt`, then run `pnpm check:python` (or `sh scripts/check-python.sh`). `pnpm check` combines complete frontend typechecking with Python checks. CI checks all maintained Python scripts and tests, including unannotated function bodies; no Docker or provider calls are made by static checks.
 
 JavaScript/TypeScript quality checks use pinned workspace tools. `pnpm lint` runs ESLint recommended JavaScript and TypeScript rules on application code and maintained build/browser tooling; `pnpm lint:fix` applies safe automatic fixes. `pnpm format` applies Prettier with the repository's 150-column/four-space settings (two spaces for YAML), and `pnpm format:check` verifies them. Formatting excludes generated output, third-party source, static visual assets and the configuration HTML template. `pnpm knip` checks unused files, dependencies, exports and types using explicit application/test entrypoints; browser globals remain public through their typed adapters. `pnpm check` runs ESLint, Prettier, Knip, strict TypeScript and Python checks, and CI enforces the same gates.
+
+## Release automation
+
+[Release setup and publication](RELEASING.md) explains the release-please PR workflow, verified draft assets and the separate shared Jellyfin catalog update.
