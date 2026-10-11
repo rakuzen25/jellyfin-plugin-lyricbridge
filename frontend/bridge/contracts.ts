@@ -48,6 +48,7 @@ export interface TrackScope {
     dismissedUpgrade?: string;
     dismissedNotices?: Set<string>;
     dismissedJobs?: Set<string>;
+    jobsRestored?: boolean;
     jobs?: Map<string, GenerationJob>;
     jobActions?: Map<string, { retry: () => Promise<void>; cancel: () => Promise<void> }>;
     versionBrowsing?: Partial<Record<AuxiliaryKind, string>>;

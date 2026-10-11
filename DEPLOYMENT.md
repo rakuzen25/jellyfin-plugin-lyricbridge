@@ -1,6 +1,6 @@
-# Operating LyricBridge 0.1.0
+# Operating LyricBridge
 
-This release candidate targets Jellyfin 12.2 / .NET 10 on Linux x64. Release readiness belongs to the exact hashes and gate results in `dist/validation.json`, not to a build succeeding alone. ARM64 remains experimental and unverified; it does not block x64 acceptance. Publication and installation of this candidate are separate actions.
+LyricBridge targets Jellyfin 12.2 / .NET 10 on Linux x64. Release readiness belongs to the exact tested release artifacts and their workflow evidence, not to a build succeeding alone. ARM64 remains experimental and unverified; it does not block x64 acceptance. Publication and installation of this candidate are separate actions.
 
 ## Storage
 
@@ -53,7 +53,44 @@ pronunciation dictionaries, restricted libraries, rejection preservation, reset
 boundaries, read-only media, disable and uninstall. It also checks separate web
 asset install/uninstall under a Jellyfin base URL. ARM64 remains experimental; no native test host is available.
 
-## Optional web renderer
+## Automatic web renderer (0.1.1 and later)
+
+Install the plugin and restart Jellyfin. **Enable web renderer** defaults to on.
+The plugin serves its embedded JS/CSS and injects ordered, content-versioned tags
+into the Jellyfin-hosted web client. Base URLs are preserved. File Transformation
+is preferred when installed and its registration interface is available; otherwise
+the configured Jellyfin web root must be writable by the server process.
+
+Dashboard → Plugins → LyricBridge → General shows the actual web root, mechanism
+and latest result. **Repair web renderer** retries registration and reconciles the
+index using the saved settings. Save the enabled setting before repairing. Reload
+browser clients after changes. Injection failure leaves backend/native lyrics
+available and does not stop Jellyfin startup.
+
+File Transformation is an optional separately installed plugin, not downloaded or
+bundled by LyricBridge. Its catalog is
+`https://www.iamparadox.dev/jellyfin/plugins/manifest.json`. Use only a build compatible
+with your server. At implementation review, upstream lists targets through 12.1;
+actual File Transformation integration on 12.2 remains unverified. Contract-fixture
+coverage is not installed-plugin validation. Read-only Docker web roots cannot use
+direct injection; do not change server permissions automatically to work around it.
+
+Direct injection backs up `index.html` once and replaces only the LyricBridge marker
+block, preserving other injections and file permissions. It recognizes the current
+manual installer block. Repair/restart reinstalls the block if a web upgrade replaced
+it. Changes inside a Docker container do not survive container recreation; startup
+reapplies them when its web root is writable.
+
+Before disabling/removing the plugin, save **Enable web renderer = off**, confirm the
+status and reload. Disabling the plugin alone cannot run cleanup after restart;
+remove leftover marked tags with the scoped uninstall command below if necessary.
+The original index backup is retained, never restored over unrelated updates.
+Already loaded browser sessions must reload to stop running the renderer.
+
+Native apps are unaffected. Independently hosted Jellyfin Web clients require the
+separate installation below. The 0.1.0 release also requires that separate setup.
+
+## Separate web renderer
 
 Back up the chosen Jellyfin web root. With appropriate filesystem permissions:
 

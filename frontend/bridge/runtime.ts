@@ -8,7 +8,7 @@ import { auxiliary as auxiliaryText } from "./auxiliary.ts";
 import type { BridgeDocument, ServiceCapability, SourceCapability, TrackScope } from "./contracts.ts";
 import { button, e, icon, select } from "./controls.ts";
 import { createDisplayPanel } from "./display-panel.ts";
-import { GenerationMonitor, activeGeneration, parseGenerationJob } from "./generation-state.ts";
+import { GenerationMonitor, activeGeneration, parseGenerationJob, type GenerationJob } from "./generation-state.ts";
 import { createLyricDecoration } from "./lyric-view.ts";
 import type { AuxiliaryKind, Preferences } from "./models.ts";
 import type { PreferenceSave } from "./preferences.ts";
@@ -68,7 +68,8 @@ export function installBridge() {
         [...document.querySelectorAll<HTMLElement>(".lyricsContainer")].filter((n) => n.getClientRects().length && !n.closest(".hide")).at(-1);
     const lyricHost = () =>
         [...document.querySelectorAll<HTMLElement>(".lyricPage")].filter((n) => n.getClientRects().length && !n.closest(".hide,[hidden]")).at(-1);
-    const isLyrics = () => location.hash.includes("lyrics") || location.pathname.endsWith("demo.html");
+    let lyricViewHidden = false;
+    const isLyrics = () => !lyricViewHidden && (location.hash.includes("lyrics") || location.pathname.endsWith("demo.html"));
     function safeMessage(error: unknown) {
         return (
             (error && typeof error === "object" && "message" in error && typeof error.message === "string" ? error.message : "") ||
@@ -161,7 +162,7 @@ export function installBridge() {
         refreshRows();
     }
     function accept(data: BridgeDocument, target: TrackScope, renderNow = false, order: number | undefined = readResponseOrder(data, responseOrder)) {
-        if (scope !== target || (order !== undefined && order < target.accepted)) {
+        if (lyricViewHidden || scope !== target || (order !== undefined && order < target.accepted)) {
             metrics.stale++;
             return;
         }
@@ -201,6 +202,10 @@ export function installBridge() {
         else if (renderNow) refreshRows();
         window.JellyfinLyricMotion?.setSharedTimingOffset?.(documentState().timingCorrection?.seconds || 0);
         if (previousVersions !== versionSignature(current)) updateSongPanel();
+        if (!target.jobsRestored && isLyrics()) {
+            target.jobsRestored = true;
+            void restoreGeneration(target);
+        }
         schedulePoll(target);
     }
     function schedulePoll(target: TrackScope) {
@@ -234,7 +239,7 @@ export function installBridge() {
         const old = noticeTimers.get(node);
         if (old) lifetime.clearTimeout(old.timer);
         noticeTimers.delete(node);
-        node.textContent = message;
+        if (node.textContent !== message) node.textContent = message;
         node.hidden = !message;
         if (ttl && message) {
             const ticket = { timer: 0 };
@@ -1030,98 +1035,127 @@ export function installBridge() {
                 notice(text, "Request already in progress");
                 return;
             }
-            text.textContent = job.state === "pending" ? "Awaiting administrator approval" : "Queued";
-            const banner = e("div", "lb-job-banner"),
-                progress = e("span", "lb-job-progress", text.textContent);
-            banner.setAttribute("role", "status");
-            banner.dataset.jobId = job.id;
-            banner.append(progress);
-            tools?.querySelector<HTMLElement>('[data-job-id="' + job.id + '"]')?.remove();
-            tools?.append(banner);
-            const dismiss = button("Dismiss", () => {
-                target.dismissedJobs ??= new Set();
-                target.dismissedJobs.add(job.id);
-                banner.remove();
-            });
-            const retryJob = async () => {
-                try {
-                    await api("jobs/" + job.id + "/retry", "POST");
-                    if (scope !== target) return;
-                    target.dismissedJobs?.delete(job.id);
-                    dismiss.hidden = true;
-                    banner.querySelector<HTMLElement>(".lb-feedback")?.remove();
-                    poll();
-                } catch (error) {
-                    if (scope !== target) return;
-                    showError(error, banner, retryJob);
-                    dismiss.hidden = false;
-                }
-            };
-            const monitor = new GenerationMonitor({
-                signal: target.controller.signal,
-                read: async (signal) => parseGenerationJob(await api("jobs/" + job.id, "GET", undefined, signal)),
-                changed: async (next) => {
-                    if (scope !== target || !next) return;
-                    requireValue(target.jobs).set(job.id, next);
-                    notice(text, next.request.service + " · " + next.state + " · " + next.progress + "%");
-                    notice(progress, text.textContent);
-                    const active = activeGeneration(next);
-                    cancelButton.hidden = !active;
-                    parentCancel.hidden = !active;
-                    dismiss.hidden = false;
-                    const detailHost = popup?.querySelector<HTMLElement>('[data-song-kind="' + kind + '"]');
-                    if (detailHost?.getClientRects().length)
-                        drawJobDetails(detailHost.querySelector<HTMLElement>(".lb-generation") || detailHost, kind);
-                    else if ((next.failure || next.error) && !target.dismissedJobs?.has(job.id))
-                        showError(
-                            { message: next.failure?.message || next.error, details: next.failure, noticeKey: "job:" + job.id },
-                            banner,
-                            retryJob,
-                        );
-                    if (next.state === "complete") {
-                        notice(progress, "Language rows ready", 4000, () => banner.remove());
-                        notice(text, "Language rows ready", 4000);
-                        await refreshSong();
-                        return;
-                    }
-                    if (next.state === "cancelled" && !next.failure && !next.error) {
-                        notice(progress, "Generation cancelled", 4000, () => banner.remove());
-                        notice(text, "Generation cancelled", 4000);
-                        return;
-                    }
-                },
-                failed: (error, retry) => {
-                    if (scope !== target) return;
-                    showError(error, banner, retry);
-                    dismiss.hidden = false;
-                },
-            });
-            const poll = monitor.poll;
-            const cancelJob = () =>
-                api("jobs/" + job.id + "/cancel", "POST")
-                    .then(poll)
-                    .catch((error) => showError(error, banner));
-            const parentCancel = button("Cancel request", cancelJob),
-                cancelButton = button("Cancel request", cancelJob);
-            parent.append(parentCancel);
-            banner.append(
-                button("Details", () => {
-                    openPopup("Versions");
-                    requireValue(popup)
-                        .querySelector<HTMLElement>('[data-song-kind="' + kind + '"]')
-                        ?.scrollIntoView({ block: "nearest" });
-                }),
-                cancelButton,
-                dismiss,
-            );
-            target.jobs ??= new Map();
-            target.jobActions ??= new Map();
-            target.jobs.set(job.id, job);
-            target.jobActions.set(job.id, { retry: retryJob, cancel: cancelJob });
-            poll();
+            watchGeneration(job, target, parent, text, kind);
         } catch (error) {
             text.textContent = "";
             showError(error, parent);
+        }
+    }
+
+    function watchGeneration(job: GenerationJob, target: TrackScope, parent: HTMLElement, text: HTMLElement, kind: AuxiliaryKind) {
+        if (scope !== target || target.jobs?.has(job.id)) return;
+        text.textContent = job.state === "pending" ? "Awaiting administrator approval" : "Queued";
+        const banner = e("div", "lb-job-banner"),
+            progress = e("span", "lb-job-progress", text.textContent);
+        banner.setAttribute("role", "status");
+        banner.dataset.jobId = job.id;
+        banner.append(progress);
+        tools?.querySelector<HTMLElement>('[data-job-id="' + job.id + '"]')?.remove();
+        tools?.append(banner);
+        const dismiss = button("Dismiss", () => {
+            target.dismissedJobs ??= new Set();
+            target.dismissedJobs.add(job.id);
+            banner.remove();
+        });
+        const retryJob = async () => {
+            try {
+                await api("jobs/" + job.id + "/retry", "POST");
+                if (scope !== target) return;
+                target.dismissedJobs?.delete(job.id);
+                dismiss.hidden = true;
+                banner.querySelector<HTMLElement>(".lb-feedback")?.remove();
+                poll();
+            } catch (error) {
+                if (scope !== target) return;
+                showError(error, banner, retryJob);
+                dismiss.hidden = false;
+            }
+        };
+        const monitor = new GenerationMonitor({
+            signal: target.controller.signal,
+            read: async (signal) => parseGenerationJob(await api("jobs/" + job.id, "GET", undefined, signal)),
+            changed: async (next) => {
+                if (scope !== target || !next) return;
+                requireValue(target.jobs).set(job.id, next);
+                notice(text, next.request.service + " · " + next.state + " · " + next.progress + "%");
+                notice(progress, text.textContent);
+                const active = activeGeneration(next);
+                cancelButton.hidden = !active;
+                parentCancel.hidden = !active;
+                dismiss.hidden = false;
+                const detailHost = popup?.querySelector<HTMLElement>('[data-song-kind="' + kind + '"]');
+                if (detailHost?.getClientRects().length) drawJobDetails(detailHost.querySelector<HTMLElement>(".lb-generation") || detailHost, kind);
+                else if ((next.failure || next.error) && !target.dismissedJobs?.has(job.id))
+                    showError({ message: next.failure?.message || next.error, details: next.failure, noticeKey: "job:" + job.id }, banner, retryJob);
+                if (next.state === "complete") {
+                    notice(progress, "Language rows ready", 4000, () => banner.remove());
+                    notice(text, "Language rows ready", 4000);
+                    await refreshSong();
+                    return;
+                }
+                if (next.state === "cancelled" && !next.failure && !next.error) {
+                    notice(progress, "Generation cancelled", 4000, () => banner.remove());
+                    notice(text, "Generation cancelled", 4000);
+                    return;
+                }
+            },
+            failed: (error, retry) => {
+                if (scope !== target) return;
+                showError(error, banner, retry);
+                dismiss.hidden = false;
+            },
+        });
+        const poll = monitor.poll;
+        const cancelJob = () =>
+            api("jobs/" + job.id + "/cancel", "POST")
+                .then(poll)
+                .catch((error) => showError(error, banner));
+        const parentCancel = button("Cancel request", cancelJob),
+            cancelButton = button("Cancel request", cancelJob);
+        parent.append(parentCancel);
+        const actions = e("div", "lb-job-actions");
+        dismiss.classList.add("lb-job-dismiss");
+        actions.append(
+            button("Details", () => {
+                if (scope !== target) return;
+                openPopup("Versions");
+                const section = requireValue(popup).querySelector<HTMLElement>('[data-song-kind="' + kind + '"]');
+                const generation = section?.querySelector<HTMLDetailsElement>(".lb-generation");
+                if (!generation) return;
+                generation.open = true;
+                drawJobDetails(generation, kind);
+                const detail = generation.querySelector<HTMLElement>('[data-job-detail="' + job.id + '"]');
+                if (detail) {
+                    detail.tabIndex = -1;
+                    detail.focus({ preventScroll: true });
+                    detail.scrollIntoView({ block: "nearest" });
+                }
+            }),
+            cancelButton,
+        );
+        banner.append(actions, dismiss);
+        target.jobs ??= new Map();
+        target.jobActions ??= new Map();
+        target.jobs.set(job.id, job);
+        target.jobActions.set(job.id, { retry: retryJob, cancel: cancelJob });
+        poll();
+    }
+    async function restoreGeneration(target: TrackScope) {
+        try {
+            const result: unknown = await api("jobs?active=true&itemId=" + encodeURIComponent(target.itemId));
+            if (scope !== target) return;
+            if (!Array.isArray(result)) throw new Error("Jellyfin returned invalid active generation jobs.");
+            const jobs = result.map(parseGenerationJob);
+            for (const job of jobs) {
+                if (!activeGeneration(job) || (job.hash && job.hash !== current?.lyrics?.hash)) continue;
+                const kind = job.request.kind;
+                if (kind !== "translation" && kind !== "pronunciation") continue;
+                // The banner owns restored feedback; no detached configuration panel is retained.
+                const host = e("div");
+                watchGeneration(job, target, host, e("span"), kind);
+            }
+        } catch (error) {
+            if (scope === target) showError(error, tools, () => restoreGeneration(target));
         }
     }
 
@@ -1397,6 +1431,28 @@ export function installBridge() {
             closeSearch();
         }
     });
+    // Jellyfin can hide a cached view without changing the URL. Its view
+    // lifecycle owns track UI and polling, independently of preference saves.
+    lifetime.on(
+        document,
+        "viewbeforehide",
+        (event) => {
+            if (!(event.target instanceof Element) || !event.target.matches(".lyricPage")) return;
+            lyricViewHidden = true;
+            cancel();
+        },
+        true,
+    );
+    lifetime.on(
+        document,
+        "viewshow",
+        (event) => {
+            if (!(event.target instanceof Element) || !event.target.matches(".lyricPage")) return;
+            lyricViewHidden = false;
+            ensureTools();
+        },
+        true,
+    );
     lifetime.on(window, "hashchange", () => {
         if (!isLyrics()) cancel();
         else ensureTools();

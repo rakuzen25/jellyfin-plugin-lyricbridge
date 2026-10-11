@@ -14,6 +14,7 @@ export interface BackgroundOptions {
     scale?: number;
     renderScale?: number;
     maxRenderLongEdge?: number;
+    maxFps?: number;
     onContextLost?: () => void;
     onContextRestored?: () => void;
     onTransitionInterrupted?: (count: number) => void;
@@ -65,6 +66,8 @@ export class DynamicBackgroundRenderer {
     scale: number;
     renderScale: number;
     maxRenderLongEdge: number;
+    readonly frameIntervalMs: number;
+    private lastRenderedAt = 0;
     renderedFrames: number;
     animationId: number;
     lastFrameTime: number;
@@ -185,6 +188,8 @@ export class DynamicBackgroundRenderer {
             typeof options.maxRenderLongEdge === "number" && Number.isFinite(options.maxRenderLongEdge)
                 ? Math.max(720, Math.min(4096, options.maxRenderLongEdge))
                 : 2560;
+        this.frameIntervalMs =
+            1000 / (typeof options.maxFps === "number" && Number.isFinite(options.maxFps) ? Math.max(1, Math.min(60, options.maxFps)) : 30);
         this.onContextLost = typeof options.onContextLost === "function" ? options.onContextLost : null;
         this.onContextRestored = typeof options.onContextRestored === "function" ? options.onContextRestored : null;
         this.onTransitionInterrupted = typeof options.onTransitionInterrupted === "function" ? options.onTransitionInterrupted : null;
@@ -833,7 +838,10 @@ export class DynamicBackgroundRenderer {
         const dt = Math.max(0, Math.min(0.1, (timestamp - this.lastFrameTime) / 1000));
         this.lastFrameTime = timestamp;
         this.accumulatedTime += dt * this.animationSpeed;
-        this.render(this.accumulatedTime, timestamp);
+        if (!this.lastRenderedAt || timestamp - this.lastRenderedAt >= this.frameIntervalMs - 1) {
+            this.lastRenderedAt = timestamp;
+            this.render(this.accumulatedTime, timestamp);
+        }
         this.animationId = this.environment.lifecycle.frame(this.renderLoop);
     }
 
@@ -847,6 +855,7 @@ export class DynamicBackgroundRenderer {
         }
         this.isPlaying = true;
         this.lastFrameTime = performance.now();
+        this.lastRenderedAt = 0;
         this.animationId = this.environment.lifecycle.frame(this.renderLoop);
     }
 
@@ -860,6 +869,7 @@ export class DynamicBackgroundRenderer {
         return {
             engine: "kawarp-domain-warp-hardened",
             running: this.isPlaying,
+            targetFps: 1000 / this.frameIntervalMs,
             renderedFrames: this.renderedFrames,
             webgl: true,
             blurSize: this.blurSize,

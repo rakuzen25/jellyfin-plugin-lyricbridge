@@ -25,6 +25,7 @@ test("typed configuration preserves unsaved edits and paginates history", async 
             JapaneseRomaji: true,
         };
         const config = {
+            EnableWebRenderer: true,
             StoragePath: "",
             MinimumMatch: 70,
             ScheduledRetrieval: false,
@@ -60,9 +61,17 @@ test("typed configuration preserves unsaved edits and paginates history", async 
                 if (window.failSave) throw new Error("synthetic");
                 window.saved.push(structuredClone(value));
                 config.StoragePath = value.StoragePath;
+                config.EnableWebRenderer = value.EnableWebRenderer;
             },
             ajax: async (options) => {
                 window.calls.push(options.url);
+                if (options.url.includes("admin/web-renderer"))
+                    return {
+                        enabled: config.EnableWebRenderer,
+                        mechanism: config.EnableWebRenderer ? "direct" : "none",
+                        webRoot: "/fixture/web",
+                        result: config.EnableWebRenderer ? "Direct injection installed" : "Renderer disabled",
+                    };
                 if (options.url.includes("admin/runtime"))
                     return {
                         activeStoragePath: "/actual/fixture/storage",
@@ -87,6 +96,11 @@ test("typed configuration preserves unsaved edits and paginates history", async 
     await expect(page.locator("[data-source]")).toHaveCount(8);
     await expect(page.getByRole("tab")).toHaveCount(5);
     await expect(page.locator("#lb-effective-storage")).toContainText("/actual/fixture/storage");
+    await expect(page.locator("#lb-web-enabled")).toBeChecked();
+    await expect(page.locator("#lb-web-status")).toContainText("/fixture/web");
+    await page.locator("#lb-web-repair").click();
+    await expect.poll(() => page.evaluate(() => window.calls.includes("/base/LyricBridge/admin/web-renderer/repair"))).toBe(true);
+    await page.locator("#lb-web-enabled").uncheck();
     await page.locator("#lb-storage").fill("/synthetic-unsaved");
     await page.getByRole("button", { name: "Save settings", exact: true }).click();
     await expect(page.locator("#lb-config-status")).toContainText("Settings were not saved");
@@ -97,6 +111,7 @@ test("typed configuration preserves unsaved edits and paginates history", async 
     await page.evaluate(() => (window.failSave = false));
     await page.getByRole("button", { name: "Save settings", exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.saved.length)).toBe(1);
+    await expect(page.locator("#lb-web-status")).toContainText("Renderer disabled");
     await expect(page.locator("#lb-storage-warning")).toBeVisible();
     await expect(page.locator("#lb-effective-storage")).toContainText("/actual/fixture/storage");
     await page.getByRole("tab", { name: "Requests", exact: true }).click();

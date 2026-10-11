@@ -1,6 +1,6 @@
 # Shipped dependency and source review
 
-This review covers the exact locked packages used by the 0.1.0 candidate. `dependency-inventory.json` inside the plugin ZIP names every shipped assembly/dictionary file, its version, digest and notices. Artifact validation rejects unidentified binaries and missing material. The final hashes and executed gates belong to `dist/validation.json`.
+This review covers the locked shipped dependencies; renderer injection adds no new packaged dependency. `dependency-inventory.json` inside the plugin ZIP names every shipped assembly/dictionary file, its version, digest and notices. Artifact validation rejects unidentified binaries and missing material. The final hashes and executed gates belong to `dist/validation.json`.
 
 | Shipped component | Terms and corresponding material |
 | --- | --- |
@@ -15,6 +15,6 @@ This review covers the exact locked packages used by the 0.1.0 candidate. `depen
 | Newtonsoft.Json 13.0.3, SharpZipLib 1.4.2, ZstdSharp.Port 0.8.8 | Copyright and MIT license texts supplied |
 | .NET runtime-owned components | Host/framework assemblies are excluded from plugin payloads. Applicable runtime license/third-party notices are retained; no Jellyfin-generated web application is redistributed |
 
-The plugin ZIP includes the LibNMeCab source archive. The editable-source ZIP includes that archive, all vendor notices, maintained renderer sources, dependency lockfiles, pinned-toolchain configuration and build/install scripts. The web ZIP includes MPL and background attribution plus NOTICE naming the paired source archive. Corresponding source availability is satisfied by distributing these archives together; public publication remains a separate action.
+The plugin ZIP includes the LibNMeCab source archive. The editable-source ZIP includes that archive, all vendor notices, maintained renderer sources, dependency lockfiles, pinned-toolchain configuration and build/install scripts. The web ZIP includes MPL and background attribution plus NOTICE naming the paired source archive. Keep corresponding source available by distributing these archives together. File Transformation integration uses its documented reflection protocol; no upstream implementation or binary is copied or bundled.
 
 Browser/build/test tools are restored from lockfiles and are not included as `node_modules` in any archive. The pnpm workspace audit covers both locked toolchains; NuGet restoration refreshes direct and transitive advisories and treats unavailable advisory data as a gate failure. Final advisory results are retained with the exact candidate evidence.

@@ -28,6 +28,7 @@ public sealed class Generation(Func<GenerationPolicy> policy, IGenerationReposit
         try { return job.Profile == services.CurrentProfile(job.Request); }
         catch (ArgumentException) { return false; }
     }
+    public IReadOnlyList<Job> ActiveJobs(Guid? user = null) => store.ActiveJobs(user);
     public IReadOnlyList<Job> Jobs(Guid? user = null, int offset = 0, int limit = 100) => store.JobHistory(user, offset, limit);
     public Job? GetJob(string id) => store.GetJob(id);
     public Variant? Cached(RichLyrics lyrics, GenerationRequest request) { var key = services.Key(lyrics, request); return store.Variants(lyrics.Hash).Where(v => v.CacheKey == key).OrderByDescending(v => v.CreatedAt ?? DateTime.MinValue).FirstOrDefault(); }

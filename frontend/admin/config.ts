@@ -1,4 +1,4 @@
-import type { Configuration, JobSummary } from "./contracts.ts";
+import type { Configuration, JobSummary, WebRendererStatus } from "./contracts.ts";
 import { hostFailure } from "./contracts.ts";
 (() => {
     const id = "70a9d327-7e98-4201-88a5-724d39366c40",
@@ -6,6 +6,8 @@ import { hostFailure } from "./contracts.ts";
         status = query("#lb-config-status");
 
     interface Controls {
+        "#lb-web-enabled": HTMLInputElement;
+        "#lb-web-repair": HTMLButtonElement;
         "#lb-approval": HTMLInputElement;
         "#lb-scheduled": HTMLInputElement;
         "#lb-reset-status": HTMLElement;
@@ -44,6 +46,7 @@ import { hostFailure } from "./contracts.ts";
         return element as S extends keyof Controls ? Controls[S] : HTMLElement;
     }
     let config: Configuration, savedConfig: Configuration;
+    let rendererRuntime: WebRendererStatus | undefined;
     let storageRuntime: { activeStoragePath?: string; configuredStoragePath?: string; restartRequired?: boolean } = {};
     let dirty = false,
         configRevision = 0,
@@ -388,6 +391,9 @@ import { hostFailure } from "./contracts.ts";
         query("#lb-effective-storage").textContent = "Active path: " + (storageRuntime.activeStoragePath || "Unavailable — reload settings to retry");
         query("#lb-storage-warning").hidden =
             !storageRuntime.restartRequired && query("#lb-storage").value.trim() === (savedConfig.StoragePath?.trim() || "");
+        query("#lb-web-status").textContent = rendererRuntime
+            ? `${rendererRuntime.result}. Mechanism: ${rendererRuntime.mechanism}. Web root: ${rendererRuntime.webRoot}`
+            : "Renderer status unavailable — use Repair to retry.";
         const lang = config.Defaults.SourceLanguage;
         const languageOptions = query("#lb-default-language-options");
         if (languageOptions) {
@@ -440,6 +446,7 @@ import { hostFailure } from "./contracts.ts";
         ] as const)
             query(selector).value = String(config[key] ?? "");
         for (const [key, selector] of [
+            ["EnableWebRenderer", "#lb-web-enabled"],
             ["ScheduledRetrieval", "#lb-scheduled"],
             ["AllowUserRequests", "#lb-requests"],
             ["AutoApproveUserRequests", "#lb-approval"],
@@ -756,6 +763,18 @@ import { hostFailure } from "./contracts.ts";
             true,
         );
     });
+    query("#lb-web-repair").onclick = async () => {
+        const control = query("#lb-web-repair");
+        control.disabled = true;
+        try {
+            rendererRuntime = await call<WebRendererStatus>("admin/web-renderer/repair", "POST");
+            refreshDependentControls();
+        } catch {
+            failure(query("#lb-web-status"), "Renderer repair failed. Reload settings and retry.");
+        } finally {
+            control.disabled = false;
+        }
+    };
     async function loadSettings() {
         if (loading) return;
         loading = true;
@@ -766,6 +785,7 @@ import { hostFailure } from "./contracts.ts";
             config = await ApiClient.getPluginConfiguration(id);
             savedConfig = JSON.parse(JSON.stringify(config));
             storageRuntime = await call<typeof storageRuntime>("admin/runtime").catch(() => ({}));
+            rendererRuntime = await call<WebRendererStatus>("admin/web-renderer").catch(() => undefined);
             render();
             dirty = false;
             loaded = true;
@@ -796,6 +816,7 @@ import { hostFailure } from "./contracts.ts";
         config.UserRequestDailyQuota = Number(query("#lb-daily").value);
         config.UserRequestActiveCap = Number(query("#lb-active").value);
         for (const [key, selector] of [
+            ["EnableWebRenderer", "#lb-web-enabled"],
             ["ScheduledRetrieval", "#lb-scheduled"],
             ["AllowUserRequests", "#lb-requests"],
             ["AutoApproveUserRequests", "#lb-approval"],
@@ -812,6 +833,7 @@ import { hostFailure } from "./contracts.ts";
                 ...storageRuntime,
                 restartRequired: storageRuntime.restartRequired || storageChanged,
             }));
+            rendererRuntime = await call<WebRendererStatus>("admin/web-renderer/repair", "POST").catch(() => undefined);
             refreshDependentControls();
             dirty = revision !== configRevision;
             notice(status, dirty ? "Unsaved changes" : "Settings saved", dirty ? 0 : 4000);

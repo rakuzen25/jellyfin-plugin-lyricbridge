@@ -21,6 +21,11 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-web-") as directory:
     assert index.read_text() == original.replace("<body>", "<body>another extension")
     assert (root / "index.html.lyricbridge-backup").read_text() == original
     assert not (root / "lyricbridge").exists()
+    automatic = '<html><head><!-- LyricBridge managed assets --><script defer src="../LyricBridge/assets/lyricbridge.js?v=0123456789abcdef"></script><!-- /LyricBridge managed assets -->\n</head><body>unrelated</body></html>'
+    index.write_text(automatic)
+    subprocess.run(command + ["--uninstall"], check=True)
+    assert index.read_text() == "<html><head></head><body>unrelated</body></html>"
+    assert (root / "index.html.lyricbridge-backup").read_text() == original
 print(
     "PASS: idempotent web install, relative URLs, script order, backup and scoped uninstall."
 )

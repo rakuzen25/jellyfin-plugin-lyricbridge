@@ -629,8 +629,9 @@ export function createArtworkController(dependencies: Dependencies) {
         const mobile = state.performanceProfile === "mobile";
         return {
             ...DYNAMIC_BACKGROUND_SETTINGS,
-            renderScale: mobile ? 0.8 : 0.96,
-            maxRenderLongEdge: mobile ? 1600 : 2560,
+            renderScale: mobile ? 0.65 : 0.75,
+            maxRenderLongEdge: mobile ? 960 : 1600,
+            maxFps: 30,
             onContextLost: () => {
                 state.atmosphereDynamicContextLossCount += 1;
                 state.atmosphereDynamicFallbackReason = "webgl-context-lost";

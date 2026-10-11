@@ -2602,6 +2602,8 @@ export function installRenderer() {
             if (!node) return false;
             const element = node instanceof Element ? node : node.parentElement;
             if (!element) return false;
+            // Bridge status and settings are siblings of lyrics, not native lyric mutations.
+            if (element.closest(".lb-tools,.lb-popup,.lb-search")) return false;
 
             if (typeof element.matches === "function" && element.matches(lyricSelector)) {
                 return true;
@@ -3128,6 +3130,8 @@ export function installRenderer() {
             const current = state.lineData[state.lastActiveLine] || null;
             return {
                 animationLoopErrors: state.animationLoopErrors,
+                animationLoopStarts: state.animationLoopStarts,
+                animationLoopStops: state.animationLoopStops,
                 lastAnimationLoopError: state.lastAnimationLoopError,
                 renderedFrameCount: state.renderedFrameCount,
                 mode: state.performanceMode,
@@ -3181,6 +3185,7 @@ export function installRenderer() {
                 atmosphereWebglFailureCount: state.atmosphereDynamicWebglFailureCount,
                 atmosphereWebglRetryInMs: Math.max(0, state.atmosphereDynamicWebglRetryAt - performance.now()),
                 atmosphereAudioCoupled: false,
+                atmosphereRendering: state.atmosphereDynamicRenderer?.diagnostics() ?? null,
                 atmosphereLyricReactive: false,
                 atmosphereLiveCssBlur: false,
                 atmospherePrebakedBlur: true,

@@ -1,6 +1,24 @@
-# LyricBridge 0.1.0 finding closure
+# LyricBridge finding closure
 
-The implementation targets Jellyfin 12.2 / .NET 10 on Linux x64. Source remediation is complete. The release verdict is attached to the exact artifact digests and executed acceptance gates in `dist/validation.json`; an older build or installation result is never attributed to different archives. Publication and installation of this candidate are excluded. The separately authorized live uninstall is recorded in local validation evidence.
+The implementation targets Jellyfin 12.2 / .NET 10 on Linux x64. Source remediation is complete. The release verdict is attached to the exact artifact digests and executed acceptance gates in `dist/validation.json`; an older build or installation result is never attributed to different archives. Publication and live installation are performed separately by the repository owner. The separately authorized live uninstall is recorded in local validation evidence.
+
+## Automatic renderer preparation for 0.1.1
+
+| Finding | Correction | Verification |
+| --- | --- | --- |
+| Web enhancement required a separate installation | Hosted web integration reuses embedded assets, prefers File Transformation, falls back to atomic marked index injection | Backend injection/registration fixtures, injected browser route fixtures and disposable official-image installation |
+| Injection could duplicate an existing manual install or erase other changes | Normalize only the current LyricBridge marker block; retain the first backup and file modes | Idempotence, manual-block replacement, scoped uninstall and unrelated-content preservation tests |
+| Administrators could not diagnose or disable injection | Enabled setting, admin-only status/repair, scoped disable cleanup and reload instructions | Typed administrator fixture and installed-plugin ordinary/admin permissions |
+| Short whole-phrase Japanese cues wrapped despite available space | Replace cyclic word percentage sizing with a non-cyclic viewport bound | Whole-phrase fixtures reproduce the failure before the change and pass in all four browser projects |
+| Details scrolled to collapsed generation controls and lost focus | Expand the correct generation section, focus the job and preserve focus after asynchronous controls load | Generation workflow fixtures, including mobile |
+| Settings and Find lyrics survived cached-view closure | Handle Jellyfin viewbeforehide/viewshow independently of the URL; dispose track UI/polling and reject hidden-view responses without cancelling accepted preference saves | Cached-view exit regression in desktop/mobile Chromium, Firefox and WebKit |
+| Running jobs disappeared after leaving the lyrics page | Restore active item jobs from an authenticated indexed query; one track-owned monitor per job, including retries | Repeated real-route exit/return and bounded polling fixtures |
+| Generation progress could trigger unnecessary renderer work | Exclude bridge chrome from lyric mutation checks, skip unchanged status text and remove persistent progress backdrop blur | Sustained playback fixture with active generation and resource/polling measurements; hardware-specific fan/GPU behavior remains unverified |
+| Steady playback imposed excessive high-DPI background work | Cap background at 30 fps and 1600/960-pixel long edge while retaining 60 fps lyric updates and continuous shader time | Renderer diagnostics and sustained playback cap/resource regressions; actual device thermals remain unverified |
+| Seeking/version changes could conceal accumulated playback work | Add real translation replacement, seek and route re-entry scheduler regressions | Playback-stability fixtures; no duplicate scheduler observed in controlled tests |
+| Nested artifact workflow could fail startup from insufficient permissions | Explicit actions-read permission at both reusable-workflow caller and download job | Actionlint passes; remote 0.1.1 workflow execution belongs to the owner's release steps |
+
+File Transformation's published catalog currently lists ABI targets through 12.1. The optional protocol is fixture-tested; real installed integration on 12.2 is not claimed. Direct injection is the tested 12.2 path. Local release-version simulation does not constitute a published or Git-tagged 0.1.1 artifact; the owner's release workflow must rebuild and validate the actual release commit.
 
 ## Findings and evidence
 

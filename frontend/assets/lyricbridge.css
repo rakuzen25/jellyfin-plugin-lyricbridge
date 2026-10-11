@@ -267,3 +267,16 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar { flex-wrap:wra
 
 .lb-result-artists { display:block; font-size:12px; line-height:1.5; color:#c6c6ce; margin-top:4px; }
 .lb-search-failures { flex-basis:100%; min-width:0; }
+
+/* Keep dismissal beside status even when job actions need a second row. */
+.lb-job-banner { display:grid; grid-template-columns:minmax(0,1fr) auto auto; }
+.lb-job-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.lb-job-banner > .lb-error { grid-column:1 / -1; }
+@media (max-width:760px) {
+    .lb-job-progress { grid-column:1 / 3; grid-row:1; }
+    .lb-job-dismiss { grid-column:3; grid-row:1; }
+    .lb-job-actions { grid-column:1 / -1; grid-row:2; }
+}
+
+/* Persistent progress chrome must not continuously blur the animated lyric backdrop. */
+.lb-tools { backdrop-filter:none; -webkit-backdrop-filter:none; }

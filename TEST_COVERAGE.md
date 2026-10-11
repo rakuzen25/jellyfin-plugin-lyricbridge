@@ -14,6 +14,7 @@ All application tests use synthetic responses or an owned disposable Jellyfin in
 | Missing/instrumental/partial/failed retrieval recovery | `retrieval-states.spec.cjs` and installed-plugin native/import tests |
 | Artwork races/fallback/hidden view, teardown/reinstallation and bounded ownership | `artwork-lifecycle.spec.cjs`, `renderer-lifecycle.spec.cjs`, lifecycle/artwork-loader unit tests |
 | Sustained playback with artwork/navigation, CPU/layout work and owner counts | `long-session.spec.cjs`, `compare-playback-performance.cjs --long` |
+| Automatic injection, permission failures, backup/cleanup, registration contracts, root/base URLs and renderer settings | `WebRendererTests.cs`, `WebInstallation.py`, `PackageInstallation.py`, `injected-renderer.spec.cjs`, `admin-configuration.spec.cjs` |
 | Configuration/storage-path validation and history pagination | `admin-configuration.spec.cjs`, backend configuration/repository tests |
 
 The retired scripts listed below duplicated these workflows or relied on credentials, fixed paths, old selectors, direct SQLite edits, or live endpoints. Their useful behavior has been consolidated into the maintained checks above; historical assertions are not counted as current passes. Live-provider connectivity, physical-device performance and ARM64 remain explicitly unverified. The pinned screenshot baseline and its provenance remain unchanged.
@@ -71,3 +72,5 @@ The retired scripts listed below duplicated these workflows or relied on credent
 - `ui-feedback.cjs`
 - `ui-redesign.cjs`
 - `upgrade-api.cjs`
+
+Generation UI regressions cover whole-phrase Japanese cues, Details expansion/focus after asynchronous control creation, and active-job restoration across real route changes. Sustained playback runs with a synthetic running job and records heap usage, script/layout time, lifecycle counts and polling rate. These controlled browser measurements do not claim physical-device fan or GPU validation.

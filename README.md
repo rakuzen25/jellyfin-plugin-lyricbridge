@@ -1,6 +1,6 @@
 # LyricBridge for Jellyfin
 
-Version 0.1.0 release candidate for Jellyfin 12.2 / .NET 10 on Linux x64. ARM64 remains experimental and unverified. Exact tested artifact hashes and release-gate results are recorded in `dist/validation.json`; this revision has not been published or deployed. See [operating instructions](DEPLOYMENT.md) and [changes](CHANGELOG.md). This revision requires fresh LyricBridge storage; unsupported databases are rejected without migration or deletion.
+LyricBridge targets Jellyfin 12.2 / .NET 10 on Linux x64. Version 0.1.0 is published; automatic web-renderer injection is being prepared for 0.1.1. ARM64 remains experimental and unverified. Release readiness applies to the exact artifacts tested by the release workflow. See [operating instructions](DEPLOYMENT.md) and [changes](CHANGELOG.md). The initial 0.1.0 storage baseline rejects unsupported preview databases without migration or deletion. The 0.1.1 renderer changes preserve 0.1.0 storage.
 
 ## Storage and read-only music
 
@@ -56,7 +56,7 @@ The plugin processes the whole song, verifies line identities, and caches valid 
 
 Once published, add the maintainer's catalog URL in Dashboard → Plugins → Repositories, install LyricBridge from the catalog, and restart Jellyfin. The plugin ZIP contains the required dependencies, dictionaries and notices; no custom server image is required. Version 0.1.0 requires fresh LyricBridge storage. Back up existing storage and choose a new empty writable directory; no migration or automatic deletion is performed.
 
-The enhanced Jellyfin Web renderer is installed separately from the matching web-assets ZIP using `scripts/web-assets.py` and an explicit web-root path. The installer backs up the index, orders and versions the asset tags, and supports Jellyfin base URLs. Reinstall these assets after a Jellyfin Web upgrade. See [operating instructions](DEPLOYMENT.md) for installation and scoped uninstall commands.
+Starting with 0.1.1, the enhanced renderer loads automatically in Jellyfin-hosted Web after plugin installation and restart. Enable web renderer defaults to on: File Transformation is preferred when available, otherwise LyricBridge adds a marked block to a writable web index. Settings show status and offer Repair. A read-only web root requires File Transformation compatible with the server, or separate web installation. Independently hosted clients still use the web-assets ZIP and `scripts/web-assets.py`. See [operating instructions](DEPLOYMENT.md) for setup and scoped uninstall.
 
 Build reproducible plugin, web and editable-source ZIPs with `scripts/package.sh`, after running `scripts/bootstrap-references.sh`. Release-mode packaging requires HTTPS repository/download settings and `--release`. Disable or uninstall the plugin through Jellyfin's plugin controls and restart; remove web assets separately. Preserve the plugin storage unless you explicitly intend to reset managed data. Scheduled retrieval starts disabled; after sample validation, enable it and configure/run **LyricBridge: retrieve missing lyrics** in Scheduled Tasks.
 

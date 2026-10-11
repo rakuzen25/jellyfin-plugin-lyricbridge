@@ -291,6 +291,67 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         )
         assert plugin["Status"] == "Active", "Installed plugin is not active"
         configuration = call_json(f"/Plugins/{PLUGIN}/Configuration")
+
+        def renderer_index():
+            with urllib.request.urlopen(base + "/web/index.html") as response:
+                return response.read().decode()
+
+        def verify_renderer():
+            state = call_json("/LyricBridge/admin/web-renderer/repair", "POST", {})
+            assert state["enabled"] and state["mechanism"] == "direct", state
+            html = renderer_index()
+            assert html.count("<!-- LyricBridge managed assets -->") == 1
+            urls = re.findall(r'(?:src|href)="([^"]*LyricBridge/assets/[^"]+)"', html)
+            assert len(urls) == 4, html
+            for url in urls:
+                with urllib.request.urlopen(
+                    urllib.parse.urljoin(base + "/web/index.html", url)
+                ) as response:
+                    assert response.status == 200 and response.read()
+
+        verify_renderer()
+        restart_server()
+        verify_renderer()
+        restart_server()
+        verify_renderer()
+        configuration["EnableWebRenderer"] = False
+        call(f"/Plugins/{PLUGIN}/Configuration", "POST", configuration)
+        assert not call_json("/LyricBridge/admin/web-renderer/repair", "POST", {})[
+            "enabled"
+        ]
+        assert "<!-- LyricBridge managed assets -->" not in renderer_index()
+        configuration["EnableWebRenderer"] = True
+        call(f"/Plugins/{PLUGIN}/Configuration", "POST", configuration)
+        verify_renderer()
+        # A prior manual install is replaced without loading either renderer twice.
+        subprocess.run(
+            [
+                sys.executable,
+                str(installer),
+                "--web-root",
+                str(web_root),
+                "--assets",
+                str(web_assets),
+            ],
+            check=True,
+        )
+        docker(
+            "cp",
+            str(web_root / "index.html"),
+            CONTAINER + ":/jellyfin/jellyfin-web/index.html",
+        )
+        verify_renderer()
+        assert "lyricbridge/lyricbridge.js" not in renderer_index()
+        # Verify root URLs as well as the existing nonempty base URL.
+        network["BaseUrl"] = ""
+        call("/System/Configuration/network", "POST", network)
+        base = base.removesuffix("/fixture")
+        restart_server()
+        verify_renderer()
+        print(
+            "PASS: automatic embedded renderer, ordered assets, root/base URL, repeated restarts and disable/re-enable.",
+            flush=True,
+        )
         runtime = call_json("/LyricBridge/admin/runtime")
         assert (
             runtime["activeStoragePath"].startswith("/")
@@ -414,6 +475,8 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         assert call_json("/LyricBridge/preferences")["originalSize"] == 51
         for path, method, body in [
             ("/LyricBridge/admin/runtime", "GET", None),
+            ("/LyricBridge/admin/web-renderer", "GET", None),
+            ("/LyricBridge/admin/web-renderer/repair", "POST", {}),
             ("/LyricBridge/admin/reset", "POST", {"confirmation": "RESET"}),
             (f"/Plugins/{PLUGIN}/Configuration", "POST", configuration),
         ]:
@@ -465,6 +528,10 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
             "PASS: native lyrics, packaged dictionary, restricted libraries, rejection preservation, reset boundaries and read-only media.",
             flush=True,
         )
+        configuration["EnableWebRenderer"] = False
+        call(f"/Plugins/{PLUGIN}/Configuration", "POST", configuration)
+        call("/LyricBridge/admin/web-renderer/repair", "POST", {})
+        assert "<!-- LyricBridge managed assets -->" not in renderer_index()
         call(f"/Plugins/{PLUGIN}/{HOST_VERSION}/Disable", "POST", {})
         restart_server()
         plugin = next(
@@ -481,6 +548,71 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         )
         print(
             "PASS: disable/restart and uninstall/restart; only disposable storage was used.",
+            flush=True,
+        )
+        # A second owned fixture proves a truly read-only image still starts safely.
+        docker("rm", "-f", "-v", CONTAINER)
+        readonly_plugin = root / "readonly-plugin"
+        with zipfile.ZipFile(archive) as plugin_archive:
+            plugin_archive.extractall(readonly_plugin)
+        token = None
+        docker(
+            "run",
+            "-d",
+            "--platform",
+            "linux/amd64",
+            "--name",
+            CONTAINER,
+            "--label",
+            "lyricbridge.disposable-test=true",
+            "--read-only",
+            "-p",
+            f"127.0.0.1:{port}:8096",
+            "--tmpfs",
+            "/config:rw,size=3g",
+            "--tmpfs",
+            "/cache:rw,size=3g",
+            "--tmpfs",
+            "/tmp:rw,size=128m",
+            "-v",
+            f"{readonly_plugin}:/fixture-plugin:ro",
+            "--entrypoint",
+            "/bin/sh",
+            IMAGE,
+            "-c",
+            f"mkdir -p /config/plugins/LyricBridge_{HOST_VERSION}; cp -r /fixture-plugin/. /config/plugins/LyricBridge_{HOST_VERSION}/; "
+            'while true; do /jellyfin/jellyfin & child=$!; echo "$child" > /tmp/lyricbridge-server.pid; wait "$child"; sleep 1; done',
+        )
+        ready()
+        call(
+            "/Startup/Configuration",
+            "POST",
+            {
+                "UICulture": "en-US",
+                "MetadataCountryCode": "US",
+                "PreferredMetadataLanguage": "en",
+            },
+        )
+        call("/Startup/User")
+        call("/Startup/User", "POST", {"Name": "fixture-admin", "Password": password})
+        call("/Startup/Complete", "POST", {})
+        token = call_json(
+            "/Users/AuthenticateByName",
+            "POST",
+            {"Username": "fixture-admin", "Pw": password},
+        )["AccessToken"]
+        credentials.append(token)
+        readonly_status = call_json(
+            "/LyricBridge/admin/web-renderer/repair", "POST", {}
+        )
+        assert readonly_status["enabled"] and readonly_status["mechanism"] == "none", (
+            readonly_status
+        )
+        assert "permissions" in readonly_status["result"]
+        assert "<!-- LyricBridge managed assets -->" not in renderer_index()
+        assert isinstance(call_json("/LyricBridge/services"), list)
+        print(
+            "PASS: read-only official image keeps Jellyfin and backend available with actionable injection failure.",
             flush=True,
         )
     except Exception:

@@ -191,7 +191,7 @@
     text-rendering: optimizeLegibility;
 
     transform-origin: 4% 50%;
-    transform: translate3d(0, 0, 0) scale(0.986);
+    transform: translate(0, 0) scale(0.986);
     opacity: 0.34;
     filter: blur(var(--ak-blur));
 
@@ -378,7 +378,7 @@
 .lyricPage .lyricsLine.ak-enhanced-line.ak-current {
     opacity: 1;
     filter: none;
-    transform: translate3d(0, 0, 0) scale(1.012);
+    transform: translate(0, 0) scale(1.012);
     text-shadow: none;
     z-index: 2;
 }
@@ -413,7 +413,7 @@
     transform-origin: 4% 50%;
     opacity: 0.4;
     filter: blur(0.01em);
-    transform: translate3d(0, 0, 0) scale(0.996);
+    transform: translate(0, 0) scale(0.996);
     transition:
         opacity 560ms cubic-bezier(0.22, 0.72, 0.18, 1),
         filter 560ms ease,
@@ -428,19 +428,19 @@
 .lyricPage .ak-instrumental-gap-line.ak-future {
     opacity: 0.4;
     filter: blur(0.01em);
-    transform: translate3d(0, 0, 0) scale(0.996);
+    transform: translate(0, 0) scale(0.996);
 }
 
 .lyricPage .ak-instrumental-gap-line.ak-past {
     opacity: 0.44;
     filter: blur(0.008em);
-    transform: translate3d(0, 0, 0) scale(0.997);
+    transform: translate(0, 0) scale(0.997);
 }
 
 .lyricPage .ak-instrumental-gap-line.ak-active {
     opacity: 1;
     filter: none;
-    transform: translate3d(0, 0, 0) scale(1.012);
+    transform: translate(0, 0) scale(1.012);
     z-index: 2;
 }
 
@@ -579,7 +579,7 @@
 .lyricPage .lyricsLine.ak-background-vocal.ak-current,
 .lyricPage .lyricsLine.ak-background-vocal.ak-overlap-current {
     opacity: 0.92 !important;
-    transform: translate3d(0, 0, 0) scale(1.004);
+    transform: translate(0, 0) scale(1.004);
 }
 
 .lyricPage .lyricsLine.ak-background-vocal .ak-glow-core {
@@ -612,12 +612,12 @@
 }
 
 .lyricPage .lyricsLine.ak-enhanced-line.ak-background-vocal.ak-future {
-    transform: translate3d(0, 0.035em, 0) scale(0.986);
+    transform: translate(0, 0.035em) scale(0.986);
 }
 
 .lyricPage .lyricsLine.ak-enhanced-line.ak-background-vocal.ak-current,
 .lyricPage .lyricsLine.ak-enhanced-line.ak-background-vocal.ak-overlap-current {
-    transform: translate3d(0, 0, 0) scale(1.004);
+    transform: translate(0, 0) scale(1.004);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1018,7 +1018,7 @@
 .lyricPage .lyricsLine.ak-enhanced-line.ak-motion-handoff {
     opacity: 0.64 !important;
     filter: none !important;
-    transform: translate3d(0, 0, 0) scale(1.002) !important;
+    transform: translate(0, 0) scale(1.002) !important;
     transition:
         opacity 320ms ease,
         transform 320ms cubic-bezier(0.41, 0, 0.12, 0.99) !important;
@@ -1456,7 +1456,11 @@
     overflow-wrap: anywhere;
 }
 .lyricPage .ak-word {
-    max-width: 100%;
+    /* An absolute viewport bound avoids cyclic percentages inside native fit-content rows. */
+    max-width: min(72rem, calc(100vw - 5rem));
     box-sizing: border-box;
     overflow-wrap: anywhere;
 }
+
+/* Inactive glyph shadows need no raster surfaces until their line becomes active. */
+.lyricPage .lyricsLine:not(.ak-current):not(.ak-motion-handoff) .ak-glow-layer { display:none; }

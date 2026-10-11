@@ -5,7 +5,7 @@
     <LyricBridgeName>LyricBridge</LyricBridgeName>
     <LyricBridgeOwner>LyricBridge contributors</LyricBridgeOwner>
     <LyricBridgeOverview>Multilingual karaoke lyrics</LyricBridgeOverview>
-    <LyricBridgeDescription>Multilingual karaoke lyrics with a separately installed web renderer and
+    <LyricBridgeDescription>Multilingual karaoke lyrics with an automatically injected web renderer and
       writable plugin storage</LyricBridgeDescription>
     <LyricBridgeCategory>General</LyricBridgeCategory>
     <JellyfinTargetAbi>12.2.0.0</JellyfinTargetAbi>

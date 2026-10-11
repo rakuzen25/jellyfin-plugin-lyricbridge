@@ -11,6 +11,7 @@ namespace LyricBridge;
 
 public sealed class Configuration : BasePluginConfiguration
 {
+    public bool EnableWebRenderer { get; set; } = true;
     public string StoragePath { get; set; } = "";
     public SourceConfig[] Sources { get; set; } = new[] { "QQ", "NetEase", "Kugou", "Soda", "Musixmatch", "Spotify", "AppleMusic", "LRCLIB" }.Select(n => new SourceConfig { Name = n }).ToArray();
     public int MinimumMatch { get; set; } = 70;
@@ -58,6 +59,8 @@ public sealed class Registration : IPluginServiceRegistrator
 {
     public void RegisterServices(IServiceCollection services, IServerApplicationHost host)
     {
+        services.AddSingleton<WebRendererIntegration>();
+        services.AddHostedService(sp => sp.GetRequiredService<WebRendererIntegration>());
         services.AddSingleton<LibraryAccess>();
         services.AddSingleton<ISelectionRepository>(sp => sp.GetRequiredService<Store>());
         services.AddSingleton<SelectionService>();

@@ -22,7 +22,7 @@ public sealed class SafeExceptionFilter(ILogger<SafeExceptionFilter> logger) : I
     }
 }
 [ApiController, Authorize, Route("LyricBridge"), TypeFilter(typeof(SafeExceptionFilter))]
-public sealed class Api(SelectionService selection, LanguageVersionService versions, TimingService timing, LyricQueryService query, LibraryAccess access, PreferenceService preferences, ManagedLibraryMaintenance maintenance, Generation generation, LanguageServices languages, Discovery discovery, LocalPronunciation local) : ControllerBase
+public sealed class Api(SelectionService selection, LanguageVersionService versions, TimingService timing, LyricQueryService query, LibraryAccess access, PreferenceService preferences, ManagedLibraryMaintenance maintenance, Generation generation, LanguageServices languages, Discovery discovery, LocalPronunciation local, WebRendererIntegration renderer) : ControllerBase
 {
     private IActionResult JsonData(object? value) => new JsonResult(value, Codec.Json);
     private IActionResult Error(int status, string code, string message, bool retryable = false) => new JsonResult(new { error = SafeError.Create(code, message, retryable) }, Codec.Json) { StatusCode = status };
@@ -180,10 +180,12 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
         catch (InvalidOperationException e) { return Error(409, e.Message.StartsWith("Daily") ? "daily_quota" : "active_quota", e.Message, true); }
     }
     [HttpGet("jobs")]
-    public IActionResult Jobs(int offset = 0, int limit = 100)
+    public IActionResult Jobs(int offset = 0, int limit = 100, bool active = false, Guid? itemId = null)
     {
         if (offset < 0 || limit is < 1 or > 500) return Error(400, "invalid_pagination", "Choose a nonnegative offset and a limit from 1 to 500.");
-        return JsonData(generation.Jobs(Admin ? null : UserId, offset, limit).Where(j => Item(j.ItemId) != null));
+        if (itemId.HasValue && Item(itemId.Value) == null) return NotFound();
+        var jobs = active ? generation.ActiveJobs(Admin ? null : UserId) : generation.Jobs(Admin ? null : UserId, offset, limit);
+        return JsonData(jobs.Where(j => (!itemId.HasValue || j.ItemId == itemId.Value) && Item(j.ItemId) != null));
     }
     [HttpGet("jobs/{jobId}")]
     public IActionResult JobStatus(string jobId)
@@ -193,8 +195,12 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
     }
     [HttpPost("jobs/{id}/{operation}")]
     public IActionResult JobAction(string id, string operation) { var job = generation.GetJob(id); if (job == null || Item(job.ItemId) == null) return NotFound(); try { return JsonData(generation.Action(id, operation, UserId, Admin)); } catch (UnauthorizedAccessException) { return Error(403, "permission_denied", "You cannot perform this request action."); } catch (InvalidOperationException) { return Error(409, "action_unavailable", "This action is not available in the current request state."); } }
+    [HttpGet("admin/web-renderer")]
+    public IActionResult WebRenderer() => Admin ? JsonData(renderer.Status) : Forbid();
+    [HttpPost("admin/web-renderer/repair")]
+    public async Task<IActionResult> RepairWebRenderer(CancellationToken token) => Admin ? JsonData(await renderer.Repair(token)) : Forbid();
     [AllowAnonymous, HttpGet("assets/{name}")]
-    public IActionResult Asset(string name) { if (name is not ("lyricbridge.js" or "lyricbridge.css" or "jellyfin-lyric-motion.js" or "jellyfin-lyric-motion.css" or "demo.html")) return NotFound(); var stream = typeof(Plugin).Assembly.GetManifestResourceStream("Jellyfin.Plugin.LyricBridge.Web." + name); return stream == null ? NotFound() : File(stream, name.EndsWith(".js") ? "application/javascript" : name.EndsWith(".css") ? "text/css" : "text/html"); }
+    public IActionResult Asset(string name) { if (name is not ("lyricbridge.js" or "lyricbridge.css" or "jellyfin-lyric-motion.js" or "jellyfin-lyric-motion.css")) return NotFound(); var stream = typeof(Plugin).Assembly.GetManifestResourceStream("Jellyfin.Plugin.LyricBridge.Web." + name); return stream == null ? NotFound() : File(stream, name.EndsWith(".js") ? "application/javascript" : name.EndsWith(".css") ? "text/css" : "text/html"); }
     private static bool LanguageTag(string value) => PreferenceService.LanguageTag(value);
 }
 public sealed record SearchInput(string? Title = null, string? Artist = null, string? Source = null);

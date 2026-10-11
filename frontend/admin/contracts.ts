@@ -29,6 +29,7 @@ interface DisplayDefaults {
 }
 export interface Configuration {
     [key: string]: unknown;
+    EnableWebRenderer: boolean;
     StoragePath: string;
     MinimumMatch: number;
     ScheduledRetrieval: boolean;
@@ -68,4 +69,11 @@ declare global {
         getPluginConfiguration(id: string): Promise<Configuration>;
         updatePluginConfiguration(id: string, value: Configuration): Promise<unknown>;
     };
+}
+
+export interface WebRendererStatus {
+    enabled: boolean;
+    mechanism: string;
+    webRoot: string;
+    result: string;
 }

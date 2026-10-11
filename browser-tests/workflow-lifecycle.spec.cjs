@@ -68,9 +68,84 @@ test("generation approval, settings change and explicit retry remain visible", a
     await panel.locator("summary").first().click();
     await panel.getByRole("button", { name: "Generate translation", exact: true }).click();
     await expect(page.locator(".lb-job-progress")).toContainText("pending");
+    await page.locator(".lb-popup").getByRole("button", { name: "Close", exact: true }).click();
+    await page.locator(".lb-job-banner").getByRole("button", { name: "Details", exact: true }).click();
+    await expect(panel).toHaveAttribute("open", "");
+    await expect(panel.locator('[data-job-detail="controlled-job"]')).toBeFocused();
     await page.evaluate(() => (window.jobState = "settings_changed"));
     await expect(page.locator(".lb-job-progress")).toContainText("settings_changed");
     await panel.getByRole("button", { name: "Retry", exact: true }).click();
     await page.waitForFunction(() => window.jobRetried);
     await expect(page.locator(".lb-job-progress")).toHaveText("Language rows ready");
+});
+
+test("running generation restores on route return without accumulating polling or DOM work", async ({ page }) => {
+    await demo(page, {
+        url: "http://fixture.invalid/web/index.html#/lyrics",
+        transformHtml: intercept(`
+  const job={id:'persistent-job',state:window.persistentState||'running',progress:12,request:{service:'Google',kind:'translation',language:'zh-Hans'},error:window.persistentState==='failed'?'Synthetic failure':null};
+  if(path.endsWith('/jobs/persistent-job/retry')){window.persistentState='running';return new Response(null,{status:204});}
+  if(path.endsWith('/jobs'))return new Response(JSON.stringify([job]));
+  if(path.endsWith('/jobs/persistent-job')){window.jobPolls=(window.jobPolls||0)+1;return new Response(JSON.stringify(job));}
+ `),
+    });
+    await expect(page.locator(".lb-job-progress")).toContainText("running");
+    await page.evaluate(() => {
+        window.persistentState = "failed";
+    });
+    await expect(page.locator(".lb-job-progress")).toContainText("failed");
+    await page.locator(".lb-job-banner").getByRole("button", { name: "Details", exact: true }).click();
+    await page.locator('[data-job-detail="persistent-job"]').getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(page.locator(".lb-job-progress")).toContainText("running");
+    await page.locator(".lb-popup").getByRole("button", { name: "Close", exact: true }).click();
+    const counts = [];
+    for (let i = 0; i < 4; i++) {
+        await page.evaluate(() => {
+            location.hash = "/home";
+        });
+        await expect(page.locator(".lb-job-banner")).toHaveCount(0);
+        await page.evaluate(async () => {
+            location.hash = "/lyrics";
+            await new Promise(requestAnimationFrame);
+            await fetch("/Audio/11111111111111111111111111111111/Lyrics");
+        });
+        await expect(page.locator(".lb-job-progress")).toContainText("running");
+        await expect(page.locator(".lb-job-banner")).toHaveCount(1);
+        counts.push(await page.evaluate(() => window.LyricBridge.lifecycleDiagnostics().cleanups));
+    }
+    expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
+    const before = await page.evaluate(() => ({
+        polls: window.jobPolls,
+        decorations: window.LyricBridge.metrics.decorations,
+        nodes: document.querySelectorAll(".lb-tools *").length,
+    }));
+    await page.waitForTimeout(3200);
+    const after = await page.evaluate(() => ({
+        polls: window.jobPolls,
+        decorations: window.LyricBridge.metrics.decorations,
+        nodes: document.querySelectorAll(".lb-tools *").length,
+    }));
+    expect(after.polls - before.polls).toBeGreaterThanOrEqual(2);
+    expect(after.polls - before.polls).toBeLessThanOrEqual(4);
+    expect(after.decorations - before.decorations).toBeLessThanOrEqual(1);
+    expect(after.nodes - before.nodes).toBeLessThanOrEqual(5);
+});
+
+test("cached lyrics view exit closes settings and search without a hash change", async ({ page }) => {
+    await demo(page);
+    await versions(page);
+    await expect(page.locator(".lb-popup")).toBeVisible();
+    await page.evaluate(() => document.querySelector(".lyricPage").dispatchEvent(new Event("viewbeforehide")));
+    await expect(page.locator(".lb-popup")).toHaveCount(0);
+    await expect(page.locator(".lb-tools")).toHaveCount(0);
+    await page.evaluate(async () => {
+        document.querySelector(".lyricPage").dispatchEvent(new Event("viewshow"));
+        await fetch("/Audio/11111111111111111111111111111111/Lyrics");
+    });
+    await search(page);
+    await expect(page.locator(".lb-search")).toBeVisible();
+    await page.evaluate(() => document.querySelector(".lyricPage").dispatchEvent(new Event("viewbeforehide")));
+    await expect(page.locator(".lb-search")).toHaveCount(0);
+    await expect(page.locator(".lb-popup")).toHaveCount(0);
+    await expect(page.locator(".lb-tools")).toHaveCount(0);
 });

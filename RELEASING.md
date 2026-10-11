@@ -14,33 +14,21 @@ The personal access token lets release PRs trigger normal PR CI; PRs created wit
 
 `Prepare release` owns validation for pushes to `main`: ordinary pushes call candidate validation, while newly created releases call artifact validation once against the release commit. PRs and manual validation remain independently available; there is no second standalone push-validation run.
 
-## Bootstrap the first release
+## Prepare 0.1.1
 
-No release has been recorded yet: `.release-please-manifest.json` starts at `0.0.0`; this is release-please's bookkeeping, not the plugin version. The plugin remains `0.1.0`.
+0.1.0 is already published. Keep its tag and assets unchanged, and leave the bookkeeping manifest at the last released version until release-please updates it.
 
-Commit and push this setup with a one-time version override in the commit body:
+Commit the reviewed automatic-injection changes through your normal PR flow. Use a Conventional Commit with the one-time footer `Release-As: 0.1.1` (retain this footer in the squash commit if applicable). Do not bump metadata or project lockfile references manually: release-please creates a release PR updating them together.
 
-```sh
-git add .github/workflows Directory.Build.props version.txt release-please-config.json \
-  .release-please-manifest.json scripts/release.py scripts/release_metadata.py \
-  scripts/package-artifacts.py tests/ReleaseAutomation.py tests/PackageArtifacts.py \
-  RELEASING.md DEPLOYMENT.md README.md CHANGELOG.md
-# Include any other reviewed fixes that have not yet been committed.
-git commit -m "feat: automate verified GitHub releases" -m "Release-As: 0.1.0"
-git push origin main
-```
+Review and merge the generated 0.1.1 release PR only after its checks pass. The workflow creates a draft with an actual `v0.1.1` tag, validates the exact commit and attaches:
 
-Configure the token secret before pushing. **Prepare release** creates or updates the `0.1.0` release PR. If it does not, run that workflow manually from the Actions tab and inspect its log. Do not create a manual `v0.1.0` tag or release first, and do not change the bookkeeping manifest to claim that `0.1.0` was already released.
-
-Review the release PR's changelog/version/lockfile changes and green CI, then merge it. For this first release, consolidate the existing unpublished `0.1.0` overview with the generated `0.1.0` entry if release-please prepends a second section; retain the generated dated heading and the useful feature notes. The workflow creates a draft with an actual `v0.1.0` tag, validates that exact commit and builds release-mode archives using the real GitHub download URLs. It attaches:
-
-- `lyricbridge-0.1.0.zip` — plugin, dependencies, dictionaries and notices.
-- `lyricbridge-web-0.1.0.zip` — separately installed web enhancement.
-- `lyricbridge-source-0.1.0.zip` — matching editable/licensed source and build inputs.
+- `lyricbridge-0.1.1.zip` — plugin, embedded renderer, dependencies, dictionaries and notices.
+- `lyricbridge-web-0.1.1.zip` — optional separately installed web enhancement.
+- `lyricbridge-source-0.1.1.zip` — matching editable/licensed source and build inputs.
 - `manifest.json` — this plugin's catalog entry.
 - `SHA256SUMS` — all three ZIPs and the manifest.
 
-Keep the plugin/web/source archives together to satisfy corresponding-source availability. After **Prepare release → artifacts** is green, review the draft assets/notes in Releases and click **Publish release**. Draft download URLs are not suitable for the public catalog before publication.
+Keep the plugin/web/source archives together for corresponding-source availability. After the artifact workflow is green, download all five assets, verify `sha256sum -c SHA256SUMS`, review the manifest's version/GUID/ABI/URLs and publish the draft. Confirm unauthenticated downloads after publishing. Do not publish an empty draft while validation is running. Publication, shared-catalog changes and live installation are performed by the repository owner.
 
 ## Future releases and retries
 

@@ -20,8 +20,8 @@ async function demo(page, options = {}) {
     const root = options.root || path.resolve(__dirname, "../dist/web");
     await page.route("**/*", (route) => {
         const name = new URL(route.request().url()).pathname.split("/").at(-1);
-        if (name === "demo.html" && options.transformHtml)
-            return route.fulfill({ contentType: "text/html", body: options.transformHtml(fs.readFileSync(path.join(root, name), "utf8")) });
+        if ((name === "demo.html" || (name === "index.html" && options.url)) && options.transformHtml)
+            return route.fulfill({ contentType: "text/html", body: options.transformHtml(fs.readFileSync(path.join(root, "demo.html"), "utf8")) });
         if (name === "demo.wav") {
             const body = silence(),
                 range = route
@@ -44,6 +44,6 @@ async function demo(page, options = {}) {
             return route.fulfill({ path: path.join(root, name) });
         return route.fulfill({ status: 204, body: "" });
     });
-    await page.goto("http://fixture.invalid/base/web/lyricbridge/demo.html");
+    await page.goto(options.url || "http://fixture.invalid/base/web/lyricbridge/demo.html");
 }
 module.exports = { demo };

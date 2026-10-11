@@ -555,7 +555,10 @@ export function createVersionPanel(dependencies: Dependencies) {
                                 : "Sends song text to this service.",
                         ),
                     );
+                    const focused =
+                        document.activeElement instanceof HTMLElement && prepare.contains(document.activeElement) ? document.activeElement : null;
                     prepare.querySelectorAll<HTMLElement>(":scope > .lb-job-details").forEach((node) => prepare.append(node));
+                    if (focused?.isConnected) focused.focus({ preventScroll: true });
                 })
                 .catch((error) => showError(error, prepare));
         }
