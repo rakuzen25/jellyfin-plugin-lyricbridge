@@ -60,3 +60,5 @@ python3 scripts/catalog.py --catalog-input /path/to/shared-manifest.json \
 ```
 
 Use the manifest downloaded from the public release as the entry (copy it to `dist/manifest.json` or supply its actual path). Review and publish the catalog change separately. Each plugin retains its own repository, GUID and version; unrelated plugin releases are preserved. Cross-repository catalog PR automation can be added once the catalog repository and its authorization are configured.
+
+For an upload-only manual retry, set `validated_run_id` to the previous run ID whose full `validate` job passed (the number in its Actions URL). This skips validation and downloads that run’s tested candidate artifact. The source run must match the tag’s checked-out commit and contain a successful validation job; missing/expired artifacts fail the retry. Leave it blank to run full validation. Automatic releases always run full validation.
