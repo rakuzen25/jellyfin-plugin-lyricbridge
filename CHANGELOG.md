@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.1](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.1.0...v0.1.1) (2026-10-11)
+
+
+### Features
+
+* add web UI injection and optimizations ([13bd4d4](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/13bd4d44b4c5e3796f4c57dd379a52df452cf4d7))
+
+
+### Bug Fixes
+
+* fix version ([b74d1c6](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/b74d1c6f3ac32b0acc5570393273b3ab84446ada))
+
 ## 0.1.0 (2026-10-11)
 
 
