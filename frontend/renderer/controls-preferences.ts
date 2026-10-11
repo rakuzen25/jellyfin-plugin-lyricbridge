@@ -2,6 +2,7 @@
  * See https://mozilla.org/MPL/2.0/. */
 import { requireValue } from "../shared/invariants.ts";
 import type {} from "../shared/runtime.ts";
+import type { AnimatedWord } from "./karaoke-animation.ts";
 import { elementHasLiveLayout, getCurrentLyricPage, getCurrentLyricsContainer, isLyricsPage } from "./host.ts";
 import { RendererLifecycle } from "./lifecycle.ts";
 import type { LyricInput } from "./payload.ts";
@@ -74,7 +75,7 @@ interface Dependencies {
         | "romanizationLoadError"
     >;
     clampTimingOffsetSeconds: (value: unknown) => number;
-    resetWordMotion: (word: import("/home/frank/.codex-default/jellyfin-lyricbridge/frontend/renderer/karaoke-animation").AnimatedWord) => void;
+    resetWordMotion: (word: AnimatedWord) => void;
     wakeAnimationLoop: () => void;
     persistCurrentSongPreference: () => boolean;
     finiteNumber: (value: unknown, fallback?: number) => number;

@@ -2,6 +2,7 @@
  * See https://mozilla.org/MPL/2.0/. */
 import { isRecord, requireValue } from "../shared/invariants.ts";
 import type {} from "../shared/runtime.ts";
+import type { AnimatedWord } from "./karaoke-animation.ts";
 import type { CueInput } from "./cue-ranges.ts";
 import type { CueRecord, RenderGap, RenderLine } from "./models.ts";
 import { cueValue } from "./payload.ts";
@@ -34,32 +35,13 @@ interface Dependencies {
     getJellyfinActiveLineIndex: () => number;
     findLineIndexAtTicks: (ticks: number) => number;
     instrumentalGapDistanceBand: (lineIndex: number, nextLineIndex: number) => "far" | "middle";
-    motionHandoffActive: (
-        word: import("/home/frank/.codex-default/jellyfin-lyricbridge/frontend/renderer/karaoke-animation").AnimatedWord,
-        timelineTicks: number,
-    ) => boolean;
-    setStaticWordState: (
-        word: import("/home/frank/.codex-default/jellyfin-lyricbridge/frontend/renderer/karaoke-animation").AnimatedWord,
-        stateName: string,
-        frameNow: number,
-        preserveMotion?: boolean,
-    ) => void;
-    resetWordMotion: (word: import("/home/frank/.codex-default/jellyfin-lyricbridge/frontend/renderer/karaoke-animation").AnimatedWord) => void;
+    motionHandoffActive: (word: AnimatedWord, timelineTicks: number) => boolean;
+    setStaticWordState: (word: AnimatedWord, stateName: string, frameNow: number, preserveMotion?: boolean) => void;
+    resetWordMotion: (word: AnimatedWord) => void;
     LINE_CLASS_NEIGHBORHOOD: 6;
-    motionContinuityGain: (
-        word: import("/home/frank/.codex-default/jellyfin-lyricbridge/frontend/renderer/karaoke-animation").AnimatedWord,
-        timelineTicks: number,
-    ) => number;
-    updateMotionGlyphs: (
-        word: import("/home/frank/.codex-default/jellyfin-lyricbridge/frontend/renderer/karaoke-animation").AnimatedWord,
-        timelineTicks: number,
-        continuityGain?: number,
-    ) => void;
-    updateWholeMotion: (
-        word: import("/home/frank/.codex-default/jellyfin-lyricbridge/frontend/renderer/karaoke-animation").AnimatedWord,
-        timelineTicks: number,
-        continuityGain?: number,
-    ) => void;
+    motionContinuityGain: (word: AnimatedWord, timelineTicks: number) => number;
+    updateMotionGlyphs: (word: AnimatedWord, timelineTicks: number, continuityGain?: number) => void;
+    updateWholeMotion: (word: AnimatedWord, timelineTicks: number, continuityGain?: number) => void;
 }
 export function createPlaybackCoordinator(dependencies: Dependencies) {
     const {

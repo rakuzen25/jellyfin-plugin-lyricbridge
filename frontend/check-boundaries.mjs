@@ -23,6 +23,15 @@ function visit(directory) {
         if (/@ts-(nocheck|ignore)/.test(source)) throw new Error("Suppressed application checking: " + file);
         const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
         function inspect(node) {
+            if (
+                ts.isStringLiteral(node) &&
+                (ts.isImportDeclaration(node.parent) ||
+                    ts.isExportDeclaration(node.parent) ||
+                    (ts.isLiteralTypeNode(node.parent) && ts.isImportTypeNode(node.parent.parent)) ||
+                    (ts.isCallExpression(node.parent) && node.parent.expression.kind === ts.SyntaxKind.ImportKeyword)) &&
+                (path.isAbsolute(node.text) || /^[A-Za-z]:[\\/]/.test(node.text))
+            )
+                throw new Error("Machine-specific absolute module import: " + file);
             if (node.kind === ts.SyntaxKind.AnyKeyword) throw new Error("Broad any in application contract: " + file);
             ts.forEachChild(node, inspect);
         }
