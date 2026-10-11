@@ -1,0 +1,291 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>Multilingual karaoke demo</title>
+        <link rel="stylesheet" href="jellyfin-lyric-motion.css" />
+        <link rel="stylesheet" href="lyricbridge.css" />
+        <style>
+            body {
+                margin: 0;
+                background: #151720;
+                color: #eee;
+                font-family: system-ui;
+            }
+            header {
+                position: relative;
+                z-index: auto;
+                padding: 16px;
+                background: #151720;
+            }
+            h1 {
+                font-size: 24px;
+            }
+            header p {
+                margin: 8px 0;
+                color: #bbb;
+            }
+            audio {
+                width: min(700px, 100%);
+            }
+            a {
+                color: #abd4ff;
+            }
+            .lyricsContainer {
+                height: 65vh;
+                overflow: auto;
+                text-align: center;
+                padding: 20px;
+            }
+            .lyricsLine {
+                padding: 22px 0;
+            }
+            #status {
+                font-size: 14px;
+            }
+        </style>
+        <script>
+            const originalFetch = window.fetch.bind(window);
+            let demoPreferences = {
+                translationLanguage: "zh-Hans",
+                sourceLanguage: "auto",
+                showTranslation: true,
+                showPronunciation: true,
+                japaneseRomaji: true,
+                chineseScript: "Simplified",
+                rowOrder: "pronunciation-first",
+                originalSize: 40,
+                pronunciationSize: 24,
+                translationSize: 24,
+                rowSpacing: 6,
+            };
+            const texts = [
+                ["朝の光が窓を照らす", "asa no hikari ga mado o terasu", "晨光照亮窗户"],
+                ["新しい道を歩こう", "atarashii michi o arukou", "走上崭新的道路"],
+                ["Hello 世界 — مرحبا", "hello sekai — marhaban", "你好，世界"],
+                ["小さな声も聞こえる", "chiisana koe mo kikoeru", "微小的声音也能听见"],
+                ["静かな夜の歌", "shizukana yoru no uta", "宁静夜晚的歌"],
+            ];
+            let scenario = "ready",
+                scenarioStarted = Date.now(),
+                selectedDemo = false;
+            let importedDemo=null,rejectedDemo=false,mixedDemo=[],mixedChoices={translation:'auto',pronunciation:'auto'},songOverrides={},demoJobs=[],deletedVersions=new Set();
+            function payload() {
+                const lines = texts.map(([text, pronunciation, translation], i) => {
+                    const start = i * 60000000;
+                    return {
+                        id: "l" + i,
+                        text,
+                        start,
+                        end: start + 50000000,
+                        language: i === 2 ? "und" : "ja",
+                        cues: [...text].map((char, j) => {
+                            const before = [...text].slice(0, j).join("").length;
+                            return {
+                                position: before,
+                                endPosition: before + char.length,
+                                start: start + (j * 45000000) / [...text].length,
+                                end: start + ((j + 1) * 45000000) / [...text].length,
+                            };
+                        }),
+                        pronunciation,
+                        translations: {
+                            zh:
+                                demoPreferences.translationLanguage === "zh-Hant"
+                                    ? translation
+                                          .replaceAll("户", "戶")
+                                          .replaceAll("崭", "嶄")
+                                          .replaceAll("声", "聲")
+                                          .replaceAll("听", "聽")
+                                          .replaceAll("见", "見")
+                                          .replaceAll("宁", "寧")
+                                          .replaceAll("静", "靜")
+                                    : translation,
+                        },
+                    };
+                });
+                lines[3].background = {
+                    id: "l3-bg",
+                    text: "(ラララ)",
+                    start: 210000000,
+                    end: 235000000,
+                    language: "ja",
+                    cues: [],
+                    pronunciation: "(la la la)",
+                    translations: { zh: "（啦啦啦）" },
+                };
+                delete lines[4].pronunciation;
+                delete lines[4].translations.zh;
+                const outcome = {
+                    detectedLanguages: [...new Set(lines.map((l) => l.language))],
+                    lyrics: { hash: "demo-" + scenario, source: "Demo fixture", providerId:"42", title: "Morning light", artist: "Synthetic timings", lines },
+                    variants: [{ key:"demo-ar", hash:"demo-"+scenario, kind: "translation", language: "ar", service: "Fixture", model: "", text: { l2: "مرحبا بالعالم" } }],
+                    accountPreferences:demoPreferences,songOverrides,preferences:{...demoPreferences,...Object.fromEntries(Object.entries(songOverrides).filter(([,v])=>v!=null))},
+                    canSelect: true,
+                    canGenerate:true,canDeleteVariants:true,
+                    state: "ready",
+                    complete: true,
+                    finished: 6,
+                    total: 6,
+                    errors: [],
+                };
+                if (scenario === "loading" && Date.now() - scenarioStarted < 4000) {
+                    outcome.lyrics = null;
+                    outcome.state = "searching";
+                    outcome.complete = false;
+                    outcome.finished = 2;
+                }
+                if (scenario === "instrumental") {
+                    outcome.lyrics = null;
+                    outcome.state = "instrumental";
+                    outcome.instrumental = [{ source: "Demo fixture", reason: "Provider instrumental flag" }];
+                }
+                if (scenario === "partial") {
+                    outcome.state = "partial";
+                    outcome.errors = [{code:"provider_unavailable",message:"Demo source could not retrieve lyrics.",retryable:true,diagnosticId:"demo-partial"}];
+                }
+                if (scenario === "error") {
+                    outcome.lyrics = null;
+                    outcome.state = "failed";
+                    outcome.errors = [
+                        { code: "provider_timeout", message: "Demo source timed out. Try again.", retryable: true, diagnosticId: "demo-timeout" },
+                    ];
+                }
+                if ((songOverrides.sourceLanguage||demoPreferences.sourceLanguage) !== "auto")
+                    for (const line of lines) {
+                        line.language=songOverrides.sourceLanguage||demoPreferences.sourceLanguage;
+                        if (line.background) line.background.language=songOverrides.sourceLanguage||demoPreferences.sourceLanguage;
+                    }
+                if (scenario === "local") {
+                    delete lines[0].pronunciation;
+                    outcome.pronunciation = { state: Date.now() - scenarioStarted < 2500 ? "running" : "complete" };
+                    if (outcome.pronunciation.state === "complete")
+                        outcome.variants.push({
+                            key:"demo-local",hash:outcome.lyrics.hash,kind: "pronunciation",
+                            service: "Kawazu",
+                            language: "ja",
+                            text: { l0: "asa no hikari ga mado o terasu" },
+                        });
+                }
+                if (scenario === "upgrade" && !selectedDemo) {
+                    outcome.better = { ...outcome.lyrics, source: "Better timing fixture", providerId: "42", wordTimed: true };
+                    outcome.improvement={baselineHash:outcome.lyrics.hash,reason:"timing",assessment:demoAssessment()};
+                }
+                if(importedDemo)outcome.lyrics=importedDemo;
+                outcome.variants.push(...mixedDemo.filter(v=>v.hash===outcome.lyrics?.hash));
+                if(outcome.lyrics)outcome.variants.push({key:'demo-saved-translation',hash:outcome.lyrics.hash,kind:'translation',language:'zh-Hans',service:'AI fixture',model:'Synthetic example',createdAt:'2026-10-10T12:00:00Z',text:Object.fromEntries(lines.filter(l=>l.translations?.zh).map(l=>[l.id,'另一种翻译示例']))});
+                outcome.variants=outcome.variants.filter(v=>!deletedVersions.has(v.key)).map(v=>({contextBefore:0,contextAfter:0,promptVersion:1,reasoningEffort:'',model:'',originType:v.service==='Kawazu'?'local':v.service==='AI fixture'?'generated':'supplied',...v}));outcome.auxiliaryChoices=mixedChoices;
+                if(rejectedDemo){outcome.lyrics=null;outcome.state="rejected";outcome.better=null;}
+                return outcome;
+            }
+            function demoAssessment(order=0){return {score:100,tier:2,eligible:true,reasons:[],fields:[{field:"title",result:"Perfect",points:7},{field:"artists",result:"Perfect",points:7}],recording:"standard",candidateRecording:"standard",durationDifferenceMs:0,providerOrder:order,timing:{category:"mostly-word-timed",rank:3,coverage:100,sungLines:6,wordLines:6,invalidCues:0},revision:2};}
+            window.fetch = async function (input, init) {
+                const request = new Request(input, init);
+                const path = new URL(request.url).pathname;
+                if(path.endsWith('/language-preferences')){if(request.method==='PUT')songOverrides=await request.json();if(request.method==='DELETE')songOverrides={};return new Response(JSON.stringify({songOverrides,accountPreferences:demoPreferences,preferences:payload().preferences}));}
+                if(path.endsWith('/language-version')){const body=await request.json();if(request.method==='DELETE'){deletedVersions.add(body.key);if(mixedChoices[body.kind]===body.key)mixedChoices[body.kind]='auto';}else mixedChoices[body.kind]=body.key;return new Response(null,{status:204});}
+                if(path.endsWith('/generate')){const body=await request.json(),job={id:'demo-job-'+Date.now(),hash:payload().lyrics.hash,request:body,state:'running',progress:0,started:Date.now()};demoJobs.push(job);return new Response(JSON.stringify(job));}
+                if(path.endsWith('/jobs')){for(const job of demoJobs){if(job.state==='running'){job.progress=Math.min(100,Math.floor((Date.now()-job.started)/50));if(job.progress===100){if(scenario==='generation-error'){job.state='failed';job.failure={code:'service_timeout',message:'Synthetic service timed out. Existing rows were retained.',retryable:true,diagnosticId:job.id};}else{job.state='complete';mixedDemo.push({key:job.id,hash:job.hash,kind:job.request.kind,language:job.request.language,service:job.request.service,model:'Synthetic result',createdAt:new Date().toISOString(),text:Object.fromEntries(texts.map((_,i)=>['l'+i,'Generated demo text '+(i+1)]))});}}}}return new Response(JSON.stringify(demoJobs));}
+                if(request.method==='GET' && /\/jobs\/[^/]+$/.test(path)){await window.fetch('/LyricBridge/jobs');const job=demoJobs.find(j=>path.endsWith('/'+j.id));return new Response(JSON.stringify(job),{status:job?200:404});}
+                if(/\/jobs\/[^/]+\/(cancel|retry)$/.test(path)){const job=demoJobs.find(j=>path.includes(j.id));if(job){job.state=path.endsWith('/cancel')?'cancelled':'running';job.started=Date.now();job.failure=null;}return new Response(null,{status:204});}
+
+                if (path.endsWith("/LyricBridge/preferences")) {
+                    if (request.method === "PUT") demoPreferences = await request.json();
+                    return new Response(JSON.stringify(demoPreferences), { headers: { "Content-Type": "application/json" } });
+                }
+                if (path.endsWith("/LyricBridge/sources"))
+                    return new Response(JSON.stringify([{ name: "Demo fixture", enabled: true, configured: true }]));
+                if(path.endsWith("/LyricBridge/services"))return new Response(JSON.stringify([{service:"Google",translation:true,pronunciation:true,languages:["*"]}]));
+                if (path.includes("/LyricBridge/search/"))
+                    return new Response(
+                        JSON.stringify({
+                            state: "complete",
+                            finished: 1,
+                            total: 1,
+                            recommended:"Demo fixture:42",
+                            errors: [],
+                            candidates: [
+                                {
+                                    source: "Demo fixture",
+                                    id: "42",
+                                    title: "Morning light",
+                                    artist: "Synthetic timings",
+                                    score: 100,
+                                    verification: "verified",
+                                    assessment:demoAssessment(),
+                                    wordTiming: true,
+                                    translationLanguages: ["zh"],
+                                    hasPronunciation: true,
+                                },
+                            ],
+                        }),
+                    );
+                if(path.endsWith("/reject-matches")){rejectedDemo=true;return new Response(null,{status:204});}
+                if(path.endsWith("/import")){const input=await request.json();rejectedDemo=false;if(!input.existingLocal){const importedLines=input.text.split(/\r?\n/).filter(Boolean).map((text,i)=>{const match=text.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/);return {id:"import-"+i,text:match?match[3]:text,start:match?Math.round((Number(match[1])*60+Number(match[2]))*10000000):null,language:"und",cues:[],translations:{}};});importedDemo={hash:"demo-import",source:"Imported",title:"Imported demo lyrics",artist:"",lines:importedLines};}return new Response(null,{status:204});}
+                if(path.endsWith("/mix")){const input=await request.json(),donor=payload().lyrics;const all=donor.lines.flatMap(l=>l.background?[l,l.background]:[l]);const text={};for(const [original,id] of Object.entries(input.mapping)){const line=all.find(l=>l.id===id);const value=input.kind==="pronunciation"?line?.pronunciation:line?.translations?.zh;if(value)text[original]=value;}const key="demo-mix-"+Date.now();mixedDemo.push({key,hash:input.hash,kind:input.kind,language:input.language,service:"Demo fixture",model:"Supplied · 42",text});mixedChoices[input.kind]=key;return new Response(null,{status:204});}
+                if (path.endsWith("/search")) return new Response(JSON.stringify({ id: "demo-search" }));
+                if (path.endsWith("/upgrade") || path.endsWith("/select")) {
+                    selectedDemo = true; rejectedDemo=false; importedDemo=null;
+                    scenario = "ready";
+                }
+                if (path.endsWith("/instrumental")) {
+                    const body = await request.json();
+                    scenario = body.clear ? "ready" : "instrumental";
+                }
+                if (path.endsWith("/retry")) {
+                    rejectedDemo=false;
+                    scenario = "ready";
+                }
+                if (path.includes("/LyricBridge/items/"))
+                    return new Response(JSON.stringify(payload()), { headers: { "Content-Type": "application/json" } });
+                return originalFetch(input, init);
+            };
+        </script>
+        <script src="lyricbridge.js"></script>
+        <script defer src="jellyfin-lyric-motion.js"></script>
+    </head>
+    <body>
+        <header>
+            <h1>Multilingual karaoke demo</h1>
+            <p>Original + pronunciation + translation. Press Play to test highlighting, or seek through the silent timeline.</p>
+            <label
+                >Demo scenario
+                <select id="demo-scenario">
+                    <option value="ready">Three rows</option>
+                    <option value="loading">Slow loading</option>
+                    <option value="partial">Some sources failed</option>
+                    <option value="local">Local romaji</option>
+                    <option value="instrumental">Instrumental</option>
+                    <option value="error">Source failure</option>
+                    <option value="upgrade">Better timing available</option><option value="generation-error">Generation failure (synthetic)</option>
+                </select></label
+            ><audio class="mediaPlayerAudio" controls src="demo.wav"></audio>
+            <p id="status">Loading…</p>
+            <a href="/web/">Open Jellyfin</a>
+        </header>
+        <main class="lyricPage"><div class="lyricsContainer"></div></main>
+        <script>
+            document.querySelector("#demo-scenario").onchange = () => {
+                scenario = document.querySelector("#demo-scenario").value;
+                scenarioStarted = Date.now();
+                selectedDemo = false;
+                window.LyricBridge.refreshSong(true);
+            };
+            window.addEventListener("load", async () => {
+                const data = await (await fetch("/Audio/11111111111111111111111111111111/Lyrics")).json();
+                const container = document.querySelector(".lyricsContainer");
+                for (const [i, line] of data.Lyrics.entries()) {
+                    const e = document.createElement("div");
+                    e.className = "lyricsLine dynamicLyric";
+                    e.id = "lyricPosition" + i;
+                    e.dataset.lyrictime = line.Start;
+                    e.textContent = line.Text;
+                    container.append(e);
+                }
+                window.JellyfinLyricMotion?.redecorate();
+                document.querySelector("#status").textContent = "Ready — final line intentionally has no auxiliary rows.";
+            });
+        </script>
+    </body>
+</html>

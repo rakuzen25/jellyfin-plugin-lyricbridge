@@ -1,0 +1,169 @@
+<!doctype html>
+<html>
+    <head>
+        <title>LyricBridge</title>
+    </head>
+
+    <body>
+        <div
+            id="LyricBridgeConfig"
+            data-role="page"
+            class="page type-interior pluginConfigurationPage"
+            data-require="emby-input,emby-button,emby-checkbox,emby-select,emby-tabs"
+        >
+            <style>
+                #LyricBridgeConfig { --lb-gap: 16px; }
+                #LyricBridgeConfig .content-primary { max-width:960px; padding-bottom:120px; }
+                #LyricBridgeConfig [hidden] { display:none!important; }
+                #LyricBridgeConfig [role="tabpanel"] { padding:16px 0; margin:0; }
+                #LyricBridgeConfig #lb-config-tabs { display:flex; flex-wrap:wrap; gap:4px; margin:16px 0 0; border-bottom:1px solid rgba(128,128,128,.25); }
+                #LyricBridgeConfig #lb-config-tabs button { border-radius:0; margin:0; padding:12px 16px; border-bottom:3px solid transparent; }
+                #LyricBridgeConfig #lb-config-tabs [aria-selected="true"] { border-bottom-color:var(--jf-palette-primary-main,currentColor); font-weight:700; }
+                #LyricBridgeConfig .sectionTitleContainer { margin-bottom:0; }
+                #LyricBridgeConfig h3 { margin:0 0 16px; }
+                #LyricBridgeConfig .inputContainer,#LyricBridgeConfig .selectContainer { margin-bottom:16px; }
+                #LyricBridgeConfig .checkboxContainer { margin:0 0 12px; min-height:44px; }
+                #LyricBridgeConfig .lb-actions,#LyricBridgeConfig .lb-section-heading { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+                #LyricBridgeConfig .lb-section-heading { margin:24px 0 16px; }
+                #LyricBridgeConfig .lb-section-heading h3 { margin:0; flex:1; }
+                #LyricBridgeConfig p,#LyricBridgeConfig .fieldDescription { overflow-wrap:anywhere; }
+                #LyricBridgeConfig button { min-height:44px; }
+                #LyricBridgeConfig button:focus-visible,#LyricBridgeConfig summary:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+                #LyricBridgeConfig .lb-settings-group { margin: 0 0 24px; }
+                #LyricBridgeConfig h4 { margin: 0 0 12px; }
+                #LyricBridgeConfig .lb-field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 16px; }
+                #LyricBridgeConfig .lb-config-badge { display:inline-block; font-size:.85em; padding:4px 8px; border-radius:4px; background:rgba(128,128,128,.12); font-weight:400; }
+                #LyricBridgeConfig .lb-service-heading { display:flex; align-items:center; gap:12px; }
+                #LyricBridgeConfig .lb-service-main { flex:1; min-width:0; display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+                #LyricBridgeConfig .lb-service-capability { flex-basis:100%; font-weight:400; line-height:1.5; margin:0; }
+                #LyricBridgeConfig .lb-service-heading > span:last-child { flex-shrink:0; }
+                #LyricBridgeConfig .emby-checkbox-label { min-height:44px; padding-inline-start:32px; padding-inline-end:0; }
+                #LyricBridgeConfig .emby-checkbox-label .checkboxOutline { width:24px; height:24px; box-sizing:border-box; left:auto; right:auto; inset-inline-start:0; top:50%; transform:translateY(-50%); }
+                #LyricBridgeConfig .emby-checkbox-label .checkboxIcon { font-size:20px; }
+                #LyricBridgeConfig .lb-service-heading > span:last-child { margin-inline-start:auto; font-size:.9em; }
+                #LyricBridgeConfig .lb-provider-heading { display:flex; align-items:center; gap:8px; }
+                #LyricBridgeConfig .lb-provider-heading .checkboxContainer { margin:0; flex:1; min-width:0; }
+                #LyricBridgeConfig .lb-source-row, #LyricBridgeConfig .lb-service { padding:12px 0; border-bottom:1px solid rgba(128,128,128,.25); }
+                #LyricBridgeConfig .lb-source-row p { margin:8px 0 0; }
+                #LyricBridgeConfig details { margin:12px 0; }
+                #LyricBridgeConfig summary { cursor:pointer; line-height:1.5; padding:8px 0; }
+                #LyricBridgeConfig .lb-service { margin:0; }
+                #LyricBridgeConfig .lb-service > summary { font-weight:600; padding:0; min-height:44px; }
+                #LyricBridgeConfig .lb-service-body { padding-top:12px; }
+                #LyricBridgeConfig .lb-service-body > .fieldDescription { margin:8px 0 16px; }
+                #LyricBridgeConfig .lb-setup-guide { padding-inline-start:24px; margin:12px 0; max-width:65ch; line-height:1.6; }
+                #LyricBridgeConfig .lb-setup-guide li + li { margin-top:8px; }
+                #LyricBridgeConfig .lb-action-status:not(:empty) { margin:12px 0; padding:12px; line-height:1.5; border-inline-start:3px solid currentColor; }
+                #LyricBridgeConfig .lb-action-status[data-state="error"] { border-color:#e77; background:rgba(220,65,65,.12); }
+                #LyricBridgeConfig .lb-action-status button { margin:8px 8px 0 0; }
+                #LyricBridgeConfig .lb-config-footer { position:fixed; bottom:0; left:var(--lb-footer-left,16px); width:var(--lb-footer-width,calc(100vw - 32px)); box-sizing:border-box; z-index:3; display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:16px 0 max(16px,env(safe-area-inset-bottom)); background:var(--lb-footer-background,#101010); border-top:1px solid rgba(128,128,128,.25); }
+                #LyricBridgeConfig .lb-config-footer .button-submit { margin:0; }
+                #LyricBridgeConfig .lb-config-footer #lb-config-status:not([hidden]) { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0; flex:1; }
+                #LyricBridgeConfig .paper-icon-button-light { min-width:44px; min-height:44px; position:relative; }
+                #LyricBridgeConfig .paper-icon-button-light:is(:hover,:focus-visible)::after { content:attr(data-tooltip); position:absolute; top:100%; inset-inline-end:0; z-index:5; padding:4px 8px; background:var(--lb-footer-background,#202020); color:inherit; font-size:12px; white-space:nowrap; pointer-events:none; }
+                #LyricBridgeConfig .lb-admin-preview { padding:16px; border:1px solid rgba(128,128,128,.25); text-align:center; overflow-wrap:anywhere; }
+                #LyricBridgeConfig input:not([type="checkbox"]), #LyricBridgeConfig select { min-height:44px; }
+                @media(max-width:600px) { #LyricBridgeConfig .lb-config-footer { flex-direction:column; align-items:flex-start; } #LyricBridgeConfig #lb-config-tabs button { padding:12px 8px; } #LyricBridgeConfig .lb-field-grid { grid-template-columns:minmax(0,1fr); } }
+            </style>
+            <div data-role="content">
+                <div class="content-primary">
+                    <form id="lb-config">
+                        <div class="verticalSection">
+                            <div class="sectionTitleContainer flex align-items-center">
+                                <h2 class="sectionTitle">LyricBridge</h2>
+                            </div>
+                            <div id="lb-config-tabs" role="tablist" aria-label="LyricBridge settings"></div>
+
+                            <section class="verticalSection" role="tabpanel" data-tab="General">
+                                <h3 class="sectionTitle">Storage and retrieval</h3>
+                                <div class="inputContainer">
+                                    <input label="Lyric storage directory" is="emby-input" id="lb-storage" placeholder="Leave empty for the server data directory" />
+                                    <div class="fieldDescription" id="lb-effective-storage"></div>
+                                    <div class="fieldDescription" id="lb-storage-warning" hidden>Restart required: the active storage directory stays unchanged until restart.</div>
+                                    <details><summary>Changing storage</summary><p class="fieldDescription">Choose a writable absolute path. Music files remain read-only. Restart after changing storage. Back up existing data first; unsupported preview databases require a new empty directory and are never migrated automatically.</p></details>
+                                </div>
+                                <label class="checkboxContainer emby-checkbox-label"
+                                    ><input is="emby-checkbox" type="checkbox" id="lb-scheduled" /><span>Enable scheduled retrieval</span></label
+                                >
+                                <div class="fieldDescription checkboxFieldDescription">
+                                    Check sample tracks before enabling. Instrumental tracks are skipped.
+                                </div>
+                                <details class="lb-maintenance"><summary>Advanced maintenance</summary>
+                                <p class="fieldDescription">Reset removes all LyricBridge-managed original lyrics, raw responses, saved versions, translations, pronunciation, timing corrections, classifications, and request history. Settings, credentials, and user display preferences and song language overrides are kept. Music files, source-library lyrics, and other plugins are untouched. Lyrics can be retrieved again when opened.</p>
+                                <button is="emby-button" type="button" class="raised emby-button" id="lb-reset-open"><span>Reset managed lyric library</span></button>
+                                <div id="lb-reset-confirm" hidden>
+                                    <div class="inputContainer"><input is="emby-input" label="Type RESET to confirm deletion" id="lb-reset-word" autocomplete="off" /></div>
+                                    <div class="lb-actions"><button is="emby-button" type="button" class="raised emby-button" id="lb-reset-submit" disabled><span>Delete managed lyric library</span></button>
+                                    <button is="emby-button" type="button" class="emby-button" id="lb-reset-cancel"><span>Cancel</span></button></div>
+                                </div>
+                                <div id="lb-reset-status" class="fieldDescription" role="status" aria-live="polite"></div></details>
+                            </section>
+                            <section class="verticalSection" role="tabpanel" data-tab="Sources" hidden>
+                                <h3 class="sectionTitle">Automatic lyric sources</h3>
+                                <p class="fieldDescription">
+                                    Order breaks ties after recording, timing, and supplied-row quality.
+                                </p>
+                                <div id="lb-sources"></div>
+                                <details>
+                                    <summary>Advanced matching</summary>
+                                    <div class="inputContainer">
+                                        <input label="Minimum match score" is="emby-input" type="number" id="lb-score" min="0" max="100" />
+                                        <div class="fieldDescription">Medium (70) is the default. Lower values can select the wrong recording.</div>
+                                    </div>
+                                </details>
+                            </section>
+                            <section
+                                class="verticalSection"
+                                role="tabpanel"
+                                data-tab="Language services"
+                                hidden
+                            >
+                                <h3 class="sectionTitle">Language services</h3>
+                                <div class="lb-source-row"><strong>Kawazu</strong> <span class="lb-config-badge">Local</span>
+                                <p class="fieldDescription">
+                                    Pronunciation only · Japanese → romaji. Supplied rows take priority.
+                                </p>
+                                </div><div id="lb-services"></div>
+                            </section>
+                            <section class="verticalSection" role="tabpanel" data-tab="Display defaults" hidden>
+                                <p class="fieldDescription">Defaults for users without saved preferences. Song overrides take priority.</p>
+                                <h3 class="sectionTitle">Default display preferences</h3>
+                                <div id="lb-defaults"></div>
+                                <div class="lb-admin-preview" id="lb-default-preview" aria-label="Display preview"></div>
+                            </section>
+                            <section class="verticalSection" role="tabpanel" data-tab="Requests" hidden>
+                                <h3 class="sectionTitle">External generation requests</h3>
+                                <label class="checkboxContainer emby-checkbox-label"
+                                    ><input is="emby-checkbox" type="checkbox" id="lb-requests" /><span>Allow user generation requests</span></label
+                                ><label class="checkboxContainer emby-checkbox-label"
+                                    ><input is="emby-checkbox" type="checkbox" id="lb-approval" /><span
+                                        >Automatically approve user requests</span
+                                    ></label
+                                >
+                                <div class="lb-field-grid"><div class="inputContainer">
+                                    <input
+                                        label="New generation jobs per rolling 24 hours"
+                                        is="emby-input"
+                                        id="lb-daily"
+                                        type="number"
+                                        min="1"
+                                        max="1000"
+                                    />
+                                </div>
+                                <div class="inputContainer">
+                                    <input label="Active requests per user" is="emby-input" id="lb-active" type="number" min="1" max="100" />
+                                </div>
+                                </div><div class="lb-section-heading"><h3 class="sectionTitle">Approval queue</h3>
+                                <button is="emby-button" type="button" id="lb-refresh" class="raised"><span>Refresh queue</span></button></div>
+                                <div id="lb-queue-status" class="fieldDescription" role="status" aria-live="polite"></div>
+                                <div id="lb-queue"></div>
+                            </section>
+                            <footer class="lb-config-footer"><button is="emby-button" type="submit" class="raised button-submit" disabled><span>Save settings</span></button><div id="lb-config-status" class="fieldDescription" role="status" aria-live="polite"></div></footer>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <!-- LYRICBRIDGE_CONFIG_SCRIPT -->
+        </div>
+    </body>
+</html>

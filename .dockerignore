@@ -1,0 +1,3 @@
+# Disposable acceptance tests use pinned official images without a local build context.
+# Keep workspace contents, credentials and runtime data out of Docker contexts.
+**

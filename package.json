@@ -1,0 +1,32 @@
+{
+    "name": "lyricbridge",
+    "private": true,
+    "packageManager": "pnpm@10.33.4",
+    "engines": {
+        "node": "26.10.0",
+        "pnpm": "10.33.4"
+    },
+    "scripts": {
+        "build": "pnpm --dir frontend run build",
+        "typecheck": "pnpm --dir frontend run typecheck",
+        "test": "pnpm --dir frontend test",
+        "test:browser": "sh scripts/test-browser.sh",
+        "check:python": "sh scripts/check-python.sh",
+        "check": "pnpm lint && pnpm format:check && pnpm knip && pnpm typecheck && pnpm run check:python",
+        "lint": "eslint . --max-warnings 0",
+        "lint:fix": "pnpm lint --fix",
+        "format": "prettier --write \"frontend/**/*.{ts,mjs,json}\" \"browser-tests/*.{cjs,json}\" \"*.{json,mjs,yaml}\" \".github/**/*.yml\"",
+        "format:check": "prettier --check \"frontend/**/*.{ts,mjs,json}\" \"browser-tests/*.{cjs,json}\" \"*.{json,mjs,yaml}\" \".github/**/*.yml\"",
+        "knip": "knip"
+    },
+    "devDependencies": {
+        "@eslint/js": "10.0.1",
+        "eslint": "10.12.0",
+        "eslint-config-prettier": "10.1.8",
+        "globals": "17.13.0",
+        "knip": "6.41.0",
+        "prettier": "3.9.10",
+        "typescript": "5.9.3",
+        "typescript-eslint": "8.71.1"
+    }
+}

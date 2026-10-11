@@ -1,0 +1,12 @@
+dist/
+.build/
+node_modules/
+**/node_modules/
+vendor/
+**/bin/
+**/obj/
+.venv/
+browser-tests/results*/
+frontend/assets/
+frontend/admin/config.html
+pnpm-lock.yaml

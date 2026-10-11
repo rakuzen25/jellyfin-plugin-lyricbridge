@@ -1,0 +1,11 @@
+packages:
+  - frontend
+  - browser-tests
+
+# esbuild needs its platform-specific binary installation; other dependency
+# lifecycle scripts are not authorized implicitly.
+onlyBuiltDependencies:
+  - esbuild
+
+managePackageManagerVersions: false
+packageManagerStrictVersion: true

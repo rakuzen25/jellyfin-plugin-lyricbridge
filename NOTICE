@@ -1,0 +1,32 @@
+LyricBridge uses Lyricify-Lyrics-Helper (WXRIW), licensed under Apache License 2.0.
+The vendored helper has local changes for cancellable HTTP transport and QQ pronunciation retention.
+
+LyricMotion (ThisIsTeddyBear/Jellyfin-LyricMotion), version 3.3, is licensed under Mozilla Public License 2.0.
+Its editable TypeScript/CSS, generated JavaScript and original license notices are retained. Local renderer changes add multilingual row hooks and DOM ownership handling.
+
+See vendor/UPSTREAM.md and the included license files for source revisions and notices.
+
+LyricBridge companion UI SVG glyphs are original project artwork covered by the project license. They require no external fonts or network assets. Native Jellyfin configuration icons remain supplied by Jellyfin.
+
+Chinese conversion uses OpenccNetLib 1.7.0 (MIT) and its OpenCC dictionary data
+(Apache-2.0). See OPENCC-LICENSE, OPENCC-DATA-LICENSE and
+OPENCC-THIRD-PARTY-NOTICES.md, including attribution to OpenCC contributors.
+Newtonsoft.Json and SharpZipLib are MIT licensed; their copyright notices are
+included as NEWTONSOFT-LICENSE and SHARPZIPLIB-LICENSE.
+ZstdSharp.Port is MIT licensed; see ZSTDSHARP-LICENSE. The System.Formats.Cbor
+runtime dependency is covered by DOTNET-LICENSE and DOTNET-THIRD-PARTY-NOTICES.
+
+The renderer background includes MIT-licensed Dynamic Background and Better
+Lyrics Kawarp adaptations. Their copyright and license texts are included as
+DYNAMIC-BACKGROUND-LICENSE and KAWARP-LICENSE, alongside the pinned LyricMotion
+third-party notices. Editable renderer sources accompany the built web assets
+in the distributed source archive.
+
+The matching editable source is lyricbridge-source-0.1.0.zip, distributed alongside
+the plugin and web archives. Renderer-derived source remains under MPL-2.0.
+LibNMeCab is dynamically linked under LGPL-2.1-or-later; its license and complete
+upstream source are in notices/LIBNMECAB-LGPL-LICENSE and
+notices/LIBNMECAB-SOURCE.tar.gz in the plugin archive. Recipients may modify or
+replace that library and reverse engineer the combined work to debug those
+modifications as provided by the LGPL. Dictionary copying terms remain beside
+the installed dictionary and in notices/IPADIC-COPYING.

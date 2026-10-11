@@ -1,0 +1,51 @@
+name: Validate release candidate
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-check.txt
+      - run: python -m pip install -r requirements-check.txt
+      - run: LYRICBRIDGE_PYTHON=python sh scripts/check-python.sh
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint && pnpm format:check && pnpm knip
+      - run: pnpm build && pnpm test
+      - run: scripts/bootstrap-references.sh
+      - run: dotnet restore tests/StorageTests.csproj --locked-mode -m:1 -p:NuGetAuditMode=all -p:WarningsAsErrors=NU1900
+      - run: dotnet test tests/StorageTests.csproj --no-restore -m:1
+      - run: scripts/test-browser.sh
+      - run: python3 tests/WebInstallation.py && sh tests/WebAssetVersions.sh
+      - run: pnpm audit
+      - run: python3 tests/ReleaseBoundaries.py && python3 tests/Catalog.py
+      - run: scripts/package.sh
+      - run: python3 tests/PackageArtifacts.py
+      - run: python3 tests/ReproducibleBuild.py
+      - run: python3 tests/PackageInstallation.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lyricbridge-candidate
+          path: |
+            dist/*.zip
+            dist/manifest.json
+            dist/SHA256SUMS

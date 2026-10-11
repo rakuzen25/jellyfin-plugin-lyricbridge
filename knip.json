@@ -1,0 +1,16 @@
+{
+    "$schema": "https://unpkg.com/knip@6/schema.json",
+    "workspaces": {
+        ".": {
+            "project": ["*.mjs"]
+        },
+        "frontend": {
+            "entry": ["bridge.ts", "renderer.ts", "admin/config.ts", "**/*.test.ts"],
+            "project": ["**/*.{ts,mjs}"]
+        },
+        "browser-tests": {
+            "entry": ["playwright.config.cjs", "*.spec.cjs", "compare-playback-performance.cjs"],
+            "project": ["*.cjs"]
+        }
+    }
+}

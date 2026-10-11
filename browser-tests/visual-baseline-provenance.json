@@ -1,0 +1,10 @@
+{
+    "description": "Captured before WebGL/text/timeline/geometry/karaoke extraction using the same seekable synthetic media fixture.",
+    "playwrightImage": "mcr.microsoft.com/playwright@sha256:6446946a1d9fd62d9ae501312a2d76a43ee688542b21622056a372959b65d63d",
+    "sourceAssets": {
+        "lyricbridge.js": "21af74b496946cb6a8f6ea44a59c510b109ec68543b73ba26440ef3fa5a4dbe2",
+        "jellyfin-lyric-motion.js": "78a5abec1c78c0d9caa62a88bdd653a6d8d5d39cd43378963b9156b651c2815b",
+        "lyricbridge.css": "8ebd4bc44c686114ffbb0b54f08234a5c2dc6eb2caacec58e4342ab6e7712763",
+        "jellyfin-lyric-motion.css": "dd714613035d957bea04a560da809395518f5eb0ce030688a1d0449b88e19e2f"
+    }
+}
