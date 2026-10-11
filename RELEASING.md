@@ -12,6 +12,8 @@ The flow is: Conventional Commits on `main` → release PR → passing PR checks
 
 The personal access token lets release PRs trigger normal PR CI; PRs created with the default workflow token do not trigger it. Artifact upload uses the repository's ordinary workflow token with write access limited to the attaching job. The personal access token is supplied only to release-please, and external actions are pinned to commit SHAs.
 
+`Prepare release` owns validation for pushes to `main`: ordinary pushes call candidate validation, while newly created releases call artifact validation once against the release commit. PRs and manual validation remain independently available; there is no second standalone push-validation run.
+
 ## Bootstrap the first release
 
 No release has been recorded yet: `.release-please-manifest.json` starts at `0.0.0`; this is release-please's bookkeeping, not the plugin version. The plugin remains `0.1.0`.
