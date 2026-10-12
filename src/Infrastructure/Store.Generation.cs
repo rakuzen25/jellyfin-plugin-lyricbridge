@@ -12,7 +12,9 @@ public sealed partial class Store : IGenerationRepository
         {
             if (IsResetting || Epoch != expectedEpoch || (operationEpoch.Value is long started && started != Epoch)) return false;
             using var connection = Open(); using var transaction = connection.BeginTransaction();
-            if (requireExisting && ReadRecord<Job>(connection, transaction, "job", job.Id) is null) return false;
+            var current = ReadRecord<Job>(connection, transaction, "job", job.Id);
+            if (requireExisting && current is null || current?.OutputDeleted == true || job.OutputDeleted ||
+                !ValidAdmission(connection, transaction, new(expectedEpoch, job.DeletionRevision, job.ItemId), [job.Hash], songScope: false)) return false;
             if (lyrics is not null) WriteRecord(connection, transaction, "document", lyrics.Hash, lyrics);
             WriteRecord(connection, transaction, "job", job.Id, job); transaction.Commit(); return true;
         }
@@ -28,7 +30,7 @@ public sealed partial class Store : IGenerationRepository
             using var connection = Open();
             using var transaction = connection.BeginTransaction();
             var current = ReadRecord<Job>(connection, transaction, "job", job.Id);
-            if (current?.State != "running") return false;
+            if (current?.State != "running" || current.OutputDeleted || !ValidAdmission(connection, transaction, new(Epoch, job.DeletionRevision, job.ItemId), [job.Hash], songScope: false)) return false;
             if (variant is not null) WriteRecord(connection, transaction, "variant", variant.Key, variant);
             var completed = Codec.Deserialize<Job>(Codec.Serialize(job))!;
             completed.State = "complete";

@@ -2,6 +2,8 @@ namespace LyricBridge;
 
 public interface ILyricQueryRepository
 {
+    IReadOnlyList<SavedOriginal> SavedOriginals(Guid item);
+    bool DiscoverySuppressed(Guid item);
     string ActiveStoragePath { get; }
     MatchRejection? Rejection(Guid item);
     InstrumentalEvidence? Instrumental(Guid item);

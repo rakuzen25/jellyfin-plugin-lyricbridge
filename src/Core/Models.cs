@@ -80,6 +80,9 @@ public sealed class Job
     public Guid ItemId { get; set; }
     public string Hash { get; set; } = "";
     public string VariantKey { get; set; } = "";
+    public long DeletionRevision { get; set; }
+    public bool OutputDeleted { get; set; }
+    public DateTimeOffset? OutputDeletedAt { get; set; }
     public string? CacheKey { get; set; }
     public GenerationProfile? Profile { get; set; }
     public GenerationRequest Request { get; set; } = new();

@@ -29,6 +29,7 @@ public sealed class SearchSession
     public MatchingMetrics? Metrics { get; set; }
     public List<SafeError> Errors { get; set; } = [];
     [JsonIgnore] public CancellationTokenSource Cancellation { get; } = new();
+    [JsonIgnore] public StoreAdmission? Admission { get; set; }
     [JsonIgnore] public Task Work { get; set; } = Task.CompletedTask;
     [JsonIgnore] public DateTime Created { get; } = DateTime.UtcNow;
 }

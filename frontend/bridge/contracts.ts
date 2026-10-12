@@ -3,7 +3,20 @@ import type { RequestFailure } from "./api.ts";
 import type { GenerationJob } from "./generation-state.ts";
 import type { AuxiliaryKind, Preferences, Variant } from "./models.ts";
 import type { MatchAssessment } from "./search-models.ts";
+interface SavedOriginal {
+    itemId: string;
+    hash: string;
+    source: string;
+    providerId: string;
+    title: string;
+    artist: string;
+    wordTimed: boolean;
+    savedAt: string;
+    revision: number;
+}
 export interface BridgeDocument {
+    savedOriginals?: SavedOriginal[];
+    canDeleteOriginals?: boolean;
     itemId?: string;
     lyrics?: RichLyrics | null;
     variants?: Variant[];
@@ -51,7 +64,7 @@ export interface TrackScope {
     jobsRestored?: boolean;
     jobs?: Map<string, GenerationJob>;
     jobActions?: Map<string, { retry: () => Promise<void>; cancel: () => Promise<void> }>;
-    versionBrowsing?: Partial<Record<AuxiliaryKind, string>>;
+    versionBrowsing?: Partial<Record<AuxiliaryKind | "original", string | null>>;
     reusableVersionRows?: Map<string, HTMLElement>;
 }
 export interface ServiceCapability {

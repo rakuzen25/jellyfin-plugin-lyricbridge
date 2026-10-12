@@ -21,13 +21,14 @@ const median = (values) => values.sort((a, b) => a - b)[Math.floor(values.length
             ["desktop", { width: 1280, height: 720 }],
             ["mobile", { width: 390, height: 844 }],
         ]) {
-            const samples = { before: [], after: [] };
+            const samples = { before: [], after: [], lowPower: [] };
             for (let round = 0; round < rounds; round++)
                 for (const [revision, root] of [
                     ["before", before],
                     ["after", after],
+                    ["lowPower", after],
                 ]) {
-                    const context = await browser.newContext({ viewport });
+                    const context = await browser.newContext({ viewport, deviceScaleFactor: 2 });
                     const page = await context.newPage();
                     const errors = [];
                     page.on("pageerror", (error) => errors.push(error.message));
@@ -39,28 +40,53 @@ const median = (values) => values.sort((a, b) => a - b)[Math.floor(values.length
                     await demo(page, { root: path.resolve(root) });
                     await page.waitForSelector(".ak-enhanced-line .lb-pronunciation");
                     await page.evaluate(() => document.fonts.ready);
-                    if (longSession)
-                        await page.route("**/Items/*/Images/Primary?*", (route) =>
-                            route.fulfill({
-                                contentType: "image/svg+xml",
-                                body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#334455"/></svg>',
-                            }),
-                        );
+                    await page.route("**/Items/*/Images/Primary?*", (route) =>
+                        route.fulfill({
+                            contentType: "image/svg+xml",
+                            body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#334455"/></svg>',
+                        }),
+                    );
                     const session = await context.newCDPSession(page);
                     await session.send("Performance.enable");
                     const metrics = async () =>
                         Object.fromEntries((await session.send("Performance.getMetrics")).metrics.map((metric) => [metric.name, metric.value]));
-                    const start = await metrics();
                     await page.evaluate(async () => {
                         const audio = document.querySelector("audio");
-                        audio.currentTime = 1;
+                        audio.src = "/Audio/11111111111111111111111111111111/demo.wav";
+                        audio.load();
                         await audio.play();
+                        audio.currentTime = 1;
                         window.comparisonFrames = 0;
                         const frame = () => {
                             window.comparisonFrames++;
+                            if (window.frameIntervals) {
+                                const now = performance.now();
+                                window.frameIntervals.push(now - window.lastSampleFrame);
+                                window.lastSampleFrame = now;
+                            }
                             window.comparisonFrameId = requestAnimationFrame(frame);
                         };
                         window.comparisonFrameId = requestAnimationFrame(frame);
+                    });
+                    await page.waitForFunction(() => window.JellyfinLyricMotion.performance().atmosphereRendering?.renderedFrames > 2);
+                    if (revision === "lowPower") {
+                        await page.evaluate(() => window.JellyfinLyricMotion.setRenderQuality("low-power"));
+                        await page.waitForFunction(() => window.JellyfinLyricMotion.performance().atmosphereRendering?.renderedFrames > 0);
+                    }
+                    const graphics = await page.evaluate(() => {
+                        const gl = document.querySelector(".ak-atmosphere-dynamic-canvas").getContext("webgl");
+                        const info = gl.getExtension("WEBGL_debug_renderer_info");
+                        return {
+                            dpr: devicePixelRatio,
+                            renderer: info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+                        };
+                    });
+                    await session.send("HeapProfiler.collectGarbage");
+                    const start = await metrics();
+                    await page.evaluate(() => {
+                        window.comparisonFrames = 0;
+                        window.frameIntervals = [];
+                        window.lastSampleFrame = performance.now();
                     });
                     const resources = [];
                     if (longSession) {
@@ -83,10 +109,17 @@ const median = (values) => values.sort((a, b) => a - b)[Math.floor(values.length
                             resources.push(await page.evaluate(() => window.JellyfinLyricMotion.lifecycleResources()));
                         }
                     } else await page.waitForTimeout(seconds * 1000);
+                    await session.send("HeapProfiler.collectGarbage");
                     const end = await metrics();
                     samples[revision].push({
                         scriptMs: 1000 * (end.ScriptDuration - start.ScriptDuration),
                         layoutMs: 1000 * (end.LayoutDuration - start.LayoutDuration),
+                        styleMs: 1000 * (end.RecalcStyleDuration - start.RecalcStyleDuration),
+                        taskMs: 1000 * (end.TaskDuration - start.TaskDuration),
+                        heapBytes: end.JSHeapUsedSize,
+                        graphics,
+                        rendering: await page.evaluate(() => window.JellyfinLyricMotion.performance()),
+                        intervals: await page.evaluate(() => window.frameIntervals),
                         resources,
                         frames:
                             (await page.evaluate(() => {
@@ -99,14 +132,20 @@ const median = (values) => values.sort((a, b) => a - b)[Math.floor(values.length
                     await context.close();
                 }
             result[name] = Object.fromEntries(
-                ["before", "after"].map((revision) => [
+                ["before", "after", "lowPower"].map((revision) => [
                     revision,
                     Object.fromEntries(
-                        ["scriptMs", "layoutMs", "frames"].map((metric) => [metric, median(samples[revision].map((sample) => sample[metric]))]),
+                        ["scriptMs", "layoutMs", "styleMs", "taskMs", "heapBytes", "frames"].map((metric) => [
+                            metric,
+                            median(samples[revision].map((sample) => sample[metric])),
+                        ]),
                     ),
                 ]),
             );
-            for (const revision of ["before", "after"]) result[name][revision].resources = samples[revision].map((sample) => sample.resources);
+            for (const revision of ["before", "after", "lowPower"])
+                result[name][revision].resources = samples[revision].map((sample) => sample.resources);
+            assert(result[name].lowPower.taskMs < result[name].after.taskMs * 0.7, `${name} low power did not reduce task time`);
+            result[name].trials = samples;
             for (const metric of ["scriptMs", "layoutMs"])
                 assert(
                     result[name].after[metric] <= Math.max(result[name].before[metric] * 1.5, result[name].before[metric] + 50),

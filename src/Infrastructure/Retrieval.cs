@@ -81,10 +81,11 @@ public sealed class Retrieval(Store store, ProviderRegistry registry, ILogger<Re
     }
     public async Task<RichLyrics?> Get(Guid item, TrackMultiArtistMetadata track, bool upgrade, CancellationToken token)
     {
+        using var operation = store.Operation(store.Admit(item));
         var gate = locks.GetOrAdd(item, _ => new(1)); await gate.WaitAsync(token);
         try
         {
-            var epoch = store.Epoch; if (store.IsResetting) return null; var previous = Selected(item); if (previous != null && !upgrade) return previous;
+            var epoch = store.Epoch; if (store.IsResetting || store.DiscoverySuppressed(item)) return null; var previous = Selected(item); if (previous != null && !upgrade) return previous;
             var instrumental = store.Get<InstrumentalEvidence>("instrumental", item.ToString("N")); if (!upgrade && instrumental != null && (instrumental.Manual || instrumental.Expires > DateTime.UtcNow)) return null;
             if (!upgrade && missingUntil.TryGetValue(item, out var until) && until > DateTime.UtcNow) return null;
             using var budget = CancellationTokenSource.CreateLinkedTokenSource(token); budget.CancelAfter(TimeSpan.FromSeconds(20)); var outcome = new LyricOutcome();
@@ -104,6 +105,7 @@ public sealed class Retrieval(Store store, ProviderRegistry registry, ILogger<Re
     }
     public async Task<RichLyrics> Select(Guid item, Candidate candidate, CancellationToken token, Action? beforeSave = null, TrackMultiArtistMetadata? track = null)
     {
+        using var operation = store.Operation(store.Admit(item));
         var gate = locks.GetOrAdd(item, _ => new(1)); await gate.WaitAsync(token);
         try
         {
@@ -114,6 +116,7 @@ public sealed class Retrieval(Store store, ProviderRegistry registry, ILogger<Re
     }
     public async Task<RichLyrics?> Fetch(Candidate candidate, CancellationToken token, TrackMultiArtistMetadata? track = null)
     {
+        using var operation = store.Operation();
         var epoch = store.Epoch; var result = await Resolve(candidate, token, track); if (epoch != store.Epoch || store.IsResetting || result.Instrumental) return null; return result.Lyrics;
     }
 }

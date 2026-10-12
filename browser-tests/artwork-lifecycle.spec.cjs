@@ -1,7 +1,8 @@
 const { test, expect } = require("playwright/test");
 const { demo } = require("./demo-fixture.cjs");
-const first = "11111111111111111111111111111111",
-    second = "22222222222222222222222222222222";
+// Fresh identities avoid reusing artwork already admitted by demo startup.
+const first = "33333333333333333333333333333333",
+    second = "44444444444444444444444444444444";
 const svg = (color) => `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="${color}"/></svg>`;
 async function track(page, id) {
     await page.evaluate(async (id) => {

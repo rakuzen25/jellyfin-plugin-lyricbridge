@@ -261,3 +261,21 @@ export function lyricTextProfile(lyric: LyricInput) {
         songSection,
     };
 }
+
+/** Identity of the native original timeline; rich auxiliary rows are bridge-owned. */
+export function lyricPayloadIdentity(lyrics: readonly LyricInput[]): string {
+    return JSON.stringify(
+        lyrics.map((line) => [
+            cueValue(line, "LyricBridgeId", "lyricBridgeId"),
+            cueValue(line, "Text", "text"),
+            cueValue(line, "Start", "start"),
+            cueValue(line, "End", "end"),
+            lyricCues(line).map((cue) => [
+                cueValue(cue, "Position", "position"),
+                cueValue(cue, "EndPosition", "endPosition"),
+                cueValue(cue, "Start", "start"),
+                cueValue(cue, "End", "end"),
+            ]),
+        ]),
+    );
+}

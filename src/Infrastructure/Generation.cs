@@ -36,7 +36,8 @@ public sealed class Generation(Func<GenerationPolicy> policy, IGenerationReposit
     {
         lock (gate)
         {
-            var epoch = store.Epoch;
+            var ticket = store.Admit(item); var epoch = ticket.Epoch;
+            if (!store.IsAdmitted(ticket, lyrics.Hash)) throw new WorkflowException(409, "original_deleted", "The original changed during admission. Reload before generating.", true);
             if (store.IsResetting) throw new WorkflowException(409, "reset_in_progress", "Managed lyric reset in progress.", true);
             if (request.Kind == "translation" && request.Service != "AI") { var service = services.Config(request.Service); request.ContextBefore = service.ContextBefore; request.ContextAfter = service.ContextAfter; }
             request.TimeoutSeconds = services.Config(request.Service).TimeoutSeconds;
@@ -53,9 +54,9 @@ public sealed class Generation(Func<GenerationPolicy> policy, IGenerationReposit
                 if (store.CountAdmissions(user, DateTime.UtcNow.AddHours(-24)) >= config.UserRequestDailyQuota) throw new InvalidOperationException("Daily generation quota reached.");
                 if (store.CountActiveJobs(user) >= config.UserRequestActiveCap) throw new InvalidOperationException("Active generation limit reached.");
             }
-            var job = new Job { UserId = user, ItemId = item, Hash = lyrics.Hash, VariantKey = key, Request = request, State = admin || config.AutoApproveUserRequests ? "queued" : "pending" };
+            var job = new Job { DeletionRevision = ticket.Revision, UserId = user, ItemId = item, Hash = lyrics.Hash, VariantKey = key, Request = request, State = admin || config.AutoApproveUserRequests ? "queued" : "pending" };
             job.Profile = profile; job.CacheKey = key; job.VariantKey = key + ":" + job.Id;
-            if (!store.PersistRequest(job, epoch, lyrics)) throw new WorkflowException(409, "reset_in_progress", "The lyric library changed during admission. Retry the request.", true); Wake(); return job;
+            if (!store.PersistRequest(job, epoch, lyrics)) throw new WorkflowException(409, store.IsResetting || store.Epoch != epoch ? "reset_in_progress" : "original_deleted", "The lyric library changed during admission. Reload before submitting a new request.", true); Wake(); return job;
         }
     }
     public Job Action(string id, string action, Guid user, bool admin)
@@ -64,6 +65,7 @@ public sealed class Generation(Func<GenerationPolicy> policy, IGenerationReposit
         {
             var epoch = store.Epoch;
             var job = store.GetJob(id) ?? throw new KeyNotFoundException();
+            if (job.OutputDeleted) throw new WorkflowException(409, "output_deleted", "This request’s output was deleted. Select an original and submit a new request.");
             if (!admin && (job.UserId != user || action is not ("cancel" or "retry"))) throw new UnauthorizedAccessException();
             if (job.State is "pending" or "queued" && !ProfileMatches(job)) { job.State = "settings_changed"; job.Error = "Generation settings changed. Retry to submit with current settings."; store.SaveJob(job); }
             if (action == "approve" && job.State == "settings_changed") return job;
@@ -79,8 +81,13 @@ public sealed class Generation(Func<GenerationPolicy> policy, IGenerationReposit
                 job.Request.TimeoutSeconds = services.Config(job.Request.Service).TimeoutSeconds; job.Error = null; job.Failure = null; job.Progress = 0; job.State = admin || policy().AutoApproveUserRequests ? "queued" : "pending";
             }
             else throw new InvalidOperationException("This action does not apply to the request state.");
-            if (!store.PersistRequest(job, epoch, requireExisting: true)) throw new WorkflowException(409, "reset_in_progress", "The request changed during reset. Reload the job history.", true); Wake(); return job;
+            if (!store.PersistRequest(job, epoch, requireExisting: true)) throw new WorkflowException(409, store.GetJob(id)?.OutputDeleted == true ? "output_deleted" : "reset_in_progress", "The request changed. Reload the job history.", true); Wake(); return job;
         }
+    }
+    public void CancelDeleted(IReadOnlyList<string> ids)
+    {
+        lock (gate) foreach (var id in ids) if (running.TryGetValue(id, out var cancellation)) cancellation.Cancel();
+        Wake();
     }
     public async Task StopAll()
     {

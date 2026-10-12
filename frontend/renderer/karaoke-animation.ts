@@ -8,6 +8,7 @@ export interface MotionMetrics {
     shadowIntensity: number;
 }
 export interface GlowOwner {
+    _akTransform?: string;
     _akGlowCoreBucket?: number;
     _akGlowHaloBucket?: number;
 }
@@ -39,6 +40,7 @@ export interface AnimatedWord extends GlowOwner {
     _akMotionIsReset?: boolean;
     _akWholeFilterCleared?: boolean;
     _akStaticState?: string;
+    _akPaintFlags?: number;
     _akProgressBucket?: number;
 }
 const WORD_PROGRESS_SNAP_DELTA = 0.42;
@@ -47,7 +49,7 @@ export const MOTION_HANDOFF_TICKS = 3200000; // 320 ms previous-line glow decay
 const MOTION_FINAL_RISE_EM = -0.035;
 const ZERO_PROGRESS_EPSILON = 0.0025;
 
-export function createKaraokeAnimation(currentAccent: () => { gain: number }) {
+export function createKaraokeAnimation(currentAccent: () => { gain: number }, motionEnabled: () => boolean = () => true) {
     function smoothWordProgress(word: AnimatedWord, target: number, frameNow: number) {
         target = Number.isFinite(target) ? Math.max(0, Math.min(1, target)) : 0;
 
@@ -286,6 +288,7 @@ export function createKaraokeAnimation(currentAccent: () => { gain: number }) {
     }
 
     function updateMotionGlyphs(word: AnimatedWord, timelineTicks: number, continuityGain = 1) {
+        if (!motionEnabled()) return;
         if (!word.motionGlyphs || !word.motionGlyphs.length) return;
 
         const durationTicks = Math.max(1, word.end - word.start);
@@ -311,8 +314,11 @@ export function createKaraokeAnimation(currentAccent: () => { gain: number }) {
 
             const yEm = (metrics.peakYEm * phase.yPeakMix + MOTION_FINAL_RISE_EM * phase.settleMix) * continuityGain;
 
-            glyph.style.transform =
-                `translate3d(${xEm.toFixed(4)}em, ${yEm.toFixed(4)}em, 0) ` + `scale3d(${scale.toFixed(4)}, ${scale.toFixed(4)}, 1)`;
+            const transform = `translate3d(${xEm.toFixed(4)}em, ${yEm.toFixed(4)}em, 0) scale3d(${scale.toFixed(4)}, ${scale.toFixed(4)}, 1)`;
+            if (glyph._akTransform !== transform) {
+                glyph.style.transform = transform;
+                glyph._akTransform = transform;
+            }
 
             setGlowLayers(glyph, glyph.glowLayers, glow.core, glow.halo);
 
@@ -321,6 +327,7 @@ export function createKaraokeAnimation(currentAccent: () => { gain: number }) {
     }
 
     function updateWholeMotion(word: AnimatedWord, timelineTicks: number, continuityGain = 1) {
+        if (!motionEnabled()) return;
         if (!word.wholeMotion || !word.element) return;
 
         const durationTicks = Math.max(1, word.end - word.start);
@@ -339,7 +346,11 @@ export function createKaraokeAnimation(currentAccent: () => { gain: number }) {
 
         const yEm = (metrics.peakYEm * phase.yPeakMix * 0.82 + MOTION_FINAL_RISE_EM * phase.settleMix) * continuityGain;
 
-        word.element.style.transform = `translate3d(0, ${yEm.toFixed(4)}em, 0) ` + `scale3d(${scale.toFixed(4)}, ${scale.toFixed(4)}, 1)`;
+        const transform = `translate3d(0, ${yEm.toFixed(4)}em, 0) scale3d(${scale.toFixed(4)}, ${scale.toFixed(4)}, 1)`;
+        if (word._akTransform !== transform) {
+            word.element.style.transform = transform;
+            word._akTransform = transform;
+        }
 
         if (!word._akWholeFilterCleared) {
             word.element.style.filter = "none";
@@ -361,6 +372,7 @@ export function createKaraokeAnimation(currentAccent: () => { gain: number }) {
         if (word._akMotionIsReset) return;
 
         word.element.style.transform = "";
+        word._akTransform = undefined;
         word.element.style.filter = "";
         (word.glowLayers || []).forEach((layer) => {
             layer.style.opacity = "0";
@@ -372,6 +384,7 @@ export function createKaraokeAnimation(currentAccent: () => { gain: number }) {
 
         (word.motionGlyphs || []).forEach((glyph) => {
             glyph.style.transform = "";
+            glyph._akTransform = undefined;
 
             (glyph.glowLayers || []).forEach((layer) => {
                 layer.style.opacity = "0";
@@ -429,21 +442,19 @@ export function createKaraokeAnimation(currentAccent: () => { gain: number }) {
          * of EVERY upcoming word look pre-lit. Keep an unsung word solid gray
          * until real timing movement begins.
          */
-        word.element.classList.toggle("ak-word-zero", painted <= ZERO_PROGRESS_EPSILON);
-
         const active = timelineTicks >= word.start && timelineTicks < word.end;
-
         const done = timelineTicks >= word.end;
+        const flags = (painted <= ZERO_PROGRESS_EPSILON ? 1 : 0) | (active ? 2 : 0) | (done ? 4 : 0) | (done && painted >= 0.995 ? 8 : 0);
+        if (word._akPaintFlags !== flags) {
+            word.element.classList.toggle("ak-word-zero", !!(flags & 1));
+            word.element.classList.toggle("ak-word-active", !!(flags & 2));
+            word.element.classList.toggle("ak-word-done", !!(flags & 4));
+            word.element.classList.toggle("ak-word-painted", !!(flags & 8));
+            word.element.classList.remove("ak-word-next");
+            word._akPaintFlags = flags;
+        }
 
-        word.element.classList.toggle("ak-word-active", active);
-
-        word.element.classList.toggle("ak-word-done", done);
-
-        word.element.classList.toggle("ak-word-painted", done && painted >= 0.995);
-
-        word.element.classList.remove("ak-word-next");
-
-        if (word.motionMode === "grow") {
+        if (word.motionMode === "grow" && motionEnabled()) {
             const continuityGain = motionContinuityGain(word, timelineTicks);
 
             if (word.motionGlyphs && word.motionGlyphs.length) {
@@ -467,6 +478,7 @@ export function createKaraokeAnimation(currentAccent: () => { gain: number }) {
         }
 
         word._akStaticState = stateName;
+        word._akPaintFlags = undefined;
 
         if (stateName === "past") {
             word.visualProgress = 1;

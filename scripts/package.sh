@@ -10,7 +10,11 @@ run_dotnet() {
     fi
 }
 "${LYRICBRIDGE_PNPM:-pnpm}" install --frozen-lockfile
-"${LYRICBRIDGE_PNPM:-pnpm}" --dir frontend run build
+if [ "${LYRICBRIDGE_PREPARED_WEB:-false}" = true ]; then
+    python3 scripts/ci.py web-verify
+else
+    "${LYRICBRIDGE_PNPM:-pnpm}" --dir frontend run build
+fi
 staging=$(mktemp -d)
 trap 'rm -rf "$staging"' EXIT INT TERM
 run_dotnet restore src/LyricBridge.csproj --locked-mode --nologo -m:1 -p:NuGetAuditMode=all -p:WarningsAsErrors=NU1900

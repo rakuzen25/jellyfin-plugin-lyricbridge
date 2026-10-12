@@ -3,7 +3,7 @@ import type { LyricLine, RichLyrics } from "../shared/lyrics.ts";
 import type {} from "../shared/runtime.ts";
 import { createApi } from "./api.ts";
 import type { BridgeDocument, SourceCapability, TrackScope } from "./contracts.ts";
-import { button, e, field, select } from "./controls.ts";
+import { button, disclosure, e, field, select } from "./controls.ts";
 import type { AuxiliaryKind, Preferences } from "./models.ts";
 import { PreviewSession } from "./preview-session.ts";
 import { parseDocument } from "./responses.ts";
@@ -85,11 +85,11 @@ export function createSearchPanel(dependencies: Dependencies) {
         const target = context.scope;
         context.searchPopup = e("section", "lb-popup lb-search");
         context.searchPopup.setAttribute("role", "dialog");
-        context.searchPopup.setAttribute("aria-label", "Find lyric versions");
+        context.searchPopup.setAttribute("aria-label", "Search versions");
         const head = e("header", "lb-popup-header");
         head.append(
-            e("h2", "", "Find lyric versions"),
-            button("Cancel", () => closeSearch(), "lb-close"),
+            e("h2", "", "Search versions"),
+            button("Cancel", () => closeSearch(), "lb-close", { icon: "close", iconOnly: true }),
         );
         const form = e("div", "lb-search-form");
         const title = e("input"),
@@ -114,19 +114,23 @@ export function createSearchPanel(dependencies: Dependencies) {
         body.append(list, preview);
         const toolbar = e("div", "lb-search-toolbar");
         toolbar.append(progress);
-        const sourceFailures = e("details", "lb-search-failures");
+        const { root: sourceFailures, content: failureContent } = disclosure("Unavailable sources", "lb-search-failures", false);
         sourceFailures.hidden = true;
-        sourceFailures.append(e("summary", "", ""), e("div", ""));
         const querySummary = e("div", "lb-search-query"),
             queryText = e("span");
         querySummary.hidden = true;
         querySummary.append(
             queryText,
-            button("Edit search", () => {
-                form.hidden = false;
-                querySummary.hidden = true;
-                title.focus();
-            }),
+            button(
+                "Edit search",
+                () => {
+                    form.hidden = false;
+                    querySummary.hidden = true;
+                    title.focus();
+                },
+                "",
+                { icon: "edit" },
+            ),
         );
         context.searchPopup.append(head, form, querySummary, toolbar, body);
         form.append(
@@ -143,30 +147,35 @@ export function createSearchPanel(dependencies: Dependencies) {
                     .join(" · "),
             ),
         );
-        const footer = e("details", "lb-search-footer");
+        const { root: footer, content: footerBody } = disclosure("More options", "lb-search-footer");
         const footerActions = e("div", "lb-song-actions");
-        footer.append(e("summary", "", "More options"), footerActions);
+        footerBody.append(footerActions);
         if (!mixKind && context.current?.canSelect) {
             footerActions.append(
-                button("None of these match", async () => {
-                    confirmation(
-                        footer,
-                        "Clear the selected lyrics and stop automatic matching until Search again or a manual selection?",
-                        async () => {
-                            await api("items/" + requireValue(target).itemId + "/reject-matches", "POST");
-                            if (context.scope !== target) return;
-                            playbackPreview.discard();
-                            closeSearch(false);
-                            await refreshSong(true);
-                            render(null);
-                        },
-                        "Confirm no match",
-                    );
-                }),
+                button(
+                    "None of these match",
+                    async () => {
+                        confirmation(
+                            footerBody,
+                            "Clear the selected lyrics and stop automatic matching until Search again or a manual selection?",
+                            async () => {
+                                await api("items/" + requireValue(target).itemId + "/reject-matches", "POST");
+                                if (context.scope !== target) return;
+                                playbackPreview.discard();
+                                closeSearch(false);
+                                await refreshSong(true);
+                                render(null);
+                            },
+                            "Confirm no match",
+                        );
+                    },
+                    "",
+                    { icon: "warning" },
+                ),
             );
             footerActions.append(
-                button("Use existing Jellyfin lyrics", () => importLyrics(true)),
-                button("Import lyrics", () => importLyrics(false)),
+                button("Use Jellyfin lyrics", () => importLyrics(true), "", { icon: "library" }),
+                button("Import lyrics", () => importLyrics(false), "", { icon: "import" }),
             );
         }
         context.searchPopup.append(footer);
@@ -180,12 +189,18 @@ export function createSearchPanel(dependencies: Dependencies) {
             { container: HTMLElement; row: HTMLButtonElement; badge: HTMLElement; warning: HTMLElement; signature: string | null; usage: HTMLElement }
         >();
         const candidates = new Map<string, Candidate>();
-        const sort = button("Sort by best match", () => {
-            const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-            for (const c of [...candidates.values()].sort(rankCandidates)) list.append(requireValue(rendered.get(c.source + ":" + c.id)).container);
-            focused?.focus({ preventScroll: true });
-            metrics.searchSorts++;
-        });
+        const sort = button(
+            "Sort by best match",
+            () => {
+                const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+                for (const c of [...candidates.values()].sort(rankCandidates))
+                    list.append(requireValue(rendered.get(c.source + ":" + c.id)).container);
+                focused?.focus({ preventScroll: true });
+                metrics.searchSorts++;
+            },
+            "",
+            { icon: "sort" },
+        );
         sort.disabled = true;
         toolbar.append(sort, sourceFailures);
         const timingName = (value: string | undefined) =>
@@ -243,10 +258,15 @@ export function createSearchPanel(dependencies: Dependencies) {
                     buildMixPreview(preview, data, mixKind, requireValue(target));
                     if (list.hidden)
                         preview.prepend(
-                            button("Back to results", () => {
-                                list.hidden = false;
-                                preview.replaceChildren();
-                            }),
+                            button(
+                                "Back to results",
+                                () => {
+                                    list.hidden = false;
+                                    preview.replaceChildren();
+                                },
+                                "",
+                                { icon: "back" },
+                            ),
                         );
                     return;
                 }
@@ -261,10 +281,15 @@ export function createSearchPanel(dependencies: Dependencies) {
                 explanation(preview, candidate.assessment || data.matchAssessment);
                 if (list.hidden)
                     preview.prepend(
-                        button("Back to results", () => {
-                            list.hidden = false;
-                            preview.replaceChildren();
-                        }),
+                        button(
+                            "Back to results",
+                            () => {
+                                list.hidden = false;
+                                preview.replaceChildren();
+                            },
+                            "",
+                            { icon: "back" },
+                        ),
                     );
                 for (const l of data.lyrics?.lines.slice(0, 15) || []) {
                     const block = e("div", "lb-preview-line");
@@ -301,26 +326,40 @@ export function createSearchPanel(dependencies: Dependencies) {
                 const previewActions = e("div", "lb-song-actions");
                 preview.append(previewActions);
                 previewActions.append(
-                    button("Preview with playback", () => {
-                        const actions = [
-                            button("Return to results", () => {
-                                requireValue(context.searchPopup).hidden = false;
-                                context.searchPlaybackBar?.remove();
-                                context.searchPlaybackBar = null;
-                                requireValue(context.searchPopup).querySelector("button")?.focus();
-                            }),
-                            button("Cancel preview", () => closeSearch()),
-                        ];
-                        if (canSelect) actions.push(button(better ? "Use improved version" : "Use this version", saveVersion, "lb-primary"));
-                        startPlaybackPreview(
-                            { ...data, itemId: requireValue(target).itemId },
-                            "Previewing " + candidate.source + " · " + candidate.title,
-                            actions,
-                        );
-                        requireValue(context.searchPopup).hidden = true;
-                    }),
+                    button(
+                        "Preview with playback",
+                        () => {
+                            const actions = [
+                                button(
+                                    "Return to results",
+                                    () => {
+                                        requireValue(context.searchPopup).hidden = false;
+                                        context.searchPlaybackBar?.remove();
+                                        context.searchPlaybackBar = null;
+                                        requireValue(context.searchPopup).querySelector("button")?.focus();
+                                    },
+                                    "",
+                                    { icon: "back" },
+                                ),
+                                button("Cancel preview", () => closeSearch(), "", { icon: "close" }),
+                            ];
+                            if (canSelect)
+                                actions.push(
+                                    button(better ? "Use improved version" : "Use this version", saveVersion, "lb-primary", { icon: "check" }),
+                                );
+                            startPlaybackPreview(
+                                { ...data, itemId: requireValue(target).itemId },
+                                "Previewing " + candidate.source + " · " + candidate.title,
+                                actions,
+                            );
+                            requireValue(context.searchPopup).hidden = true;
+                        },
+                        "",
+                        { icon: "preview" },
+                    ),
                 );
-                if (canSelect) previewActions.append(button(better ? "Use improved version" : "Use this version", saveVersion, "lb-primary"));
+                if (canSelect)
+                    previewActions.append(button(better ? "Use improved version" : "Use this version", saveVersion, "lb-primary", { icon: "check" }));
                 else preview.append(e("p", "lb-help", "Only administrators can apply this selection."));
             } catch (error) {
                 showError(error, preview);
@@ -480,9 +519,9 @@ export function createSearchPanel(dependencies: Dependencies) {
                 const failureSignature = JSON.stringify(errors);
                 if (sourceFailures.dataset.signature !== failureSignature) {
                     sourceFailures.dataset.signature = failureSignature;
-                    requireValue(sourceFailures.querySelector("summary")).textContent =
+                    requireValue(sourceFailures.querySelector(".lb-disclosure-title")).textContent =
                         errors.length + " source" + (errors.length === 1 ? "" : "s") + " unavailable";
-                    requireValue(sourceFailures.querySelector("div")).replaceChildren(
+                    failureContent.replaceChildren(
                         ...errors.map((error) => e("p", "lb-help", error.message + (error.diagnosticId ? " · Reference " + error.diagnosticId : ""))),
                     );
                 }
@@ -503,28 +542,32 @@ export function createSearchPanel(dependencies: Dependencies) {
             progress.textContent = "Searching…";
             return session.start({ title: title.value, artist: artist.value, source: provider.value || null });
         };
-        const submit = button("Search", search, "lb-primary lb-search-submit");
+        const submit = button("Search", search, "lb-primary lb-search-submit", { icon: "search" });
         form.insertBefore(submit, form.querySelector<HTMLElement>(".lb-search-context"));
-        const advanced = e("details", "lb-advanced");
-        advanced.append(e("summary", "", "Advanced: provider track ID"));
+        const { root: advanced, content: advancedBody } = disclosure("Advanced: provider track ID", "lb-advanced", false);
         const id = e("input");
         const idProvider = select(
-            advanced,
+            advancedBody,
             "Track ID provider",
             context.sources[0]?.name || "",
             context.sources.map((source) => [source.name, source.name] as const),
             () => {},
         );
-        field(advanced, "Provider track ID", id);
-        const openTrack = button("Open provider track", () => {
-            if (!idProvider.value || !id.value.trim()) {
-                notice(progress, "Choose a provider and enter its track ID.");
-                return;
-            }
-            pick({ source: idProvider.value, id: id.value.trim(), title: title.value, artist: artist.value, album: "", score: 100 });
-        });
-        advanced.append(openTrack);
-        footer.append(advanced);
+        field(advancedBody, "Provider track ID", id);
+        const openTrack = button(
+            "Open provider track",
+            () => {
+                if (!idProvider.value || !id.value.trim()) {
+                    notice(progress, "Choose a provider and enter its track ID.");
+                    return;
+                }
+                pick({ source: idProvider.value, id: id.value.trim(), title: title.value, artist: artist.value, album: "", score: 100 });
+            },
+            "",
+            { icon: "external" },
+        );
+        advancedBody.append(openTrack);
+        footerBody.append(advanced);
         if (better) {
             const c = {
                 source: requireValue(better.source),

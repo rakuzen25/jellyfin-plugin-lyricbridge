@@ -18,6 +18,7 @@
   <ItemGroup>
     <Reference Include="$(JellyfinReferenceDir)/MediaBrowser.*.dll" />
     <Reference Include="$(JellyfinReferenceDir)/Jellyfin.Data.dll" />
+    <Reference Include="$(JellyfinReferenceDir)/Jellyfin.Api.dll" />
     <Reference Include="$(JellyfinReferenceDir)/Jellyfin.Database.Implementations.dll" />
     <Reference Include="$(JellyfinReferenceDir)/Jellyfin.Extensions.dll" />
   </ItemGroup>

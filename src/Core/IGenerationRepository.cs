@@ -3,6 +3,8 @@ namespace LyricBridge;
 /// <summary>Storage contract used by generation workers, independent of database or host types.</summary>
 public interface IGenerationRepository : IJobRepository
 {
+    StoreAdmission Admit(Guid? item = null);
+    bool IsAdmitted(StoreAdmission ticket, string hash);
     bool IsResetting { get; }
     long Epoch { get; }
     bool PersistRequest(Job job, long expectedEpoch, RichLyrics? lyrics = null, bool requireExisting = false);

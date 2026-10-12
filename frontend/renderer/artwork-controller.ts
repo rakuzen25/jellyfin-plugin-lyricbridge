@@ -632,6 +632,7 @@ export function createArtworkController(dependencies: Dependencies) {
             renderScale: mobile ? 0.65 : 0.75,
             maxRenderLongEdge: mobile ? 960 : 1600,
             maxFps: 30,
+            maxWarpLongEdge: mobile ? 480 : 800,
             onContextLost: () => {
                 state.atmosphereDynamicContextLossCount += 1;
                 state.atmosphereDynamicFallbackReason = "webgl-context-lost";

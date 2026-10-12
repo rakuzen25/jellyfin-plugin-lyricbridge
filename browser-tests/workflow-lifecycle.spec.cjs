@@ -9,10 +9,10 @@ async function versions(page) {
 }
 async function search(page) {
     await versions(page);
-    await page.getByRole("button", { name: "Find versions", exact: true }).click();
+    await page.locator('[data-song-kind="original"]').getByRole("button", { name: "Search versions", exact: true }).click();
 }
 
-test("late search admission is released without replacing a reopened search", async ({ page }) => {
+test("@workflow late search admission is released without replacing a reopened search", async ({ page }) => {
     await demo(page, {
         transformHtml: intercept(`
   if(path.endsWith('/search') && request.method==='POST'){
@@ -36,7 +36,7 @@ test("late search admission is released without replacing a reopened search", as
     await expect.poll(() => page.evaluate(() => window.releasedSearches || [])).toContain("new-session");
 });
 
-test("a delayed selection response cannot close controls on a different track", async ({ page }) => {
+test("@workflow a delayed selection response cannot close controls on a different track", async ({ page }) => {
     await demo(page, {
         transformHtml: intercept(`
   if(path.endsWith('/select')){window.selectionStarted=true;await new Promise(resolve=>window.releaseSelection=resolve);return new Response(null,{status:204});}
@@ -54,7 +54,7 @@ test("a delayed selection response cannot close controls on a different track", 
     await expect(page.locator(".lb-status")).not.toHaveText("Lyric version saved");
 });
 
-test("generation approval, settings change and explicit retry remain visible", async ({ page }) => {
+test("@workflow generation approval, settings change and explicit retry remain visible", async ({ page }) => {
     await demo(page, {
         transformHtml: intercept(`
   const syntheticJob=()=>({id:'controlled-job',state:window.jobState||'pending',progress:0,request:{service:'Google',kind:'translation',language:'zh-Hans'},error:window.jobState==='settings_changed'?'Settings changed. Retry with current settings.':null});
@@ -79,7 +79,7 @@ test("generation approval, settings change and explicit retry remain visible", a
     await expect(page.locator(".lb-job-progress")).toHaveText("Language rows ready");
 });
 
-test("running generation restores on route return without accumulating polling or DOM work", async ({ page }) => {
+test("@workflow running generation restores on route return without accumulating polling or DOM work", async ({ page }) => {
     await demo(page, {
         url: "http://fixture.invalid/web/index.html#/lyrics",
         transformHtml: intercept(`
@@ -131,7 +131,7 @@ test("running generation restores on route return without accumulating polling o
     expect(after.nodes - before.nodes).toBeLessThanOrEqual(5);
 });
 
-test("cached lyrics view exit closes settings and search without a hash change", async ({ page }) => {
+test("@workflow cached lyrics view exit closes settings and search without a hash change", async ({ page }) => {
     await demo(page);
     await versions(page);
     await expect(page.locator(".lb-popup")).toBeVisible();
@@ -148,4 +148,27 @@ test("cached lyrics view exit closes settings and search without a hash change",
     await expect(page.locator(".lb-search")).toHaveCount(0);
     await expect(page.locator(".lb-popup")).toHaveCount(0);
     await expect(page.locator(".lb-tools")).toHaveCount(0);
+});
+
+test("@layout generation banner keeps status above a single action row without nested borders", async ({ page }, testInfo) => {
+    await demo(page, {
+        transformHtml: intercept(`
+      const job={id:'layout-job',state:'running',progress:12,request:{service:'Google',kind:'translation',language:'zh-Hans'}};
+      if(path.endsWith('/jobs'))return new Response(JSON.stringify([job]));
+      if(path.endsWith('/jobs/layout-job'))return new Response(JSON.stringify(job));
+    `),
+    });
+    await expect(page.locator(".lb-job-progress")).toContainText("Google · running · 12%");
+    const banner = page.locator(".lb-job-banner");
+    const status = await banner.locator(".lb-job-progress").boundingBox();
+    const details = await banner.getByRole("button", { name: "Details", exact: true }).boundingBox();
+    const cancel = await banner.getByRole("button", { name: "Cancel request", exact: true }).boundingBox();
+    const dismiss = await banner.getByRole("button", { name: "Dismiss", exact: true }).boundingBox();
+    expect(details.y).toBeGreaterThanOrEqual(status.y + status.height);
+    expect(Math.abs(details.y - cancel.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(details.y - dismiss.y)).toBeLessThanOrEqual(1);
+    expect(details.height).toBeGreaterThanOrEqual(44);
+    expect(dismiss.x + dismiss.width).toBeLessThanOrEqual(page.viewportSize().width);
+    expect(await banner.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("0px");
+    await page.locator(".lb-tools").screenshot({ path: testInfo.outputPath("generation-two-lines.png") });
 });

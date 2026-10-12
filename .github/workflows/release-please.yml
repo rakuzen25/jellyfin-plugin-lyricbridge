@@ -5,17 +5,21 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-concurrency:
-  group: release-please-${{ github.repository }}
-  cancel-in-progress: false
+  actions: read
 jobs:
   release-please:
     runs-on: ubuntu-24.04
+    concurrency:
+      group: release-please-${{ github.repository }}
+      cancel-in-progress: false
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag: ${{ steps.release.outputs.tag_name }}
-      sha: ${{ steps.release.outputs.sha }}
+      release_created: ${{ steps.release.outputs.release_created == 'true' || steps.resume.outputs.release_created == 'true' }}
+      tag: ${{ steps.release.outputs.tag_name || steps.resume.outputs.tag }}
+      sha: ${{ steps.release.outputs.sha || steps.resume.outputs.sha }}
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Check release token setup
         env:
           RELEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
@@ -30,12 +34,20 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      - name: Resume an existing matching unpublished draft
+        id: resume
+        if: steps.release.outputs.release_created != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: python3 scripts/release.py resume-draft --repository "$REPOSITORY" --environment "$GITHUB_OUTPUT"
   validate:
     needs: release-please
     if: needs.release-please.outputs.release_created != 'true'
     uses: ./.github/workflows/validate.yml
     with:
       ref: ${{ github.sha }}
+      base: ${{ github.event.before }}
   artifacts:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'

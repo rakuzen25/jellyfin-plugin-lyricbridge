@@ -34,6 +34,10 @@ public sealed partial class Store
     {
         using var command = connection.CreateCommand();
         command.CommandText = """
+            CREATE INDEX IF NOT EXISTS originals_song ON records(json_extract(payload,'$.itemId'),json_extract(payload,'$.savedAt')) WHERE kind='saved-original';
+            CREATE TABLE IF NOT EXISTS deletion_clock(id INTEGER PRIMARY KEY CHECK(id=1),revision INTEGER NOT NULL);
+            INSERT OR IGNORE INTO deletion_clock VALUES(1,0);
+            CREATE TABLE IF NOT EXISTS deletion_revisions(scope TEXT PRIMARY KEY NOT NULL,revision INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS retained_documents(hash TEXT PRIMARY KEY NOT NULL);
             CREATE TABLE IF NOT EXISTS transient_records(kind TEXT NOT NULL,id TEXT NOT NULL,last_used_ms INTEGER NOT NULL,PRIMARY KEY(kind,id));
             CREATE INDEX IF NOT EXISTS transient_expiry ON transient_records(last_used_ms);
@@ -41,12 +45,14 @@ public sealed partial class Store
             CREATE INDEX IF NOT EXISTS referenced_hash ON record_references(hash);
             CREATE TRIGGER IF NOT EXISTS record_refs_insert AFTER INSERT ON records BEGIN
               INSERT OR IGNORE INTO record_references SELECT DISTINCT NEW.kind,NEW.id,value FROM json_tree(NEW.payload)
-              WHERE key IN ('hash','donorHash','baselineHash') AND type='text' AND NEW.kind NOT IN ('document','raw','preview','preview-assessment');
+              WHERE key IN ('hash','donorHash','baselineHash') AND type='text' AND NEW.kind NOT IN ('document','raw','preview','preview-assessment')
+              AND NOT (NEW.kind='job' AND json_extract(NEW.payload,'$.outputDeleted')=1);
             END;
             CREATE TRIGGER IF NOT EXISTS record_refs_update AFTER UPDATE ON records BEGIN
               DELETE FROM record_references WHERE owner_kind=OLD.kind AND owner_id=OLD.id;
               INSERT OR IGNORE INTO record_references SELECT DISTINCT NEW.kind,NEW.id,value FROM json_tree(NEW.payload)
-              WHERE key IN ('hash','donorHash','baselineHash') AND type='text' AND NEW.kind NOT IN ('document','raw','preview','preview-assessment');
+              WHERE key IN ('hash','donorHash','baselineHash') AND type='text' AND NEW.kind NOT IN ('document','raw','preview','preview-assessment')
+              AND NOT (NEW.kind='job' AND json_extract(NEW.payload,'$.outputDeleted')=1);
             END;
             CREATE TRIGGER IF NOT EXISTS record_refs_delete AFTER DELETE ON records BEGIN
               DELETE FROM record_references WHERE owner_kind=OLD.kind AND owner_id=OLD.id;

@@ -19,6 +19,13 @@ const glyphs = {
     warning: "M12 3L2 21h20L12 3M12 9v5M12 17h.01",
     edit: "M4 20l1-5L16 4l4 4L9 19l-5 1",
     sort: "M4 6h16M4 12h11M4 18h6",
+    chevron: "M9 5l7 7-7 7",
+    back: "M12 5l-7 7 7 7M5 12h15",
+    external: "M14 3h7v7M21 3L11 13M10 3H3v18h18v-7",
+    import: "M14 3H5v18h14V8l-5-5M14 3v5h5M12 10v7M9 14l3 3 3-3",
+    library: "M4 4h4v16H4zM10 4h4v16h-4zM17 4l4 15-3 1-4-15z",
+    timing: "M9 3h6M12 3v3M18 5l2 2M12 10v5l3 2M21 14a9 9 0 1 1-18 0 9 9 0 0 1 18 0",
+    music: "M9 18V5l11-2v12M9 5l11-2M9 18a3 3 0 1 1-3-3 3 3 0 0 1 3 3M20 15a3 3 0 1 1-3-3 3 3 0 0 1 3 3",
 };
 export const icon = (name: keyof typeof glyphs) => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -31,37 +38,18 @@ export const icon = (name: keyof typeof glyphs) => {
     svg.append(path);
     return svg;
 };
-export const button = (text: string, action: (event: MouseEvent) => void, cls = "") => {
+interface ButtonOptions {
+    icon?: keyof typeof glyphs;
+    iconOnly?: boolean;
+    appearance?: "primary" | "danger" | "text";
+}
+export const button = (text: string, action: (event: MouseEvent) => void, cls = "", options: ButtonOptions = {}) => {
     const node = e("button", "lb-button " + cls);
     node.type = "button";
     node.onclick = action;
-    const only =
-        text === "Lyrics settings" || (["Close", "Dismiss", "Delete", "Cancel"].includes(text) && (text !== "Cancel" || cls.includes("lb-close")));
-    const name = only
-        ? text === "Lyrics settings"
-            ? "settings"
-            : text === "Delete"
-              ? "trash"
-              : "close"
-        : text === "Lyrics settings"
-          ? "settings"
-          : text.startsWith("Find") || text === "Search"
-            ? "search"
-            : text.startsWith("Preview")
-              ? "preview"
-              : text === "Use" || text.startsWith("Use this")
-                ? "check"
-                : text.startsWith("Retry")
-                  ? "retry"
-                  : text.startsWith("Generate")
-                    ? "generate"
-                    : text === "Edit search"
-                      ? "edit"
-                      : text === "Sort by best match"
-                        ? "sort"
-                        : null;
-    if (name) node.append(icon(name));
-    if (only) {
+    if (options.appearance) node.classList.add(options.appearance === "text" ? "lb-text-button" : "lb-" + options.appearance);
+    if (options.icon) node.append(icon(options.icon));
+    if (options.iconOnly) {
         node.classList.add("lb-icon-button");
         node.setAttribute("aria-label", text);
         node.dataset.tooltip = text;
@@ -69,8 +57,22 @@ export const button = (text: string, action: (event: MouseEvent) => void, cls = 
     } else if (text) node.append(e("span", "lb-action-label", text));
     return node;
 };
+export function section(title: string) {
+    const root = e("section", "lb-setting-group");
+    root.append(e("h3", "lb-section-title", title));
+    return root;
+}
+export function disclosure(title: string, cls = "", framed = true) {
+    const root = e("details", "lb-disclosure " + (framed ? "lb-frame " : "lb-flat ") + cls);
+    const heading = e("summary", "lb-disclosure-heading");
+    heading.append(icon("chevron"), e("span", "lb-disclosure-title", title));
+    const content = e("div", "lb-disclosure-content");
+    root.append(heading, content);
+    return { root, content };
+}
 export function field<T extends HTMLElement>(parent: HTMLElement, label: string, input: T, help?: string) {
     const wrap = e("label", "lb-field");
+    input.setAttribute("aria-label", label);
     wrap.append(e("span", "lb-field-label", label), input);
     if (help) wrap.append(e("small", "lb-help", help));
     parent.append(wrap);

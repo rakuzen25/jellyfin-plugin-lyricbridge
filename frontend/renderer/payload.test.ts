@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeLyricsPayload, lyricTextProfile, lyricTimingMode, usableWordCueRanges } from "./payload.ts";
+import { lyricPayloadIdentity, normalizeLyricsPayload, lyricTextProfile, lyricTimingMode, usableWordCueRanges } from "./payload.ts";
 test("malformed native rows cannot shift line identities", () => {
     assert.equal(normalizeLyricsPayload({ Lyrics: [{ Text: "valid" }, null] }), null);
     assert.equal(normalizeLyricsPayload({ Lyrics: [{ Text: 9 }] }), null);
@@ -72,4 +72,11 @@ test("obsolete preview sentinels are plain source text; current background prefi
     assert.equal(profile.text, old);
     assert.equal(profile.isBackgroundVocal, false);
     assert.equal(lyricTextProfile({ Text: "[ak:bg]hello" }).isBackgroundVocal, true);
+});
+
+test("original identity tracks cue boundaries and IDs without auxiliary metadata", () => {
+    const line = { Text: "歌", Start: 1, End: 9, LyricBridgeId: "row", Cues: [{ Position: 0, EndPosition: 1, Start: 1, End: 9 }] };
+    assert.equal(lyricPayloadIdentity([line]), lyricPayloadIdentity([{ ...line, translations: { en: "song" } }]));
+    assert.notEqual(lyricPayloadIdentity([line]), lyricPayloadIdentity([{ ...line, Cues: [{ Position: 0, EndPosition: 1, Start: 1, End: 8 }] }]));
+    assert.notEqual(lyricPayloadIdentity([line]), lyricPayloadIdentity([{ ...line, LyricBridgeId: "other" }]));
 });

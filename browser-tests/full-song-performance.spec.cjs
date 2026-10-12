@@ -1,6 +1,7 @@
 const { writeFileSync } = require("node:fs");
 const { test, expect } = require("playwright/test");
 const { demo } = require("./demo-fixture.cjs");
+test.use({ deviceScaleFactor: 2 });
 
 test("full song playback keeps inactive lines out of promoted animation layers", async ({ page, browserName }, testInfo) => {
     test.skip(browserName !== "chromium", "LayerTree and retained heap measurements require Chromium CDP.");
@@ -18,6 +19,12 @@ test("full song playback keeps inactive lines out of promoted animation layers",
                 ),
     });
     await expect(page.locator(".ak-enhanced-line")).toHaveCount(121, { timeout: 30000 });
+    await page.route("**/Items/*/Images/Primary?*", (route) =>
+        route.fulfill({
+            contentType: "image/svg+xml",
+            body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#993377"/></svg>',
+        }),
+    );
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("Performance.enable");
     await cdp.send("LayerTree.enable");
@@ -26,9 +33,13 @@ test("full song playback keeps inactive lines out of promoted animation layers",
         layers = event.layers || [];
     });
     await page.evaluate(async () => {
-        await document.querySelector("audio").play();
+        const audio = document.querySelector("audio");
+        audio.src = "/Audio/11111111111111111111111111111111/demo.wav";
+        audio.load();
+        await audio.play();
     });
-    await page.waitForTimeout(1500);
+    await page.waitForFunction(() => window.JellyfinLyricMotion.performance().atmosphereRendering?.renderedFrames > 2);
+    const backgroundBefore = await page.evaluate(() => window.JellyfinLyricMotion.performance().atmosphereRendering.renderedFrames);
     await cdp.send("HeapProfiler.collectGarbage");
     const read = async () => Object.fromEntries((await cdp.send("Performance.getMetrics")).metrics.map((m) => [m.name, m.value]));
     const first = await read();
@@ -39,6 +50,8 @@ test("full song playback keeps inactive lines out of promoted animation layers",
     expect(last.ScriptDuration - first.ScriptDuration).toBeLessThan(3);
     const rendering = await page.evaluate(() => window.JellyfinLyricMotion.performance());
     expect(rendering.animationLoopErrors).toBe(0);
+    expect(rendering.atmosphereRendering.renderedFrames).toBeGreaterThan(backgroundBefore);
+    expect(Math.max(rendering.atmosphereRendering.warpWidth, rendering.atmosphereRendering.warpHeight)).toBeLessThanOrEqual(800);
     await expect(page.locator(".lyricsLine:not(.ak-current):not(.ak-motion-handoff) .ak-glow-layer").first()).toBeHidden();
     const report = testInfo.outputPath("full-song-performance.json");
     writeFileSync(

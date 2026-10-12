@@ -14,6 +14,7 @@ export interface BackgroundOptions {
     scale?: number;
     renderScale?: number;
     maxRenderLongEdge?: number;
+    maxWarpLongEdge?: number;
     maxFps?: number;
     onContextLost?: () => void;
     onContextRestored?: () => void;
@@ -66,6 +67,7 @@ export class DynamicBackgroundRenderer {
     scale: number;
     renderScale: number;
     maxRenderLongEdge: number;
+    readonly maxWarpLongEdge: number;
     readonly frameIntervalMs: number;
     private lastRenderedAt = 0;
     renderedFrames: number;
@@ -149,7 +151,7 @@ export class DynamicBackgroundRenderer {
             stencil: false,
             premultipliedAlpha: false,
             preserveDrawingBuffer: false,
-            powerPreference: "high-performance",
+            powerPreference: "default",
         });
         if (!gl) throw new Error("WebGL not supported");
         this.gl = gl;
@@ -205,6 +207,7 @@ export class DynamicBackgroundRenderer {
         this.isTransitioning = false;
         this.transitionStartTime = 0;
         this.contextLost = false;
+        this.maxWarpLongEdge = Math.max(64, Math.min(800, options.maxWarpLongEdge ?? 800));
         this.renderWidth = 0;
         this.renderHeight = 0;
         this.transitionSerial = 0;
@@ -766,7 +769,8 @@ export class DynamicBackgroundRenderer {
         this.renderWidth = width;
         this.renderHeight = height;
         this.deleteFramebuffer(this.warpFBO!);
-        this.warpFBO = this.createFramebuffer(width, height, false);
+        const warpScale = Math.min(1, this.maxWarpLongEdge / Math.max(width, height));
+        this.warpFBO = this.createFramebuffer(Math.max(1, Math.round(width * warpScale)), Math.max(1, Math.round(height * warpScale)), false);
         return true;
     }
 
@@ -796,7 +800,7 @@ export class DynamicBackgroundRenderer {
         gl.useProgram(this.warpProgram);
         this.setupAttributes();
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.warpFBO!.framebuffer);
-        gl.viewport(0, 0, width, height);
+        gl.viewport(0, 0, this.warpFBO!.width, this.warpFBO!.height);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, sourceTexture);
         gl.uniform1i(this.uniforms.warp.texture, 0);
@@ -881,6 +885,8 @@ export class DynamicBackgroundRenderer {
             saturation: this.saturation,
             dithering: this.dithering,
             scale: this.scale,
+            warpWidth: this.warpFBO?.width ?? 0,
+            warpHeight: this.warpFBO?.height ?? 0,
             renderWidth: this.renderWidth,
             renderHeight: this.renderHeight,
             transitioning: this.isTransitioning,

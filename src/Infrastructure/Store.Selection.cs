@@ -123,15 +123,17 @@ public sealed partial class Store : ISelectionRepository
         ReadRecord<MatchRejection>(connection, transaction, "rejected-match", id),
         ReadRecord<SelectionAssessment>(connection, transaction, "selection-assessment", id));
 
-    private static void WriteSelection(SqliteConnection connection, SqliteTransaction transaction, string id, VersionSnapshot selection, RawLyrics? raw)
+    private void WriteSelection(SqliteConnection connection, SqliteTransaction transaction, string id, VersionSnapshot selection, RawLyrics? raw)
     {
         if (selection.Lyrics is { } lyrics)
         {
             lyrics.Hash = Codec.ContentHash(lyrics);
             WriteRecord(connection, transaction, "document", lyrics.Hash, lyrics);
             RetainDocument(connection, transaction, lyrics.Hash);
+            SaveOriginal(connection, transaction, Guid.ParseExact(id, "N"), lyrics, selection.Assessment);
             if (raw is not null) WriteRecord(connection, transaction, "raw", lyrics.Hash, raw);
         }
+        WriteRecord<object>(connection, transaction, "discovery-suppressed", id, null);
         WriteRecord(connection, transaction, "selected", id, selection.Lyrics);
         WriteRecord(connection, transaction, "instrumental", id, selection.Instrumental);
         WriteRecord(connection, transaction, "rejected-match", id, selection.Rejected);
@@ -147,7 +149,13 @@ public sealed partial class Store : ISelectionRepository
         return command.ExecuteScalar() is string value ? Codec.Deserialize<T>(value) : default;
     }
 
-    private static void WriteRecord<T>(SqliteConnection connection, SqliteTransaction transaction, string kind, string id, T? value)
+    private void WriteRecord<T>(SqliteConnection connection, SqliteTransaction transaction, string kind, string id, T? value)
+    {
+        if (!CanWrite(connection, transaction, kind, id, value)) throw DeletedConflict();
+        WriteUnchecked(connection, transaction, kind, id, value);
+    }
+
+    private static void WriteUnchecked<T>(SqliteConnection connection, SqliteTransaction transaction, string kind, string id, T? value)
     {
         using var command = connection.CreateCommand(); command.Transaction = transaction;
         command.CommandText = value is null

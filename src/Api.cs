@@ -21,7 +21,19 @@ public sealed class SafeExceptionFilter(ILogger<SafeExceptionFilter> logger) : I
         context.Result = new JsonResult(new { error }, Codec.Json) { StatusCode = error.Code == "search_limit" ? 429 : error.Code == "invalid_request" ? 400 : 503 }; context.ExceptionHandled = true;
     }
 }
-[ApiController, Authorize, Route("LyricBridge"), TypeFilter(typeof(SafeExceptionFilter))]
+public sealed class StoreOperationFilter(Store store) : IAsyncActionFilter
+{
+    public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
+    {
+        if (context.ActionArguments.TryGetValue("id", out var id) && id is Guid item)
+        {
+            using var operation = store.Operation(store.Admit(item));
+            await next();
+        }
+        else await next();
+    }
+}
+[ApiController, Authorize, Route("LyricBridge"), TypeFilter(typeof(SafeExceptionFilter)), TypeFilter(typeof(StoreOperationFilter))]
 public sealed class Api(SelectionService selection, LanguageVersionService versions, TimingService timing, LyricQueryService query, LibraryAccess access, PreferenceService preferences, ManagedLibraryMaintenance maintenance, Generation generation, LanguageServices languages, Discovery discovery, LocalPronunciation local, WebRendererIntegration renderer) : ControllerBase
 {
     private IActionResult JsonData(object? value) => new JsonResult(value, Codec.Json);
@@ -45,10 +57,10 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
     [HttpDelete("items/{id:guid}/language-preferences")]
     public IActionResult ClearSongPreferences(Guid id) { if (Item(id) == null) return NotFound(); preferences.SaveSong(UserId, id, null); return SongPreferences(id); }
     private Task<RichLyrics?> Read(Audio audio, CancellationToken token) => query.Read(audio, token);
-    private IActionResult Payload(Guid id, LyricOutcome outcome, RichLyrics? original = null)
+    private IActionResult Payload(Guid id, LyricOutcome outcome, RichLyrics? original = null, bool readOnly = false)
     {
         var item = Item(id);
-        return item == null ? NotFound() : JsonData(query.Build(item, UserId, Admin, outcome, original));
+        return item == null ? NotFound() : JsonData(query.Build(item, UserId, Admin, outcome, original, readOnly));
     }
     [HttpGet("items/{id:guid}/lyrics")]
     public async Task<IActionResult> Lyrics(Guid id, CancellationToken token) { var item = Item(id); return item == null ? NotFound() : Payload(id, await query.Discover(item, token)); }
@@ -69,6 +81,31 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
     {
         var item = Item(id); if (item == null) return NotFound();
         var result = await selection.Preview(item, candidate, token); return Payload(id, result.Outcome, result.Original);
+    }
+    [HttpGet("items/{id:guid}/originals")]
+    public IActionResult Originals(Guid id) => Item(id) == null ? NotFound() : JsonData(selection.Originals(id));
+    [HttpGet("items/{id:guid}/originals/{hash}/preview")]
+    public IActionResult OriginalPreview(Guid id, string hash)
+    {
+        if (Item(id) == null) return NotFound();
+        return Payload(id, new() { State = "ready", Lyrics = selection.PreviewOriginal(id, hash), Complete = true }, readOnly: true);
+    }
+    [HttpPost("items/{id:guid}/originals/{hash}/select")]
+    public IActionResult SelectOriginal(Guid id, string hash)
+    {
+        if (!Admin) return Error(403, "permission_denied", "An administrator must change the library lyric version.");
+        if (Item(id) == null) return NotFound();
+        selection.SelectOriginal(id, hash);
+        return Payload(id, discovery.Status(id));
+    }
+    [HttpDelete("items/{id:guid}/originals/{hash}")]
+    public IActionResult DeleteOriginal(Guid id, string hash, DeleteOriginalInput input)
+    {
+        if (!Admin) return Error(403, "permission_denied", "An administrator must delete saved originals.");
+        if (Item(id) == null) return NotFound();
+        if (!input.Confirmed || input.Revision is null) return Error(400, "confirmation_required", "Confirm deletion of this saved original and its dependent managed data.");
+        var result = maintenance.DeleteOriginal(id, hash, input.Revision);
+        return JsonData(new { result.SharedContentRetained, lyrics = query.Build(Item(id)!, UserId, Admin, discovery.Status(id), readOnly: true) });
     }
     [HttpPost("items/{id:guid}/select")]
     public async Task<IActionResult> Select(Guid id, Candidate candidate, CancellationToken token)
@@ -208,3 +245,5 @@ public sealed record InstrumentalInput(bool Clear = false);
 public sealed record PronunciationInput(string Hash, bool IncludeSupplied = true, bool Retry = false);
 
 public sealed record ResetLibraryInput(string Confirmation);
+
+public sealed record DeleteOriginalInput(bool Confirmed, long? Revision = null);

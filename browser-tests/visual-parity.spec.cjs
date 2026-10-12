@@ -5,12 +5,21 @@ const { demo } = require("./demo-fixture.cjs");
 // synthetic, seekable media fixture. Override is used only to recapture them.
 test("paused multilingual playback and settings preserve the visual baseline", async ({ page, browserName }) => {
     // Keep the pre-extraction capture's artwork grace period independent of host load.
-    await page.clock.install();
+    const start = new Date("2026-01-01T00:00:00Z");
+    await page.clock.install({ time: start });
+    await page.clock.pauseAt(new Date(start.getTime() + 100));
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.addInitScript(() => localStorage.setItem("lyricbridge.renderer.accent", "ruby"));
     const root = process.env.LYRICBRIDGE_VISUAL_BASELINE_ROOT;
     await demo(page, root ? { root: path.resolve(root) } : {});
-    await page.waitForSelector(".ak-enhanced-line .lb-pronunciation");
+    // Initialization may need an animation frame. Advance bounded virtual time
+    // rather than letting slow host setup consume the artwork grace period.
+    await expect
+        .poll(async () => {
+            await page.clock.runFor(16);
+            return page.locator(".ak-enhanced-line .lb-pronunciation").count();
+        })
+        .toBeGreaterThan(0);
     await page.evaluate(async () => {
         await document.fonts.ready;
         const audio = document.querySelector("audio");

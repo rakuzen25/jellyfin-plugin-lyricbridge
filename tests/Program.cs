@@ -15,6 +15,8 @@ public sealed class RegressionSuite
     [Theory]
     [InlineData(0)]
     [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(6)]
     public void UnsupportedPreviewStorageIsNotReinterpreted(int schema)
     {
         var root = Path.Combine(Path.GetTempPath(), "lyricbridge-schema-" + Guid.NewGuid().ToString("N"));
@@ -41,7 +43,7 @@ public sealed class RegressionSuite
     }
 
     [Fact]
-    public async Task ExistingScenarios()
+    public void PersistenceMultilingualAlignmentAndReadOnlyMedia()
     {
         var root = Path.Combine(Path.GetTempPath(), "lyricbridge-tests-" + Guid.NewGuid().ToString("N"));
         var storage = Path.Combine(root, "custom-storage");
@@ -64,17 +66,6 @@ public sealed class RegressionSuite
             Assert(Directory.GetFiles(media).Length == 1, "no sidecar writes"); Assert(File.Exists(Path.Combine(storage, "index.sqlite")), "custom path index");
             var malformed = false; try { Normalization.ValidateGenerated(["l0", "l1"], new() { { "l0", "text" } }); } catch (InvalidDataException) { malformed = true; }
             Assert(malformed, "reject missing generated lines");
-            await CoreTests.Run(root);
-            await ImprovementTests.Run(root);
-            await RankingTests.Run(root);
-            CompositionTests.Run();
-            SongPreferencesTests.Run(root);
-            ResetTests.Run(root);
-            await ContextTests.Run();
-            await AiThinkingTests.Run(root);
-            await GenerationProfileTests.Run(root);
-            await PartialPronunciationTests.Run();
-            await VariantHistoryTests.Run(root);
             Console.WriteLine("PASS: custom storage, read-only library, SQLite persistence, original/raw/variant separation, multilingual alignment, invalid generation mappings.");
         }
         finally
@@ -84,6 +75,56 @@ public sealed class RegressionSuite
             Directory.Delete(root, true);
         }
     }
+    // Each historical scenario now has an isolated root and an independently
+    // discoverable result. Keep distinct invariants until replaced by finer tests.
+    private static async Task InIsolatedRoot(Func<string, Task> scenario)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "lyricbridge-scenario-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var paths = System.Reflection.DispatchProxy.Create<MediaBrowser.Common.Configuration.IApplicationPaths, Proxy>();
+            ((Proxy)(object)paths).Root = root;
+            var serializer = System.Reflection.DispatchProxy.Create<MediaBrowser.Model.Serialization.IXmlSerializer, Proxy>();
+            new Plugin(paths, serializer).UpdateConfiguration(new Configuration());
+            await scenario(root);
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public Task ProviderRegistryAndGenerationAdmission() => InIsolatedRoot(CoreTests.Run);
+
+    [Fact]
+    public Task ImprovementRetrievalAndPronunciation() => InIsolatedRoot(ImprovementTests.Run);
+
+    [Fact]
+    public Task RankingAndConcurrentRetrieval() => InIsolatedRoot(RankingTests.Run);
+
+    [Fact]
+    public Task ReasoningAndExecutionSettings() => InIsolatedRoot(AiThinkingTests.Run);
+
+    [Fact]
+    public Task GenerationProfilesAndSettingsChanges() => InIsolatedRoot(GenerationProfileTests.Run);
+
+    [Fact]
+    public Task VariantHistoryAndSelection() => InIsolatedRoot(VariantHistoryTests.Run);
+
+    [Fact]
+    public Task SongPreferenceIsolation() => InIsolatedRoot(root => { SongPreferencesTests.Run(root); return Task.CompletedTask; });
+
+    [Fact]
+    public Task ManagedResetPreservesPreferencesAndRejectsStaleWrites() => InIsolatedRoot(root => { ResetTests.Run(root); return Task.CompletedTask; });
+
+    [Fact]
+    public void CompositionPreservesTimingAndRejectsAmbiguousMappings() => CompositionTests.Run();
+
+    [Fact]
+    public Task ProviderContextPropagation() => InIsolatedRoot(_ => ContextTests.Run());
+
+    [Fact]
+    public Task PartialPronunciationPreservesRowIdentity() => InIsolatedRoot(_ => PartialPronunciationTests.Run());
+
     static void Assert(bool condition, string name) { if (!condition) throw new Exception("Failed: " + name); }
 
 }

@@ -82,3 +82,21 @@ test("preview-era responses without explicit account/song preferences are reject
     delete input.accountPreferences;
     assert.throws(() => parseDocument(input, defaults), /invalid lyric response/);
 });
+
+test("saved-original summaries and delete permissions are validated before rendering", () => {
+    const original = {
+        itemId: "song",
+        hash: "original",
+        source: "Imported",
+        providerId: "local",
+        title: "Song",
+        artist: "Artist",
+        wordTimed: false,
+        savedAt: "2026-10-11T00:00:00Z",
+        revision: 0,
+    };
+    const input = { ...fixture(), savedOriginals: [original], canDeleteOriginals: true };
+    assert.equal(parseDocument(input, defaults).savedOriginals?.[0]?.hash, "original");
+    assert.throws(() => parseDocument({ ...input, savedOriginals: [{ ...original, hash: 42 }] }, defaults));
+    assert.throws(() => parseDocument({ ...input, canDeleteOriginals: "yes" }, defaults));
+});

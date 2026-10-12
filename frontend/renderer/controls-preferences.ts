@@ -572,15 +572,46 @@ export function createControlsPreferences(dependencies: Dependencies) {
 
     const lyricScrollGeometry = (element: HTMLElement) =>
         scrollGeometry(element, (element) => element instanceof HTMLElement && elementHasLiveLayout(element));
-    function refreshLyricScrollSpace() {
+    let scrollSpaceCache:
+        | {
+              container: HTMLElement;
+              records: typeof state.lineData;
+              width: number;
+              height: number;
+              firstHeight: number;
+              lastHeight: number;
+              picking: boolean;
+          }
+        | undefined;
+    function refreshLyricScrollSpace(force = false) {
         const container = getCurrentLyricsContainer(true);
         if (!container || !state.lineData.length) return;
         const first = state.lineData.find((line) => !line.isBackgroundVocal)?.element;
         const last = [...state.lineData].reverse().find((line) => !line.isBackgroundVocal)?.element;
         if (!first || !last) return;
-        const bounds = lyricScrollGeometry(first);
         const firstHeight = first.getBoundingClientRect().height;
         const lastHeight = last.getBoundingClientRect().height;
+        if (
+            !force &&
+            scrollSpaceCache?.container === container &&
+            scrollSpaceCache.records === state.lineData &&
+            scrollSpaceCache.width === innerWidth &&
+            scrollSpaceCache.height === innerHeight &&
+            scrollSpaceCache.firstHeight === firstHeight &&
+            scrollSpaceCache.lastHeight === lastHeight &&
+            scrollSpaceCache.picking === state.timingPickActive
+        )
+            return;
+        scrollSpaceCache = {
+            container,
+            records: state.lineData,
+            width: innerWidth,
+            height: innerHeight,
+            firstHeight,
+            lastHeight,
+            picking: state.timingPickActive,
+        };
+        const bounds = lyricScrollGeometry(first);
         const head = Math.max(0, bounds.center - bounds.scrollTop - firstHeight / 2);
         const tail = Math.max(24, bounds.scrollBottom - bounds.center - lastHeight / 2 + 24);
         for (const [name, value] of [

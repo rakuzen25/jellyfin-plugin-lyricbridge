@@ -135,13 +135,7 @@ def artifact_hashes(
     return hashes
 
 
-def upload(root: Path, directory: Path, repository: str, tag: str) -> None:
-    repository = repository_name(repository)
-    if not tag:
-        raise ValueError("A release tag is required for artifact upload")
-    check_identity(root, tag)
-    hashes = artifact_hashes(root, directory, repository, tag)
-    # The release-by-tag endpoint does not reliably resolve draft releases.
+def release_for_tag(repository: str, tag: str) -> dict | None:
     matches: list[dict] = []
     page = 1
     while True:
@@ -152,22 +146,62 @@ def upload(root: Path, directory: Path, repository: str, tag: str) -> None:
         if len(releases) < 100:
             break
         page += 1
-    if len(matches) != 1:
+    if len(matches) > 1:
         raise ValueError(
-            "Expected exactly one release for this tag; resolve missing or duplicate releases before upload"
+            "Expected exactly one release for this tag; resolve duplicate releases"
         )
-    release = matches[0]
-    if release.get("draft") is not True or release.get("tag_name") != tag:
-        raise ValueError(
-            "Only the matching existing draft release may receive artifacts"
-        )
+    return matches[0] if matches else None
+
+
+def tag_commit(repository: str, tag: str) -> str:
     reference = github_json(repository, "/git/ref/tags/" + tag)["object"]
     while reference["type"] == "tag":
         reference = github_json(repository, "/git/tags/" + reference["sha"])["object"]
+    if reference["type"] != "commit":
+        raise ValueError("Release tag does not identify a commit")
+    return reference["sha"]
+
+
+def resume_draft(root: Path, repository: str, output: Path) -> None:
+    repository = repository_name(repository)
+    tag = check_identity(root)
+    draft = release_for_tag(repository, tag)
+    if not draft or not draft.get("draft"):
+        with output.open("a") as stream:
+            stream.write("release_created=false\n")
+        return
     commit = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=root, text=True
     ).strip()
-    if reference["type"] != "commit" or reference["sha"] != commit:
+    if tag_commit(repository, tag) != commit:
+        raise ValueError(
+            "Existing draft tag does not match main; resolve it explicitly before resuming"
+        )
+    with output.open("a") as stream:
+        stream.write(f"release_created=true\ntag={tag}\nsha={commit}\n")
+
+
+def upload(root: Path, directory: Path, repository: str, tag: str) -> None:
+    repository = repository_name(repository)
+    if not tag:
+        raise ValueError("A release tag is required for artifact upload")
+    check_identity(root, tag)
+    hashes = artifact_hashes(root, directory, repository, tag)
+    # The release-by-tag endpoint does not reliably resolve draft releases.
+    release = release_for_tag(repository, tag)
+    if not release:
+        raise ValueError(
+            "Expected exactly one release for this tag; resolve missing releases before upload"
+        )
+    if release.get("draft") is not True:
+        raise ValueError(
+            "Only the matching existing draft release may receive artifacts"
+        )
+    tagged_commit = tag_commit(repository, tag)
+    commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=root, text=True
+    ).strip()
+    if tagged_commit != commit:
         raise ValueError("Release tag moved or does not identify the tested checkout")
     names = [asset["name"] for asset in release.get("assets", [])]
     if len(set(names)) != len(names):
@@ -218,6 +252,9 @@ def main() -> None:
     prep.add_argument("--repository", required=True)
     prep.add_argument("--tag", default="")
     prep.add_argument("--environment", type=Path, required=True)
+    resume = subparsers.add_parser("resume-draft")
+    resume.add_argument("--repository", required=True)
+    resume.add_argument("--environment", type=Path, required=True)
     attach = subparsers.add_parser("upload")
     attach.add_argument("--repository", required=True)
     attach.add_argument("--tag", required=True)
@@ -229,6 +266,8 @@ def main() -> None:
             print("Validated release identity: " + check_identity(root, args.tag))
         elif args.command == "prepare":
             prepare(root, args.repository, args.tag, args.environment)
+        elif args.command == "resume-draft":
+            resume_draft(root, args.repository, args.environment)
         else:
             upload(root, args.directory, args.repository, args.tag)
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 from release_metadata import load_release
+from source_inventory import source_files
 import shutil
 from urllib.parse import urlparse
 import xml.etree.ElementTree as ET
@@ -207,62 +208,7 @@ web = archive(
         (Path("vendor/KAWARP-LICENSE"), Path("KAWARP-LICENSE.txt")),
     ],
 )
-sources = []
-for root in (
-    "src",
-    "frontend",
-    "vendor",
-    "scripts",
-    "tests",
-    "browser-tests",
-    ".github",
-):
-    for p in Path(root).rglob("*"):
-        if (
-            p.is_file()
-            and not any(
-                part in {"bin", "obj", ".git", "node_modules", "results", "__pycache__"}
-                or (root == "browser-tests" and part.startswith("results-"))
-                for part in p.parts
-            )
-            and not p.name.startswith(("core.", ".env"))
-            and not p.name.endswith((".session.json", ".dmp"))
-        ):
-            sources.append((p, p))
-for name in (
-    "LICENSE",
-    "NOTICE",
-    "README.md",
-    "DEPLOYMENT.md",
-    "RELEASING.md",
-    "CHANGELOG.md",
-    "REMEDIATION.md",
-    "ARCHITECTURE.md",
-    "TEST_COVERAGE.md",
-    "LICENSE_REVIEW.md",
-    "PERFORMANCE.md",
-    "RANKING.md",
-    "SETUP.md",
-    "Directory.Build.props",
-    "release-please-config.json",
-    ".release-please-manifest.json",
-    "version.txt",
-    "package.json",
-    "pnpm-workspace.yaml",
-    "pnpm-lock.yaml",
-    "global.json",
-    "knip.json",
-    "eslint.config.mjs",
-    ".prettierrc.json",
-    ".prettierignore",
-    "pyproject.toml",
-    "requirements-check.txt",
-    ".node-version",
-    ".editorconfig",
-    ".gitignore",
-    ".dockerignore",
-):
-    sources.append((Path(name), Path(name)))
+sources = [(path, path) for path in source_files(Path("."))]
 source = archive(f"lyricbridge-source-{version}.zip", sources)
 manifest = [
     {

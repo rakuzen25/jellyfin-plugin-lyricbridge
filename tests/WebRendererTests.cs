@@ -91,6 +91,17 @@ public sealed class WebRendererTests
         finally { Directory.Delete(root, true); }
     }
     [Fact]
+    public async Task DisposalImmediatelyDetachesServeTimeTransformation()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var integration = new WebRendererIntegration("/nonexistent-lyricbridge-disposal-fixture", () => true, NullLogger<WebRendererIntegration>.Instance, Revision, () => { entered.TrySetResult(); return true; });
+        await integration.StartAsync(default);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Contains(WebRendererIntegration.StartMarker, WebRendererIntegration.TransformIndexHtml(new() { Contents = "<head></head>" }));
+        integration.Dispose();
+        Assert.Equal("<head></head>", WebRendererIntegration.TransformIndexHtml(new() { Contents = "<head></head>" }));
+    }
+    [Fact]
     public void RegistrationUsesTheDocumentedWireContract()
     {
         Assert.True(WebRendererIntegration.RegisterWith(typeof(WebRendererTests).Assembly));

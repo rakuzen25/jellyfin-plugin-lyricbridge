@@ -2,6 +2,9 @@ namespace LyricBridge;
 
 public interface ISelectionRepository
 {
+    IReadOnlyList<SavedOriginal> SavedOriginals(Guid item);
+    RichLyrics SavedDocument(Guid item, string hash);
+    void SelectOriginal(Guid item, string hash);
     VersionSnapshot Selection(Guid item);
     ImprovementOffer? Improvement(Guid item);
     SelectionAssessment? PreviewAssessment(Candidate candidate);

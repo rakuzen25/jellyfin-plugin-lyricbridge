@@ -82,3 +82,11 @@ test("malformed generation output produces a controlled error", () => {
         failure: null,
     });
 });
+
+test("deleted output metadata survives job parsing and malformed markers fail", () => {
+    const input = { ...job("cancelled"), outputDeleted: true, outputDeletedAt: "2026-10-11T00:00:00Z" };
+    assert.equal(parseGenerationJob(input).outputDeleted, true);
+    assert.equal(parseGenerationJob(input).outputDeletedAt, input.outputDeletedAt);
+    assert.throws(() => parseGenerationJob({ ...input, outputDeleted: "true" }));
+    assert.throws(() => parseGenerationJob({ ...input, outputDeletedAt: 42 }));
+});

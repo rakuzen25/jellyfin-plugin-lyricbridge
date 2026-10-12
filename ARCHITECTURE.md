@@ -43,3 +43,14 @@ harness rather than accepting arbitrary server URLs. Never use live provider
 credentials in the default suite.
 
 Frontend source and maintained static assets live in `frontend/` (static files in `frontend/assets/`). `pnpm build` recreates `dist/web/` with browser-ready bundles, the configuration page, static assets and notices. Packaging and browser fixtures consume that generated directory; it is not editable source.
+
+Saved originals are song/content-hash associations. Generated/supplied variants and
+account auxiliary choices retain their original content identities; shared timing
+remains song/content scoped. Original deletion resolves the dependency closure in
+one SQLite write transaction, updates selection and job history, and advances
+persistent song/original/content deletion fences. Work admitted before a matching
+fence cannot save output after deletion, including after identical content is
+explicitly re-imported. Cancellation is dispatched after commit without holding
+the store write gate. Deleted job history no longer pins removed content.
+Storage schema 5 is initialized only for empty stores; unsupported schemas are
+rejected before initialization, with no migration.

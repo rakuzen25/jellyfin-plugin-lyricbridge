@@ -7,7 +7,9 @@ public sealed partial class Store : ILanguageVersionRepository
         lock (writeGate)
         {
             if (IsResetting || admittedEpoch != Epoch) return false;
-            Put("variant", variant.Key, variant); return true;
+            using var c = Open(); using var tx = c.BeginTransaction();
+            if (!CanWrite(c, tx, "variant", variant.Key, variant) || ReadRecord<RichLyrics>(c, tx, "document", variant.Hash) is null) return false;
+            WriteUnchecked(c, tx, "variant", variant.Key, variant); tx.Commit(); return true;
         }
     }
     public bool SelectPendingLocal(string choiceId, string key)
@@ -15,7 +17,9 @@ public sealed partial class Store : ILanguageVersionRepository
         lock (writeGate)
         {
             if (IsResetting || (operationEpoch.Value is long started && started != Epoch)) return false;
-            Put("auxiliary-choice", choiceId, new AuxiliarySelection(key)); return true;
+            using var c = Open(); using var tx = c.BeginTransaction(); var selection = new AuxiliarySelection(key);
+            if (!CanWrite(c, tx, "auxiliary-choice", choiceId, selection)) return false;
+            WriteUnchecked(c, tx, "auxiliary-choice", choiceId, selection); tx.Commit(); return true;
         }
     }
     public bool SaveSuppliedVariant(Variant variant, MixedOrigin origin, string choiceId, Guid? item = null, VersionSnapshot? expected = null)

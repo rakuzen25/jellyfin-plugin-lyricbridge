@@ -13,7 +13,7 @@ test("preview cancel restores playback and focus; apply saves the selected versi
     async function search() {
         await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
         await page.getByRole("tab", { name: "Versions", exact: true }).click();
-        await page.getByRole("button", { name: "Find versions", exact: true }).click();
+        await page.locator('[data-song-kind="original"]').getByRole("button", { name: "Search versions", exact: true }).click();
         await page.locator(".lb-result").first().click();
     }
     await search();

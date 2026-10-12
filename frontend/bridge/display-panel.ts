@@ -2,7 +2,7 @@ import { requireValue } from "../shared/invariants.ts";
 import type {} from "../shared/runtime.ts";
 import { rowLanguage, translationScript } from "./auxiliary.ts";
 import type { BridgeDocument } from "./contracts.ts";
-import { e, field, select, toggle } from "./controls.ts";
+import { disclosure, e, field, section, select, toggle } from "./controls.ts";
 import type { AuxiliaryKind, Preferences } from "./models.ts";
 interface Context {
     current: BridgeDocument | null;
@@ -32,13 +32,16 @@ export function createDisplayPanel(dependencies: Dependencies) {
     const { context, accountPreferences, languageChoices, preference, defaults } = dependencies;
     function buildDisplay(parent: HTMLElement) {
         const p = accountPreferences();
+        const expanded = [...parent.querySelectorAll<HTMLDetailsElement>("details[open]")].map(
+            (n) => n.querySelector(".lb-disclosure-title")?.textContent,
+        );
+        const focused = parent.contains(document.activeElement) ? document.activeElement?.getAttribute("aria-label") : null;
         parent.replaceChildren();
         function group(title: string, key: string) {
-            const section = e("section", "lb-setting-group");
-            section.dataset.group = key;
-            section.append(e("h3", "", title));
-            parent.append(section);
-            return section;
+            const group = section(title);
+            group.dataset.group = key;
+            parent.append(group);
+            return group;
         }
         const original = group("Original lyrics", "original");
         select(
@@ -62,9 +65,9 @@ export function createDisplayPanel(dependencies: Dependencies) {
         for (const section of [original, translation, pronunciation]) section.append(e("div", "lb-group-language"));
         parent.append(e("div", "lb-language-options"));
         updateLanguageOptions(parent);
-        const layout = e("details", "lb-setting-group");
-        layout.append(e("summary", "", "Text sizes and layout"));
-        parent.append(layout);
+        const layoutDisclosure = disclosure("Text sizes and layout");
+        parent.append(layoutDisclosure.root);
+        const layout = layoutDisclosure.content;
         select(
             layout,
             "Auxiliary row order",
@@ -89,9 +92,33 @@ export function createDisplayPanel(dependencies: Dependencies) {
             input.onchange = () => preference(key, Number(input.value));
             field(layout, label, input);
         }
+        const renderer = window.JellyfinLyricMotion;
+        if (renderer?.setRenderQuality && renderer.renderQuality) {
+            const rendering = layout;
+            select(
+                rendering,
+                "Rendering quality",
+                renderer.renderQuality(),
+                [
+                    ["standard", "Standard"],
+                    ["low-power", "Low power"],
+                ],
+                (value) => {
+                    renderer.setRenderQuality?.(value === "low-power" ? "low-power" : "standard");
+                },
+            );
+            rendering.append(e("p", "lb-hint", "Low power uses stationary artwork and simpler lyric effects. Saved for this browser."));
+        }
         const preview = e("div", "lb-live-preview");
         parent.append(preview, e("p", "lb-save-status", ""));
         updateLivePreview();
+        parent
+            .querySelectorAll<HTMLDetailsElement>("details")
+            .forEach((n) => (n.open = expanded.includes(n.querySelector(".lb-disclosure-title")?.textContent)));
+        if (focused)
+            [...parent.querySelectorAll<HTMLElement>("[aria-label]")]
+                .find((n) => n.getAttribute("aria-label") === focused)
+                ?.focus({ preventScroll: true });
     }
     function originalLanguages() {
         const configured = context.current?.preferences?.sourceLanguage || "auto";
@@ -126,12 +153,10 @@ export function createDisplayPanel(dependencies: Dependencies) {
         const expanded = host.querySelector("details")?.open;
         host.replaceChildren();
         parent.querySelectorAll<HTMLElement>(".lb-group-language").forEach((n) => n.replaceChildren());
-        const language = e(unknown ? "details" : "div");
-        if (unknown) {
-            language.append(e("summary", "", "Language-specific options"));
-            if (language instanceof HTMLDetailsElement) language.open = !!expanded;
-        }
-        host.append(language);
+        const options = unknown ? disclosure("Language-specific options") : null;
+        const language = options?.content || e("div");
+        if (options) options.root.open = !!expanded;
+        host.append(options?.root || language);
         const groupLanguage = (kind: AuxiliaryKind | "original") =>
             unknown ? language : parent.querySelector<HTMLElement>('[data-group="' + kind + '"] .lb-group-language') || language;
         if (unknown || [...detected].some((l) => requireValue(l).split("-")[0] === "ja")) {

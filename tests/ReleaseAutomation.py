@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -69,6 +70,78 @@ class ReleaseTests(unittest.TestCase):
             + "\n"
         )
         return directory, tag
+
+    def test_packaging_rejects_unsafe_urls_without_printing_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for repository, download in (
+                ("http://example.invalid", "https://example.invalid"),
+                (
+                    "https://example.invalid",
+                    "https://example.invalid/path?token=synthetic",
+                ),
+                ("https://user:synthetic@example.invalid", "https://example.invalid"),
+            ):
+                with self.subTest(repository=repository, download=download):
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            "scripts/package-artifacts.py",
+                            directory,
+                            "--release",
+                        ],
+                        cwd=ROOT,
+                        env=dict(
+                            os.environ,
+                            LYRICBRIDGE_REPOSITORY_URL=repository,
+                            LYRICBRIDGE_DOWNLOAD_BASE_URL=download,
+                        ),
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("require HTTPS", result.stderr)
+                    self.assertNotIn("synthetic", result.stderr)
+
+    def test_matching_existing_draft_resumes_without_creating_or_moving_tags(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            tag = "v" + load_release(root).version
+            output = root / "outputs"
+            with (
+                patch.object(
+                    release,
+                    "github_json",
+                    side_effect=[
+                        [{"tag_name": tag, "draft": True}],
+                        {"object": {"type": "commit", "sha": "same"}},
+                    ],
+                ),
+                patch.object(release.subprocess, "check_output", return_value="same\n"),
+            ):
+                release.resume_draft(root, REPOSITORY, output)
+            self.assertIn("release_created=true", output.read_text())
+            with (
+                patch.object(
+                    release,
+                    "github_json",
+                    side_effect=[
+                        [{"tag_name": tag, "draft": True}],
+                        {"object": {"type": "commit", "sha": "moved"}},
+                    ],
+                ),
+                patch.object(release.subprocess, "check_output", return_value="same\n"),
+            ):
+                with self.assertRaisesRegex(ValueError, "does not match"):
+                    release.resume_draft(root, REPOSITORY, output)
+            with patch.object(
+                release,
+                "github_json",
+                return_value=[{"tag_name": tag, "draft": True}] * 2,
+            ):
+                with self.assertRaisesRegex(ValueError, "duplicate"):
+                    release.resume_draft(root, REPOSITORY, output)
 
     def test_identity_changelog_and_preparation(self):
         with tempfile.TemporaryDirectory() as temporary:

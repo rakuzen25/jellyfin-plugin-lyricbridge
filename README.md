@@ -20,7 +20,7 @@ Use the pinned SDK in `global.json` and run `scripts/bootstrap-references.sh` be
 
 JavaScript tooling uses pnpm 10.33.4 and the Node.js version in `.node-version`. From the repository root, run `pnpm install --frozen-lockfile`; the frontend and browser tests share one workspace lockfile. `pnpm build`, `pnpm typecheck`, `pnpm test`, and `pnpm test:browser` provide the maintained entrypoints. Packaging and CI use the same frozen workspace installation.
 
-Run `dotnet test tests/StorageTests.csproj` for storage, approval/quota enforcement, multilingual normalization, provider formats, concurrent retrieval, cancellation, manual selections, and cache invalidation. `browser-tests` contains maintained isolated Playwright fixtures. Run `scripts/test-browser.sh` for desktop/mobile Chromium, Firefox and WebKit. `pnpm build` checks every application module before bundling; `pnpm test` runs workflow/lifecycle unit tests. See [test coverage](TEST_COVERAGE.md).
+Run `dotnet test tests/StorageTests.csproj` for storage, approval/quota enforcement, multilingual normalization, provider formats, concurrent retrieval, cancellation, manual selections, and cache invalidation. `browser-tests` contains maintained isolated Playwright fixtures. Run `scripts/test-browser.sh` for desktop/mobile Chromium, Firefox and WebKit. `pnpm build` checks every application module before bundling; `pnpm test` runs workflow/lifecycle unit tests. See [test coverage](TEST_COVERAGE.md) and [risk-based CI/local commands](CI.md).
 
 ## Using lyrics
 
@@ -58,7 +58,7 @@ Once published, add the maintainer's catalog URL in Dashboard → Plugins → Re
 
 Starting with 0.1.1, the enhanced renderer loads automatically in Jellyfin-hosted Web after plugin installation and restart. Enable web renderer defaults to on: File Transformation is preferred when available, otherwise LyricBridge adds a marked block to a writable web index. Settings show status and offer Repair. A read-only web root requires File Transformation compatible with the server, or separate web installation. Independently hosted clients still use the web-assets ZIP and `scripts/web-assets.py`. See [operating instructions](DEPLOYMENT.md) for setup and scoped uninstall.
 
-Build reproducible plugin, web and editable-source ZIPs with `scripts/package.sh`, after running `scripts/bootstrap-references.sh`. Release-mode packaging requires HTTPS repository/download settings and `--release`. Disable or uninstall the plugin through Jellyfin's plugin controls and restart; remove web assets separately. Preserve the plugin storage unless you explicitly intend to reset managed data. Scheduled retrieval starts disabled; after sample validation, enable it and configure/run **LyricBridge: retrieve missing lyrics** in Scheduled Tasks.
+Build plugin, web and editable-source ZIPs with `scripts/package.sh`, after running `scripts/bootstrap-references.sh`. For acceptance, use `python3 scripts/clean-package.py` followed by `python3 tests/ReproducibleBuild.py` to compare two independent clean builds; see [CI.md](CI.md). Release-mode packaging requires HTTPS repository/download settings and `--release`. Disable or uninstall the plugin through Jellyfin's plugin controls and restart; remove web assets separately. Preserve the plugin storage unless you explicitly intend to reset managed data. Scheduled retrieval starts disabled; after sample validation, enable it and configure/run **LyricBridge: retrieve missing lyrics** in Scheduled Tasks.
 
 ## Licenses
 

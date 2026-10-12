@@ -1,6 +1,6 @@
 const { test, expect } = require("playwright/test");
 const { demo } = require("./demo-fixture.cjs");
-test("retrieval outcomes keep settings usable and preserve lyrics through partial failures", async ({ page }) => {
+test("@workflow retrieval outcomes keep settings usable and preserve lyrics through partial failures", async ({ page }) => {
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await demo(page);

@@ -45,6 +45,9 @@ const config = await build({
     target: ["es2022"],
     legalComments: "inline",
 });
+// Jellyfin localizes ${...} across the entire page, including inline JavaScript.
+if (config.outputFiles[0].text.includes("${"))
+    throw new Error("Inline administrator script contains Jellyfin localization tokens; use string concatenation.");
 const template = await readFile("admin/config.html", "utf8");
 await writeFile(
     "../dist/web/config.html",

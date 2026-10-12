@@ -5,7 +5,7 @@ const { demo } = require("./demo-fixture.cjs");
 // Real elapsed playback, synthetic media and local images. No application server.
 test("sustained playback and view transitions keep owned work bounded", async ({ page, browserName }, testInfo) => {
     test.skip(browserName !== "chromium", "CDP performance metrics are Chromium-only; lifecycle cases run in every engine.");
-    test.setTimeout(150000);
+    test.setTimeout(600000);
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await demo(page, {
@@ -29,8 +29,13 @@ test("sustained playback and view transitions keep owned work bounded", async ({
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("Performance.enable");
     const metrics = async () => Object.fromEntries((await cdp.send("Performance.getMetrics")).metrics.map((value) => [value.name, value.value]));
+    const graphics = await page.evaluate(() => {
+        const gl = document.querySelector(".ak-atmosphere-dynamic-canvas")?.getContext("webgl");
+        const info = gl?.getExtension("WEBGL_debug_renderer_info");
+        return { dpr: devicePixelRatio, renderer: info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : "unavailable" };
+    });
     const samples = [];
-    for (let cycle = 0; cycle < 12; cycle++) {
+    for (let cycle = 0; cycle < 60; cycle++) {
         const id = (cycle + 0x334455).toString(16).padStart(32, "0");
         await page.evaluate(async (id) => {
             await fetch("/Audio/" + id + "/Lyrics");
@@ -42,21 +47,40 @@ test("sustained playback and view transitions keep owned work bounded", async ({
         }, id);
         await expect.poll(() => page.evaluate(() => window.JellyfinLyricMotion.performance().atmosphereArtwork)).toContain(id);
         await expect(page.locator(".lb-job-progress")).toContainText("running");
-        const backgroundBefore = await page.evaluate(() => window.JellyfinLyricMotion.performance().atmosphereRendering?.renderedFrames || 0);
-        const pollsBefore = await page.evaluate(() => window.generationPolls);
+        const previousBackgroundFrame = await page.evaluate(() => window.JellyfinLyricMotion.performance().atmosphereRendering?.renderedFrames || 0);
+        await page.waitForFunction(
+            (previous) => window.JellyfinLyricMotion.performance().atmosphereRendering?.renderedFrames > previous,
+            previousBackgroundFrame,
+        );
+        const sampleBefore = await page.evaluate(() => ({
+            time: performance.now(),
+            polls: window.generationPolls,
+            backgroundFrames: window.JellyfinLyricMotion.performance().atmosphereRendering.renderedFrames,
+            lyricFrames: window.JellyfinLyricMotion.performance().renderedFrameCount,
+        }));
+        const backgroundBefore = sampleBefore.backgroundFrames;
+        const lyricBefore = sampleBefore.lyricFrames;
         const start = await metrics();
         await page.waitForTimeout(5000);
         await cdp.send("HeapProfiler.collectGarbage");
         const end = await metrics();
-        const backgroundAfter = await page.evaluate(() => window.JellyfinLyricMotion.performance().atmosphereRendering);
+        const sampleAfter = await page.evaluate(() => ({
+            time: performance.now(),
+            polls: window.generationPolls,
+            background: window.JellyfinLyricMotion.performance().atmosphereRendering,
+        }));
+        const backgroundAfter = sampleAfter.background;
+        const elapsedSeconds = (sampleAfter.time - sampleBefore.time) / 1000;
         if (backgroundAfter) {
             expect(backgroundAfter.targetFps).toBeCloseTo(30);
-            expect(backgroundAfter.renderedFrames - backgroundBefore).toBeLessThanOrEqual(165);
+            expect(backgroundAfter.renderedFrames - backgroundBefore).toBeLessThanOrEqual(Math.ceil(elapsedSeconds * 30) + 2);
             expect(Math.max(backgroundAfter.renderWidth, backgroundAfter.renderHeight)).toBeLessThanOrEqual(1600);
         }
-        const pollsAfter = await page.evaluate(() => window.generationPolls);
-        expect(pollsAfter - pollsBefore).toBeGreaterThanOrEqual(3);
-        expect(pollsAfter - pollsBefore).toBeLessThanOrEqual(6);
+        const pollCount = sampleAfter.polls - sampleBefore.polls;
+        expect(pollCount).toBeGreaterThanOrEqual(3);
+        // CDP/GC and scheduling extend the interval beyond the requested five seconds.
+        // Bound one poll per second plus an edge tick, not an assumed wall duration.
+        expect(pollCount).toBeLessThanOrEqual(Math.ceil(elapsedSeconds) + 1);
         await page.evaluate(() => {
             document.querySelector(".lyricPage").dispatchEvent(new Event("viewbeforehide", { bubbles: true }));
             document.querySelector("audio").pause();
@@ -68,11 +92,18 @@ test("sustained playback and view transitions keep owned work bounded", async ({
             cycle,
             scriptMs: 1000 * (end.ScriptDuration - start.ScriptDuration),
             layoutMs: 1000 * (end.LayoutDuration - start.LayoutDuration),
+            styleMs: 1000 * (end.RecalcStyleDuration - start.RecalcStyleDuration),
+            taskMs: 1000 * (end.TaskDuration - start.TaskDuration),
+            lyricFrames: (await page.evaluate(() => window.JellyfinLyricMotion.performance().renderedFrameCount)) - lyricBefore,
+            backgroundFrames: backgroundAfter ? backgroundAfter.renderedFrames - backgroundBefore : 0,
             resources,
             heapBytes: end.JSHeapUsedSize,
             background: backgroundAfter,
-            generationPolls: pollsAfter - pollsBefore,
+            generationPolls: pollCount,
+            elapsedSeconds,
         });
+        // Preserve useful evidence even when a later transition times out.
+        writeFileSync(testInfo.outputPath("long-session-progress.json"), JSON.stringify({ graphics, samples }, null, 2));
         // Long-lived registrations must not grow with the number of visited tracks.
         if (cycle > 0) {
             expect(resources.cleanups).toBe(samples[0].resources.cleanups);
@@ -97,6 +128,9 @@ test("sustained playback and view transitions keep owned work bounded", async ({
     expect(disposed).toEqual({ disposed: true, cleanups: 0, frames: 0, timers: 0, intervals: 0 });
     expect(errors).toEqual([]);
     const report = testInfo.outputPath("long-session-performance.json");
-    writeFileSync(report, JSON.stringify({ elapsedPlaybackSeconds: 60, transitions: 12, viewport: page.viewportSize(), samples, disposed }, null, 2));
+    writeFileSync(
+        report,
+        JSON.stringify({ elapsedPlaybackSeconds: 300, transitions: 60, viewport: page.viewportSize(), graphics, samples, disposed }, null, 2),
+    );
     await testInfo.attach("long-session-performance.json", { contentType: "application/json", path: report });
 });

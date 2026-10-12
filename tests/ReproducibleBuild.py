@@ -1,16 +1,22 @@
-"""Build the editable source archive twice in clean roots and compare all artifacts.
+"""Compare a clean candidate with one independent clean build (two builds total).
 
 Requires the pinned SDK, pnpm, cached/available package feeds, and official references.
 Uses no running server, account, media directory, or lyric provider.
 """
 
 import hashlib
+import json
+import sys
 import os
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+from ci import digest
+from source_inventory import source_files
 
 repository = Path(__file__).resolve().parent.parent
 version = (
@@ -36,9 +42,18 @@ candidate = {
     for path in (repository / "dist").iterdir()
     if path.suffix == ".zip" or path.name in ("manifest.json", "SHA256SUMS")
 }
+proof = json.loads((repository / "dist/clean-build.json").read_text())
+if proof != {
+    "source": digest(repository, source_files(repository)),
+    "artifacts": candidate,
+}:
+    raise SystemExit(
+        "Candidate is not the current verified clean build; run scripts/clean-package.py first."
+    )
+environment.pop("LYRICBRIDGE_PREPARED_WEB", None)
 results = []
 with tempfile.TemporaryDirectory(prefix="lyricbridge-repro-") as directory:
-    for name in ("first", "second"):
+    for name in ("comparison",):
         root = Path(directory) / name
         root.mkdir()
         with zipfile.ZipFile(source) as archive:
@@ -66,17 +81,15 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-repro-") as directory:
             }
         )
         print("Built clean source root " + name, flush=True)
-    different = [
-        name
-        for name in results[0].keys() | results[1].keys()
-        if results[0].get(name) != results[1].get(name)
-    ]
-    if different:
-        raise SystemExit("Non-reproducible artifacts: " + ", ".join(sorted(different)))
     if results[0] != candidate:
+        different = sorted(
+            name
+            for name in results[0].keys() | candidate.keys()
+            if results[0].get(name) != candidate.get(name)
+        )
         raise SystemExit(
-            "Clean builds differ from the candidate artifacts under review."
+            "Independent clean build differs from candidate: " + ", ".join(different)
         )
     print(
-        "PASS: two independent clean builds match each other AND the candidate archives, catalog and checksums."
+        "PASS: two independent clean builds match: candidate and comparison archives, catalog and checksums."
     )

@@ -106,8 +106,19 @@ function document(v: unknown): v is BridgeDocument {
         (v.better == null || lyrics(v.better)) &&
         (v.variants === undefined || (Array.isArray(v.variants) && v.variants.every(variant))) &&
         ["itemId", "state", "timingFingerprint", "suggestedOriginHash"].every((k) => v[k] == null || typeof v[k] === "string") &&
-        ["complete", "canSelect", "canDeleteVariants", "canGenerate"].every((k) => v[k] === undefined || typeof v[k] === "boolean") &&
+        ["complete", "canSelect", "canDeleteVariants", "canDeleteOriginals", "canGenerate"].every(
+            (k) => v[k] === undefined || typeof v[k] === "boolean",
+        ) &&
         ["finished", "total"].every((k) => v[k] === undefined || number(v[k])) &&
+        (v.savedOriginals === undefined ||
+            (Array.isArray(v.savedOriginals) &&
+                v.savedOriginals.every(
+                    (x) =>
+                        isRecord(x) &&
+                        ["itemId", "hash", "source", "providerId", "title", "artist", "savedAt"].every((k) => typeof x[k] === "string") &&
+                        typeof x.wordTimed === "boolean" &&
+                        number(x.revision),
+                ))) &&
         (v.detectedLanguages === undefined || strings(v.detectedLanguages)) &&
         (songOverrides === undefined ||
             (isRecord(songOverrides) &&

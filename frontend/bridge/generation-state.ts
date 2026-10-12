@@ -4,6 +4,8 @@ export interface GenerationJob {
     hash?: string;
     state: string;
     progress: number;
+    outputDeleted?: boolean;
+    outputDeletedAt?: string | null;
     request: { service: string; kind: string; language?: string };
     error?: string | null;
     failure?: RequestFailure | null;
@@ -23,7 +25,9 @@ export function parseGenerationJob(value: unknown): GenerationJob {
         typeof value.request.kind !== "string" ||
         !(value.request.language === undefined || typeof value.request.language === "string") ||
         !(value.hash === undefined || typeof value.hash === "string") ||
-        !(value.error == null || typeof value.error === "string")
+        !(value.error == null || typeof value.error === "string") ||
+        !(value.outputDeleted === undefined || typeof value.outputDeleted === "boolean") ||
+        !(value.outputDeletedAt == null || typeof value.outputDeletedAt === "string")
     )
         throw new Error("Jellyfin returned an invalid generation status. Reload the job details.");
     let failure: RequestFailure | null = null;
@@ -54,6 +58,8 @@ export function parseGenerationJob(value: unknown): GenerationJob {
         request: { service: value.request.service, kind: value.request.kind, language: value.request.language },
         error: value.error,
         failure,
+        ...(value.outputDeleted === undefined ? {} : { outputDeleted: value.outputDeleted }),
+        ...(value.outputDeletedAt === undefined ? {} : { outputDeletedAt: value.outputDeletedAt }),
     };
 }
 export function activeGeneration(job: Pick<GenerationJob, "state">): boolean {

@@ -2,7 +2,7 @@ const { test } = require("playwright/test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-test("preference writes survive track changes", async ({ page }) => {
+test("@workflow preference writes survive track changes", async ({ page }) => {
     const root = path.resolve(__dirname, "../dist/web");
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
@@ -34,7 +34,7 @@ test("preference writes survive track changes", async ({ page }) => {
     console.log("PASS: debounced preference write survives immediate track transition and delayed response.");
 });
 
-test("failed preference saves retain edits and expose retry after a track change", async ({ page }) => {
+test("@workflow failed preference saves retain edits and expose retry after a track change", async ({ page }) => {
     const root = path.resolve(__dirname, "../dist/web");
     await page.route("**/*", (route) => {
         const name = new URL(route.request().url()).pathname.split("/").at(-1);

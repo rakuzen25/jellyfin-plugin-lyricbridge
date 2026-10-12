@@ -91,34 +91,6 @@ test("XHR rewriting preserves base URLs, headers and request reuse", async ({ pa
     expect(received).toContainEqual({ path: "/base/LyricBridge/items/33333333333333333333333333333333/lyrics", token: "synthetic-token" });
 });
 
-test("renderer disposal releases resources and supports a fresh installation", async ({ page }) => {
-    const root = path.resolve(__dirname, "../dist/web");
-    const errors = [];
-    page.on("pageerror", (error) => errors.push(error.message));
-    await page.route("**/*", (route) => {
-        const name = new URL(route.request().url()).pathname.split("/").at(-1);
-        if (["demo.html", "lyricbridge.js", "lyricbridge.css", "jellyfin-lyric-motion.js", "jellyfin-lyric-motion.css"].includes(name))
-            return route.fulfill({ path: path.join(root, name) });
-        return route.fulfill({ status: 204, body: "" });
-    });
-    await page.goto("http://fixture.invalid/base/web/lyricbridge/demo.html");
-    await expect(page.locator(".ak-enhanced-line")).toHaveCount(6);
-    const resources = await page.evaluate(() => {
-        const runtime = window.JellyfinLyricMotion;
-        const before = runtime.lifecycleResources();
-        runtime.dispose();
-        runtime.dispose();
-        return { before, after: runtime.lifecycleResources(), installed: !!window.JellyfinLyricMotion };
-    });
-    expect(resources.before).toBeGreaterThan(0);
-    expect(resources.after).toBe(0);
-    expect(resources.installed).toBe(false);
-    await page.addScriptTag({ url: "jellyfin-lyric-motion.js" });
-    await expect(page.locator(".ak-enhanced-line")).toHaveCount(6);
-    expect(await page.evaluate(() => window.JellyfinLyricMotion.lifecycleResources())).toBeGreaterThan(0);
-    expect(errors).toEqual([]);
-});
-
 test("repeated renderer installation releases all owned resources", async ({ page }) => {
     const { demo } = require("./demo-fixture.cjs");
     const errors = [];
@@ -128,10 +100,18 @@ test("repeated renderer installation releases all owned resources", async ({ pag
         await expect(page.locator(".ak-enhanced-line")).toHaveCount(6);
         const after = await page.evaluate(() => {
             const renderer = window.JellyfinLyricMotion;
+            const before = renderer.lifecycleResources();
             renderer.dispose();
-            return { resources: renderer.lifecycleResources(), artwork: renderer.artworkPendingLoads() };
+            renderer.dispose();
+            return {
+                before,
+                resources: renderer.lifecycleResources(),
+                artwork: renderer.artworkPendingLoads(),
+                installed: !!window.JellyfinLyricMotion,
+            };
         });
-        expect(after).toEqual({ resources: 0, artwork: 0 });
+        expect(after.before).toBeGreaterThan(0);
+        expect(after).toMatchObject({ resources: 0, artwork: 0, installed: false });
         await page.addScriptTag({ url: "jellyfin-lyric-motion.js" });
     }
     await expect(page.locator(".ak-enhanced-line")).toHaveCount(6);

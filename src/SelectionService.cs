@@ -4,6 +4,9 @@ namespace LyricBridge;
 
 public sealed class SelectionService(ISelectionRepository repository, Retrieval retrieval, Discovery discovery, ILyricManager native, LyricQueryService query)
 {
+    public IReadOnlyList<SavedOriginal> Originals(Guid item) => repository.SavedOriginals(item);
+    public RichLyrics PreviewOriginal(Guid item, string hash) => repository.SavedDocument(item, hash);
+    public void SelectOriginal(Guid item, string hash) { repository.SelectOriginal(item, hash); discovery.Invalidate(item); }
     public VersionSnapshot Snapshot(Guid item) => repository.Selection(item);
     public void ClearRejection(Guid item) => repository.ClearRejection(item);
     public void Revert(Guid item) => discovery.Revert(item);

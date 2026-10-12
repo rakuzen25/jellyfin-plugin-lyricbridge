@@ -7,6 +7,10 @@
     --lb-glass-shadow: 0 8px 24px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.14), inset 0 -1px 0 rgba(255,255,255,.025);
     --lb-glass-filter: blur(16px) saturate(1.15);
     --lb-glass-text: rgba(255,255,255,.94);
+    --lb-control-height:44px;
+    --lb-control-radius:12px;
+    --lb-control-font:14px/1.5 system-ui;
+    --lb-muted-text:#c6c6ce;
     --lb-space-xs: 4px;
     --lb-space-sm: 8px;
     --lb-space-md: 12px;
@@ -28,7 +32,7 @@
     unicode-bidi: plaintext;
 }
 /* Reserve the right-hand settings position before lyric/timing controls load. */
-.lyricPage > .lb-settings-trigger { position:fixed; top:max(5.1rem,calc(env(safe-area-inset-top,0px) + 4.45rem)); right:max(1rem,calc(env(safe-area-inset-right,0px) + .9rem)); z-index:1100; width:44px; height:44px; min-height:44px; font:500 .88rem/1.3 system-ui; color:#eeeeee; background:rgba(25,25,30,.88); backdrop-filter:blur(12px); }
+.lyricPage > .lb-settings-trigger { position:fixed; top:max(5.1rem,calc(env(safe-area-inset-top,0px) + 4.45rem)); right:max(1rem,calc(env(safe-area-inset-right,0px) + .9rem)); z-index:1100; width:44px; height:44px; min-height:var(--lb-control-height); font:500 .88rem/1.3 system-ui; color:#eeeeee; background:rgba(25,25,30,.88); backdrop-filter:blur(12px); }
 body:has(.lyricPage > .lb-settings-trigger) .lyricPage .ak-lyrics-tools { right:calc(max(1rem,env(safe-area-inset-right,0px)) + 52px); max-width:calc(100vw - 84px); }
 body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar { flex-wrap:wrap; justify-content:flex-end; }
 @media(max-width:600px) { body:has(.lyricPage > .lb-settings-trigger) .lb-tools { top:132px; max-width:calc(100vw - 16px); } }
@@ -37,7 +41,7 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar { flex-wrap:wra
 .lb-popup, .lb-tools, .lyricPage .ak-lyrics-tools .ak-timing-popover {
     color:var(--lb-glass-text); background:var(--lb-glass-panel); border:1px solid var(--lb-glass-border);
     box-shadow:var(--lb-glass-shadow); backdrop-filter:var(--lb-glass-filter); -webkit-backdrop-filter:var(--lb-glass-filter);
-    box-sizing:border-box; font:14px/1.5 system-ui;
+    box-sizing:border-box; font:var(--lb-control-font);
 }
 .lb-popup {
     position:fixed; top:128px; right:max(16px,env(safe-area-inset-right)); bottom:var(--lb-panel-bottom,110px);
@@ -55,16 +59,16 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar { flex-wrap:wra
 .lb-setting-group { border-bottom:1px solid var(--lb-glass-border); padding:16px 0; margin:0; }
 .lb-setting-group:first-child { padding-top:0; }
 .lb-setting-group:last-child { border:0; }
-.lb-popup summary { cursor:pointer; min-height:44px; box-sizing:border-box; padding:12px 0; font-weight:600; }
+.lb-popup summary { cursor:pointer; min-height:var(--lb-control-height); box-sizing:border-box; padding:12px 0; font-weight:600; }
 .lb-popup details > :not(summary) { margin-top:8px; }
-.lb-help, .lb-provenance, .lb-search-context { display:block; font-size:12px; line-height:1.5; color:#c6c6ce; overflow-wrap:anywhere; }
+.lb-help, .lb-provenance, .lb-search-context { display:block; font-size:12px; line-height:1.5; color:var(--lb-muted-text); overflow-wrap:anywhere; }
 .lb-source { font-weight:600; }
 .lb-field { display:grid; grid-template-columns:minmax(0,1fr) minmax(110px,1.25fr); align-items:center; gap:8px 12px; padding:8px 0; }
 .lb-field > small { grid-column:1/-1; }
-.lb-field:has(input[type="checkbox"]) { grid-template-columns:minmax(0,1fr) 44px; min-height:44px; }
+.lb-field:has(input[type="checkbox"]) { grid-template-columns:minmax(0,1fr) 44px; min-height:var(--lb-control-height); }
 .lb-field-label { min-width:0; font-weight:500; }
 .lb-popup input:not([type="checkbox"]), .lb-popup select {
-    width:100%; min-width:0; max-width:100%; min-height:44px; box-sizing:border-box; padding:8px 12px; border-radius:12px;
+    width:100%; min-width:0; max-width:100%; min-height:var(--lb-control-height); box-sizing:border-box; padding:8px 12px; border-radius:var(--lb-control-radius);
     background:var(--lb-glass-control); border:1px solid var(--lb-glass-border); color:var(--lb-glass-text); font:inherit;
 }
 .lb-popup input[type="checkbox"] { width:20px; height:20px; margin:12px; accent-color:#a5cffc; }
@@ -72,7 +76,7 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar { flex-wrap:wra
 .lb-popup select option { background:#29292f; color:#eee; }
 .lb-popup select option:disabled { color:#a5a5ae; }
 .lb-button, .lyricPage .ak-lyrics-tools .ak-timing-action {
-    min-height:44px; padding:8px 12px; margin:0; border-radius:12px; box-sizing:border-box;
+    min-height:var(--lb-control-height); padding:8px 12px; margin:0; border-radius:var(--lb-control-radius); box-sizing:border-box;
     background:var(--lb-glass-control); border:1px solid var(--lb-glass-border); color:var(--lb-glass-text);
     font:600 14px/1.4 system-ui; cursor:pointer; white-space:normal; overflow-wrap:anywhere;
 }
@@ -86,17 +90,14 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar { flex-wrap:wra
 .lb-popup [tabindex]:focus-visible, .lb-sync:focus-visible { outline:2px solid #a5cffc; outline-offset:2px; }
 .lb-song-actions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
 .lb-summary-row { display:grid; grid-template-columns:100px minmax(0,1fr) auto; align-items:center; gap:8px; margin:8px 0; }
-.lb-language-versions { display:flex; flex-direction:column; margin:12px 0; }
-.lb-version-row { padding:12px 0; border-bottom:1px solid var(--lb-glass-border); min-width:0; }
-.lb-version-heading { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; }
+.lb-language-versions { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+
 .lb-active-label { color:#b8e2bd; font-size:12px; }
-.lb-version-row[data-active="true"] > .lb-version-heading { color:#fff; }
 .lb-version-preview { padding:12px 0; overflow-wrap:anywhere; }
 .lb-preview-block, .lb-preview-line { margin:12px 0; }
-.lb-preview-line div { margin-top:4px; color:#c6c6ce; font-size:13px; }
+.lb-preview-line div { margin-top:4px; color:var(--lb-muted-text); font-size:13px; }
 .lb-live-preview { margin-top:16px; padding:16px; text-align:center; overflow-wrap:anywhere; }
 .lb-display-panel > .lb-language-options:has(> div:empty) { display:none; }
-.lb-generation, .lb-version-more { margin-top:12px; }
 .lb-save-status, .lb-song-save-status, .lb-version-status { color:#b8e2bd; }
 .lb-save-status:empty, .lb-song-save-status:empty, .lb-version-status:empty { display:none; }
 .lb-confirmation { padding:12px; border-inline-start:3px solid #ffc3bd; background:#ffc3bd0b; margin-top:12px; }
@@ -119,10 +120,10 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar { flex-wrap:wra
 .lb-results { display:flex; flex-direction:column; gap:8px; }
 .lb-button.lb-result { display:block; flex:0 0 auto; height:auto; text-align:start; padding:12px; font-weight:400; }
 .lb-result strong, .lb-result small, .lb-badges { display:block; }
-.lb-result small { margin:8px 0; font-size:12px; color:#c6c6ce; }
+.lb-result small { margin:8px 0; font-size:12px; color:var(--lb-muted-text); }
 .lb-badges { color:#bad6f1; font-size:12px; }
 .lb-result[aria-pressed="true"] { background:#ffffff20; border-color:#a5cffc; }
-.lb-search-footer, .lb-advanced { flex:0 0 auto; border-top:1px solid var(--lb-glass-border); }
+.lb-search-footer, .lb-advanced { flex:0 0 auto; }
 .lb-search-footer > .lb-button, .lb-advanced > .lb-button { margin:4px 8px 4px 0; }
 .lb-search:has(.lb-search-footer[open],.lb-advanced[open]) { overflow-y:auto; }
 .lb-mix-lines { max-height:30dvh; overflow:auto; overscroll-behavior:contain; }
@@ -133,7 +134,7 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar { flex-wrap:wra
 .lb-tools:not(:has(> :not([hidden]))) { display:none; }
 .lb-status { font-weight:500; }
 .lb-local-status, .lb-source-note { font-size:12px; }
-.lb-feedback { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px; border:1px solid #ffa8b142; border-radius:12px; background:linear-gradient(180deg,#78353f9e,#56252f8f); color:#fff; flex-basis:100%; overflow-wrap:anywhere; }
+.lb-feedback { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px; border:1px solid #ffa8b142; border-radius:var(--lb-control-radius); background:linear-gradient(180deg,#78353f9e,#56252f8f); color:#fff; flex-basis:100%; overflow-wrap:anywhere; }
 .lb-feedback > strong, .lb-feedback > details { flex-basis:100%; }
 .lb-feedback p { margin:8px 0; }
 .lb-error { color:#ffc6c6; }
@@ -150,7 +151,7 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar { flex-wrap:wra
 /* Preserve the established lyric display and timing-toolbar appearance. */
 .lb-instrumental-view { position:fixed; inset:180px 24px 140px; display:flex; align-items:center; justify-content:center; text-align:center; font:650 clamp(24px,3vw,44px)/1.4 system-ui; color:#eee; pointer-events:none; z-index:1000; }
 .lyricPage:has(> .lb-instrumental-view) .lyricsContainer { visibility:hidden; }
-.lyricPage .ak-lyrics-tools .ak-lyrics-tools-bar, .lyricPage > .lb-settings-trigger, .lb-sync { background:var(--lb-glass-control); border:1px solid var(--lb-glass-border); color:var(--lb-glass-text); box-shadow:var(--lb-glass-shadow); backdrop-filter:var(--lb-glass-filter); -webkit-backdrop-filter:var(--lb-glass-filter); box-sizing:border-box; min-height:44px; border-radius:999px; }
+.lyricPage .ak-lyrics-tools .ak-lyrics-tools-bar, .lyricPage > .lb-settings-trigger, .lb-sync { background:var(--lb-glass-control); border:1px solid var(--lb-glass-border); color:var(--lb-glass-text); box-shadow:var(--lb-glass-shadow); backdrop-filter:var(--lb-glass-filter); -webkit-backdrop-filter:var(--lb-glass-filter); box-sizing:border-box; min-height:var(--lb-control-height); border-radius:999px; }
 .lyricPage .ak-lyrics-tools .ak-lyrics-tools-bar { padding:3px; }
 .lyricPage .ak-lyrics-tools .ak-lyrics-timing-chip, .lyricPage .ak-lyrics-tools .ak-romanization-toggle { min-height:36px; }
 .lyricPage .ak-lyrics-tools .ak-lyrics-timing-chip { font-size:14px; font-weight:600; }
@@ -196,7 +197,7 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar { flex-wrap:wra
 .lb-result .lb-recommended { display:inline-block; margin-top:8px; }
 .lb-match-warning { margin:0 0 8px; color:inherit; }
 .lb-match-details { margin:0; }
-.lb-match-details summary { min-height:44px; display:flex; align-items:center; cursor:pointer; }
+.lb-match-details summary { min-height:var(--lb-control-height); display:flex; align-items:center; cursor:pointer; }
 .lb-match-details > div { margin:4px 0; }
 
 /* Compact companion controls; lyric typography is unchanged. */
@@ -204,9 +205,9 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar { flex-wrap:wra
 .lb-button { display:inline-flex; align-items:center; justify-content:center; gap:8px; }
 .lb-icon-button { width:44px; min-width:44px; padding:10px; position:relative; flex:0 0 44px; }
 .lb-icon-button:is(:hover,:focus-visible)::after { content:attr(data-tooltip); position:absolute; bottom:calc(100% + 8px); inset-inline-end:0; padding:4px 8px; border-radius:6px; background:#24242c; color:#fff; font:12px/1.5 system-ui; white-space:nowrap; pointer-events:none; z-index:4; }
-.lb-version-row { padding:4px 0; }
+
 .lb-version-toggle { display:flex; width:100%; justify-content:space-between; text-align:start; padding:8px 12px; background:transparent; border-color:transparent; font-weight:400; }
-.lb-version-toggle[aria-expanded=true] { background:rgba(255,255,255,.05); }
+
 .lb-version-summary { display:flex; flex-direction:column; gap:4px; min-width:0; }
 .lb-status-badge { font-size:12px; white-space:nowrap; padding:4px 8px; border-radius:8px; background:rgba(255,255,255,.08); }
 .lb-status-badge:empty { display:none; }
@@ -229,54 +230,43 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar { flex-wrap:wra
 .lb-language-versions + .lb-button { margin-top:12px; }
 .lyricPage > .lb-settings-trigger:is(:hover,:focus-visible)::after { top:calc(100% + 8px); bottom:auto; }
 
-/* Companion task hierarchy. Inner surfaces deliberately add no blur or shadow. */
-.lb-popup { --lb-task-tint:rgba(255,255,255,.045); --lb-task-edge:rgba(255,255,255,.10); }
-.lb-popup .lb-task-surface,
-.lb-popup .lb-version-row:has(> .lb-version-toggle[aria-expanded="true"]) {
-    background:var(--lb-task-tint); border:1px solid var(--lb-task-edge);
-    border-radius:12px; padding:12px; box-shadow:none; backdrop-filter:none;
-    -webkit-backdrop-filter:none; box-sizing:border-box; min-width:0;
-}
-.lb-popup details.lb-task-surface { margin-block:16px; }
-.lb-popup details.lb-task-surface > summary { padding:0; display:flex; align-items:center; gap:8px; }
-.lb-popup details.lb-task-surface > summary::before { content:"▸"; }
-.lb-popup details.lb-task-surface[open] > summary::before { content:"▾"; }
-.lb-popup details.lb-task-surface > summary::-webkit-details-marker { display:none; }
-.lb-popup details.lb-task-surface > .lb-song-actions { margin:8px 0 0; }
-.lb-popup .lb-generation-advanced { padding:0; border:0; border-radius:0; background:none; box-shadow:none; }
-.lb-popup .lb-generation-advanced[open] { border-top:1px solid var(--lb-task-edge); margin-top:12px; }
-.lb-popup .lb-generation-advanced > summary { padding:8px 0; }
-.lb-popup summary:focus-visible { outline-offset:-2px; border-radius:8px; }
-.lb-popup .lb-version-row:has(> .lb-version-toggle[aria-expanded="true"]) { margin-block:4px; }
-.lb-popup .lb-version-row > .lb-version-toggle[aria-expanded="true"] { background:none; padding:8px; }
-.lb-popup .lb-version-row:has(> .lb-version-toggle[aria-expanded="true"]) > .lb-version-content { padding:12px 8px 0; }
-.lb-popup .lb-task-surface .lb-feedback,
-.lb-popup .lb-version-content .lb-feedback { background:none; border:0; border-inline-start:3px solid #ffa8b1; border-radius:0; padding:8px 12px; margin-top:12px; }
-.lb-popup .lb-task-surface .lb-confirmation,
-.lb-popup .lb-version-content .lb-confirmation { background:none; border-radius:0; }
-.lb-popup .lb-task-surface .lb-job-details { margin-top:12px; padding-top:12px; }
-.lb-search-body > .lb-version-preview.lb-task-surface { padding:12px; }
-.lb-search-body > .lb-version-preview.lb-task-surface:empty { display:none; }
-
+/* Shared controls: only disclosures and version accordions carry frames. */
+.lb-popup { --lb-frame-edge:rgba(255,255,255,.10); --lb-frame-tint:rgba(255,255,255,.045); }
+.lb-section-title { font:600 16px/1.4 system-ui; margin:0 0 12px; }
+.lb-displaying { margin:8px 0 12px; color:var(--lb-muted-text); font:var(--lb-control-font); }
+.lb-section-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.lb-popup .lb-frame { border:1px solid var(--lb-frame-edge); border-radius:var(--lb-control-radius); padding:0; margin:0; min-width:0; box-sizing:border-box; box-shadow:none; backdrop-filter:none; background:transparent; overflow:hidden; }
+.lb-popup .lb-frame:is([open],:has(> .lb-version-toggle[aria-expanded=true])) { background:var(--lb-frame-tint); }
+.lb-popup .lb-disclosure { margin-block:16px; }
+.lb-popup .lb-disclosure-heading { display:flex; align-items:center; gap:8px; padding:12px; list-style:none; font:600 14px/1.4 system-ui; cursor:pointer; }
+.lb-disclosure-heading::-webkit-details-marker { display:none; }
+.lb-disclosure-content { padding:0 12px 12px; }
+.lb-popup details.lb-disclosure > .lb-disclosure-content { margin-top:0; }
+.lb-disclosure[open] > .lb-disclosure-heading > .lb-icon,.lb-version-toggle[aria-expanded=true] > .lb-icon { transform:rotate(90deg); }
+.lb-popup .lb-flat { border:0; background:none; box-shadow:none; }
+.lb-popup .lb-flat > .lb-disclosure-heading { padding:8px 0; }
+.lb-flat > .lb-disclosure-content { padding:0; }
+.lb-popup .lb-version-toggle { padding:12px; border:0; border-radius:0; background:transparent; box-shadow:none; outline-offset:-3px; gap:8px; font:400 14px/1.4 system-ui; }
+.lb-version-summary { flex:1; }
+.lb-popup .lb-version-toggle:hover:not(:disabled) { background:rgba(255,255,255,.035); border:0; }
+.lb-popup .lb-version-content { padding:0 12px 12px; }
+.lb-version-metadata { margin:0 0 8px; font:12px/1.5 system-ui; color:var(--lb-muted-text); overflow-wrap:anywhere; }
+.lb-popup .lb-version-content .lb-confirmation,.lb-popup .lb-disclosure-content .lb-confirmation { background:none; border:0; border-radius:0; padding:8px 0; }
+.lb-popup .lb-version-content .lb-feedback,.lb-popup .lb-disclosure-content .lb-feedback { background:none; border:0; border-inline-start:3px solid #ffa8b1; border-radius:0; padding:8px 12px; margin-top:12px; }
+.lb-popup .lb-task-surface { padding:12px 0; background:none; border:0; box-shadow:none; }
+.lb-search-body > .lb-version-preview:empty { display:none; }
 .lb-source-usage { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; text-align:start; }
 .lb-source-usage .lb-status-badge { white-space:normal; }
 
-.lb-popup .lb-version-toggle { border:0; box-shadow:none; border-radius:8px; outline-offset:-2px; }
-.lb-popup .lb-version-toggle:hover:not(:disabled) { background:rgba(255,255,255,.035); border:0; }
-.lb-popup .lb-version-toggle:active { background:rgba(255,255,255,.06); }
-
-.lb-result-artists { display:block; font-size:12px; line-height:1.5; color:#c6c6ce; margin-top:4px; }
+.lb-result-artists { display:block; font-size:12px; line-height:1.5; color:var(--lb-muted-text); margin-top:4px; }
 .lb-search-failures { flex-basis:100%; min-width:0; }
 
-/* Keep dismissal beside status even when job actions need a second row. */
-.lb-job-banner { display:grid; grid-template-columns:minmax(0,1fr) auto auto; }
-.lb-job-actions { display:flex; flex-wrap:wrap; gap:8px; }
-.lb-job-banner > .lb-error { grid-column:1 / -1; }
-@media (max-width:760px) {
-    .lb-job-progress { grid-column:1 / 3; grid-row:1; }
-    .lb-job-dismiss { grid-column:3; grid-row:1; }
-    .lb-job-actions { grid-column:1 / -1; grid-row:2; }
-}
+/* Job status occupies the first row; all actions stay together beneath it. */
+.lb-job-banner { display:grid; grid-template-columns:minmax(0,1fr) auto; }
+.lb-job-progress { grid-column:1 / -1; grid-row:1; }
+.lb-job-actions { display:flex; flex-wrap:wrap; gap:8px; grid-column:1; grid-row:2; }
+.lb-job-dismiss { grid-column:2; grid-row:2; }
+.lb-job-banner > .lb-feedback { grid-column:1 / -1; }
 
 /* Persistent progress chrome must not continuously blur the animated lyric backdrop. */
 .lb-tools { backdrop-filter:none; -webkit-backdrop-filter:none; }

@@ -42,6 +42,8 @@ export interface Configuration {
     Defaults: DisplayDefaults;
 }
 export interface JobSummary {
+    outputDeleted?: boolean;
+    outputDeletedAt?: string | null;
     id: string;
     state: string;
     progress: number;

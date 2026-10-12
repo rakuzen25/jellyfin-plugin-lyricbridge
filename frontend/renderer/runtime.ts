@@ -26,7 +26,7 @@ import { detectStockJellyfinTvEnvironment, getCurrentLyricPage, getCurrentLyrics
 import { createKaraokeAnimation, WORD_PROGRESS_SMOOTH_TAU_MS } from "./karaoke-animation.ts";
 import { RendererLifecycle } from "./lifecycle.ts";
 import { clamp01 } from "./motion.ts";
-import { cueValue, lyricTimingMode, normalizeLyricsPayload, usableEnhancedCueCount } from "./payload.ts";
+import { cueValue, lyricPayloadIdentity, lyricTimingMode, normalizeLyricsPayload, usableEnhancedCueCount } from "./payload.ts";
 import { projectClock, resetClock } from "./playback-clock.ts";
 import { detectScriptProfile, firstStrongDirection, getGraphemeRanges, getWordRanges, usesWholeShapedMotion } from "./text-processing.ts";
 import { nullableTick } from "./ticks.ts";
@@ -84,7 +84,18 @@ export function installRenderer() {
         return;
     }
 
+    let renderQuality: "standard" | "low-power" = "standard";
+    try {
+        if (localStorage.getItem("lyricbridge.renderer.quality") === "low-power") renderQuality = "low-power";
+    } catch {
+        /* unavailable storage */
+    }
+    let acceptedOriginalIdentity = "",
+        acceptedOriginalTrack = "";
     const lifecycle = new RendererLifecycle();
+    let hookedMedia: HTMLMediaElement | null = null;
+    const mediaWakeReleases: (() => void)[] = [];
+    lifecycle.own(() => releaseMediaWakeHooks());
     const artworkLoader = new ArtworkLoader(
         () => new Image(),
         () => state.atmosphereTimeoutCount++,
@@ -615,7 +626,7 @@ export function installRenderer() {
     const yieldLyricsWork = async () => {
         await lifecycle.sleep();
     };
-    async function refreshMotionGeometry(revision = geometryRevision) {
+    async function refreshMotionGeometry(revision = geometryRevision, preserveScroll = false) {
         const generation = state.generation,
             records = state.lineData;
         let batchStart = performance.now();
@@ -631,9 +642,10 @@ export function installRenderer() {
         }
         if (revision === geometryRevision && generation === state.generation && records === state.lineData) {
             alignBackgroundVocalAnchors();
-            refreshLyricScrollSpace();
+            refreshLyricScrollSpace(true);
             wakeAnimationLoop();
             if (
+                !preserveScroll &&
                 !state.timingPickActive &&
                 state.activeInstrumentalGapIndex < 0 &&
                 performance.now() >= state.lyricAutoFollowSuspendedUntil &&
@@ -643,7 +655,7 @@ export function installRenderer() {
         }
     }
 
-    function queueMotionGeometryRefresh() {
+    function queueMotionGeometryRefresh(preserveScroll = false) {
         const revision = ++geometryRevision;
         if (!state.lyrics || !isLyricsPage()) {
             if (state.geometryTimer) {
@@ -667,7 +679,7 @@ export function installRenderer() {
                     return;
                 }
 
-                refreshMotionGeometry(revision).catch((error: unknown) => warn("Geometry refresh failed", error));
+                refreshMotionGeometry(revision, preserveScroll).catch((error: unknown) => warn("Geometry refresh failed", error));
             });
         }, 40);
 
@@ -1043,6 +1055,16 @@ export function installRenderer() {
             return true;
         }
 
+        const identity = lyricPayloadIdentity(lyrics);
+        if (state.lyrics && identity === acceptedOriginalIdentity && state.lyricsRequestKey === acceptedOriginalTrack) {
+            state.lyrics = lyrics;
+            window.LyricBridge?.refreshRows();
+            if (state.decoratedGeneration !== state.generation || !state.lineData[0]?.element.isConnected) queueDecoration();
+            return true;
+        }
+        const trackChanged = state.lyricsRequestKey !== acceptedOriginalTrack;
+        acceptedOriginalIdentity = identity;
+        acceptedOriginalTrack = state.lyricsRequestKey;
         state.lyrics = lyrics;
         state.generation += 1;
         state.decoratedGeneration = -1;
@@ -1053,10 +1075,12 @@ export function installRenderer() {
          * shader field visible, invalidate only obsolete asynchronous art work,
          * then probe the CURRENT media element several times while Jellyfin swaps
          * its player source. */
-        invalidateAtmosphereLoads("lyrics-accepted");
-        state.atmosphereFailedKey = "";
-        state.atmosphereLastCheck = 0;
-        scheduleDynamicBackgroundProbeBurst("lyrics-accepted");
+        if (trackChanged) {
+            invalidateAtmosphereLoads("lyrics-accepted");
+            state.atmosphereFailedKey = "";
+            state.atmosphereLastCheck = 0;
+            scheduleDynamicBackgroundProbeBurst("lyrics-accepted");
+        }
 
         const cueCount = usableEnhancedCueCount(lyrics);
 
@@ -1235,6 +1259,7 @@ export function installRenderer() {
     }
 
     function prefersReducedMotion() {
+        if (renderQuality === "low-power") return true;
         try {
             if (!reducedMotionMediaQuery && window.matchMedia) {
                 reducedMotionMediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -1827,7 +1852,7 @@ export function installRenderer() {
             return 1000 / LRC_TARGET_FPS;
         }
 
-        const fps = PERFORMANCE_TARGET_FPS[state.performanceProfile] || 30;
+        const fps = renderQuality === "low-power" ? 30 : PERFORMANCE_TARGET_FPS[state.performanceProfile] || 30;
 
         return 1000 / fps;
     }
@@ -1975,6 +2000,7 @@ export function installRenderer() {
         });
 
         if (media !== cached) {
+            releaseMediaWakeHooks();
             state.mediaElement = media;
             state.mediaProbeAt = now + 1000;
             state.mediaStartOffsetSource = "";
@@ -2138,7 +2164,7 @@ export function installRenderer() {
         resetWordMotion,
         updateWordVisual,
         setStaticWordState,
-    } = createKaraokeAnimation(currentAccent);
+    } = createKaraokeAnimation(currentAccent, () => !prefersReducedMotion());
     const { sourceTimelineTicks, chooseTimelineTicks, cueEndTicks, resetMotionHandoffs, syncStaticLineStates, updateLineHandoffs } =
         createPlaybackCoordinator({
             finiteNumber: (...args) => finiteNumber(...args),
@@ -2285,15 +2311,17 @@ export function installRenderer() {
         scheduleNextFrame(state.mediaElement, true);
     }
 
+    function releaseMediaWakeHooks() {
+        for (const release of mediaWakeReleases) release();
+        mediaWakeReleases.length = 0;
+        if (hookedMedia) delete hookedMedia.dataset.akPerfHooks;
+        hookedMedia = null;
+    }
     function ensureMediaWakeHooks(media: HTMLMediaElement | null) {
-        if (!media || media.dataset.akPerfHooks) {
-            return;
-        }
-
+        if (!media || hookedMedia === media) return;
+        releaseMediaWakeHooks();
+        hookedMedia = media;
         media.dataset.akPerfHooks = "true";
-        lifecycle.own(() => {
-            delete media.dataset.akPerfHooks;
-        });
 
         const handleMediaWake = (event: Event) => {
             const type = event && event.type;
@@ -2371,9 +2399,11 @@ export function installRenderer() {
             "ended",
             "emptied",
         ] as const) {
-            lifecycle.on(media, eventName, handleMediaWake, {
-                passive: true,
-            });
+            mediaWakeReleases.push(
+                lifecycle.on(media, eventName, handleMediaWake, {
+                    passive: true,
+                }),
+            );
         }
     }
 
@@ -2483,7 +2513,6 @@ export function installRenderer() {
                 /* Current/future scaling can change a line's measured edge.
                  * Re-anchor attached backing vocals only at line transitions,
                  * never on the steady-state frame path. */
-                alignBackgroundVocalAnchors();
                 queueBackgroundVocalAnchorRefresh();
 
                 /* Diagnostics keep a human-readable signature, but build it only
@@ -2495,10 +2524,14 @@ export function installRenderer() {
                     // During the break the upcoming line is only a fade anchor.
                     // It still needs a fresh scroll when singing resumes.
                     if (returningFromInstrumental) state.lyricAutoFollowLastIndex = -1;
-                    focusLyricLineIndex(lyricPlaybackFollowIndex(activeLine), {
-                        force: false,
-                        behavior: "smooth",
-                        reason: "playback-follow",
+                    const generation = state.generation;
+                    lifecycle.frame(() => {
+                        if (generation !== state.generation || activeLine !== state.lastActiveLine || state.lyricViewHidden) return;
+                        focusLyricLineIndex(lyricPlaybackFollowIndex(activeLine), {
+                            force: false,
+                            behavior: "smooth",
+                            reason: "playback-follow",
+                        });
                     });
                 }
             }
@@ -2888,6 +2921,8 @@ export function installRenderer() {
     state.performanceMode = readPerformanceMode();
 
     state.performanceProfile = detectPerformanceProfile();
+    document.documentElement.classList.toggle("ak-low-power", renderQuality === "low-power");
+    lifecycle.own(() => document.documentElement.classList.remove("ak-low-power"));
 
     // LyricBridge owns lyric transport; this renderer receives accepted payloads.
     lifecycle.on(
@@ -3052,6 +3087,21 @@ export function installRenderer() {
         setAccent: setAccentMode,
         nextAccent: rerollAccent,
         setPerformance: setPerformanceMode,
+        setRenderQuality(quality: "standard" | "low-power") {
+            if (quality !== "standard" && quality !== "low-power") throw new Error("Unknown rendering quality");
+            renderQuality = quality;
+            try {
+                localStorage.setItem("lyricbridge.renderer.quality", quality);
+            } catch {
+                /* unavailable storage */
+            }
+            document.documentElement.classList.toggle("ak-low-power", quality === "low-power");
+            for (const line of state.lineData) for (const word of line.words || []) resetWordMotion(word);
+            rebuildDynamicBackgroundRenderer("render-quality");
+            wakeAnimationLoop();
+            return renderQuality;
+        },
+        renderQuality: () => renderQuality,
         setRomanization: setRomanizationMode,
         romanization() {
             return {
@@ -3136,7 +3186,12 @@ export function installRenderer() {
                 renderedFrameCount: state.renderedFrameCount,
                 mode: state.performanceMode,
                 profile: state.performanceProfile,
-                targetFps: state.timedCueCount > 0 ? PERFORMANCE_TARGET_FPS[state.performanceProfile] : LRC_TARGET_FPS,
+                targetFps:
+                    state.timedCueCount > 0
+                        ? renderQuality === "low-power"
+                            ? 30
+                            : PERFORMANCE_TARGET_FPS[state.performanceProfile]
+                        : LRC_TARGET_FPS,
                 measuredFps: Number(state.measuredFps.toFixed(1)),
                 timedCueCount: state.timedCueCount,
                 perGlyphMotion: "multiscript-grapheme+whole-shaped",
@@ -3155,6 +3210,7 @@ export function installRenderer() {
                 normalLrcTargetFps: LRC_TARGET_FPS,
                 pausedTargetFps: PAUSED_TARGET_FPS,
                 adaptiveAlbumAtmosphere: true,
+                renderQuality,
                 atmosphereMode: "dynamic-only",
                 atmosphereArtwork: state.atmosphereArtwork,
                 atmosphereSource: state.atmosphereSource,

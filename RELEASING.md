@@ -2,7 +2,7 @@
 
 LyricBridge uses release-please for one repository-wide version and changelog. It updates `version.txt`, the authoritative version in `Directory.Build.props`, and only the LyricBridge project-reference versions in .NET lockfiles. Third-party dependency versions and hashes are preserved. Packaging reads the matching changelog section and its committed release date for the catalog; notes and URLs are not left at the initial release defaults.
 
-The flow is: Conventional Commits on `main` → release PR → passing PR checks and your merge → draft release and tag → full validation/reproducibility/installed-plugin checks → tested assets attached → your final Publish click. The workflow never installs on a live server or changes a shared catalog. A draft without a green artifact workflow is not ready to publish.
+The flow is: Conventional Commits on `main` → release PR → passing PR checks and your merge → draft release and tag → risk-based code validation plus mandatory final artifact/reproducibility/installed-plugin checks → tested assets attached → your final Publish click. The workflow never installs on a live server or changes a shared catalog. A draft without a green artifact workflow is not ready to publish.
 
 ## One-time GitHub setup
 
@@ -14,19 +14,24 @@ The personal access token lets release PRs trigger normal PR CI; PRs created wit
 
 `Prepare release` owns validation for pushes to `main`: ordinary pushes call candidate validation, while newly created releases call artifact validation once against the release commit. PRs and manual validation remain independently available; there is no second standalone push-validation run.
 
-## Prepare 0.1.1
+## Prepare the next release
 
-0.1.0 is already published. Keep its tag and assets unchanged, and leave the bookkeeping manifest at the last released version until release-please updates it.
+Keep published tags and assets unchanged. Commit the implementation with a Conventional
+Commit title. Release-please determines the next version; use a one-time `Release-As:`
+footer only when deliberately selecting a different version. Do not manually bump
+metadata or project lockfile references: the generated release PR updates them together.
 
-Commit the reviewed automatic-injection changes through your normal PR flow. Use a Conventional Commit with the one-time footer `Release-As: 0.1.1` (retain this footer in the squash commit if applicable). Do not bump metadata or project lockfile references manually: release-please creates a release PR updating them together.
+Review and merge that PR after its required checks pass. The workflow creates a draft
+and tag, verifies the exact candidate and attaches five assets:
 
-Review and merge the generated 0.1.1 release PR only after its checks pass. The workflow creates a draft with an actual `v0.1.1` tag, validates the exact commit and attaches:
-
-- `lyricbridge-0.1.1.zip` — plugin, embedded renderer, dependencies, dictionaries and notices.
-- `lyricbridge-web-0.1.1.zip` — optional separately installed web enhancement.
-- `lyricbridge-source-0.1.1.zip` — matching editable/licensed source and build inputs.
+- `lyricbridge-VERSION.zip` — plugin, embedded renderer, dependencies, dictionaries and notices.
+- `lyricbridge-web-VERSION.zip` — optional separately installed web enhancement.
+- `lyricbridge-source-VERSION.zip` — matching editable/licensed source and build inputs.
 - `manifest.json` — this plugin's catalog entry.
 - `SHA256SUMS` — all three ZIPs and the manifest.
+
+A matching unpublished draft at the exact current commit can be resumed if release-please
+already created it. Duplicate or mismatched tags fail rather than being recreated.
 
 Keep the plugin/web/source archives together for corresponding-source availability. After the artifact workflow is green, download all five assets, verify `sha256sum -c SHA256SUMS`, review the manifest's version/GUID/ABI/URLs and publish the draft. Confirm unauthenticated downloads after publishing. Do not publish an empty draft while validation is running. Publication, shared-catalog changes and live installation are performed by the repository owner.
 
@@ -36,7 +41,7 @@ Use Conventional Commit messages (or squash PR titles): `fix:` for fixes, `feat:
 
 Release-please keeps a release PR updated. Review and merge it when ready. No manual version edits, tags or ZIP uploads are needed; publishing remains an explicit final click.
 
-If artifact validation/upload fails, leave the release as a draft. After resolving the failure, run **Build draft release artifacts** from Actions with the existing tag (for example `v0.1.0`). It validates the tagged source again. Identical existing assets are accepted; conflicting files, moved tags or published releases are rejected. It never overwrites existing assets. A source fix belongs in a new reviewed release commit/version rather than silently replacing a published artifact. For an unpublished failed draft whose source must change, resolve the draft/tag deliberately before recreating that version; this workflow will not delete or move tags for you.
+If artifact validation/upload fails, leave the release as a draft. After resolving the failure, run **Build draft release artifacts** from Actions with the existing tag (the unpublished `vVERSION` tag). It verifies new tagged artifacts again and reuses code checks only when their inputs match trusted evidence. Identical existing assets are accepted; conflicting files, moved tags or published releases are rejected. It never overwrites existing assets. A source fix belongs in a new reviewed release commit/version rather than silently replacing a published artifact. For an unpublished failed draft whose source must change, resolve the draft/tag deliberately before recreating that version; this workflow will not delete or move tags for you.
 
 ## Shared Jellyfin catalog
 
@@ -49,4 +54,11 @@ python3 scripts/catalog.py --catalog-input /path/to/shared-manifest.json \
 
 Use the manifest downloaded from the public release as the entry (copy it to `dist/manifest.json` or supply its actual path). Review and publish the catalog change separately. Each plugin retains its own repository, GUID and version; unrelated plugin releases are preserved. Cross-repository catalog PR automation can be added once the catalog repository and its authorization are configured.
 
-For an upload-only manual retry, set `validated_run_id` to the previous run ID whose full `validate` job passed (the number in its Actions URL). This skips validation and downloads that run’s tested candidate artifact. The source run must match the tag’s checked-out commit and contain a successful validation job; missing/expired artifacts fail the retry. Leave it blank to run full validation. Automatic releases always run full validation.
+For an upload-only manual retry, set `validated_run_id` to a previous successful release
+validation run (the number in its Actions URL), including one whose later attach failed. The downloaded candidate must carry a
+complete receipt for the exact tag/source, every required gate and identical artifact
+hashes. Missing/expired artifacts, old receipt-free candidates and mismatched sources
+fail safely. Evidence older than 24 hours requires fresh advisory validation. Leave it blank to build and verify a new candidate; code checks can reuse
+matching trusted evidence, but artifact installation, reproducibility, inventory and
+fresh advisories always execute. See [CI.md](CI.md) for execution groups and manual full
+validation. Upload-only retry does not bypass release acceptance.

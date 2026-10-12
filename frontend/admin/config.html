@@ -30,6 +30,9 @@
                 #LyricBridgeConfig button { min-height:44px; }
                 #LyricBridgeConfig button:focus-visible,#LyricBridgeConfig summary:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
                 #LyricBridgeConfig .lb-settings-group { margin: 0 0 24px; }
+                #LyricBridgeConfig #lb-renderer-settings .fieldDescription { margin:8px 0 16px; line-height:1.5; }
+                #LyricBridgeConfig #lb-web-status { white-space:pre-line; }
+                #LyricBridgeConfig #lb-renderer-settings .lb-actions button { margin:0; }
                 #LyricBridgeConfig h4 { margin: 0 0 12px; }
                 #LyricBridgeConfig .lb-field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 16px; }
                 #LyricBridgeConfig .lb-config-badge { display:inline-block; font-size:.85em; padding:4px 8px; border-radius:4px; background:rgba(128,128,128,.12); font-weight:400; }
@@ -75,11 +78,13 @@
                             <div id="lb-config-tabs" role="tablist" aria-label="LyricBridge settings"></div>
 
                             <section class="verticalSection" role="tabpanel" data-tab="General">
-                                <h3 class="sectionTitle">Web renderer</h3>
-                                <label class="checkboxContainer emby-checkbox-label"><input is="emby-checkbox" type="checkbox" id="lb-web-enabled" /><span>Enable web renderer</span></label>
-                                <p class="fieldDescription">Loads the enhanced lyrics interface in Jellyfin-hosted web clients. Uses File Transformation when available, otherwise updates a writable web index. Reload browser clients after changes.</p>
-                                <div id="lb-web-status" class="fieldDescription" role="status" aria-live="polite"></div>
-                                <button is="emby-button" type="button" class="raised emby-button" id="lb-web-repair"><span>Repair web renderer</span></button>
+                                <div class="lb-settings-group" id="lb-renderer-settings">
+                                    <h3 class="sectionTitle">Web renderer</h3>
+                                    <label class="checkboxContainer emby-checkbox-label"><input is="emby-checkbox" type="checkbox" id="lb-web-enabled" /><span>Enable web renderer</span></label>
+                                    <p class="fieldDescription">Enhances lyrics in Jellyfin-hosted web clients. Reload browser clients after saving changes.</p>
+                                    <div id="lb-web-status" class="fieldDescription" role="status" aria-live="polite"></div>
+                                    <div class="lb-actions"><button is="emby-button" type="button" class="raised emby-button" id="lb-web-repair"><span>Repair web renderer</span></button></div>
+                                </div>
                                 <h3 class="sectionTitle">Storage and retrieval</h3>
                                 <div class="inputContainer">
                                     <input label="Lyric storage directory" is="emby-input" id="lb-storage" placeholder="Leave empty for the server data directory" />

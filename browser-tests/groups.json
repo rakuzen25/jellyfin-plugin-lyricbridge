@@ -1,0 +1,21 @@
+{
+    "workflow": [
+        "admin-configuration.spec.cjs",
+        "preference-lifecycle.spec.cjs",
+        "retrieval-states.spec.cjs",
+        "saved-originals.spec.cjs",
+        "workflow-lifecycle.spec.cjs"
+    ],
+    "rendering": [
+        "artwork-lifecycle.spec.cjs",
+        "injected-renderer.spec.cjs",
+        "playback.spec.cjs",
+        "playback-stability.spec.cjs",
+        "render-quality.spec.cjs",
+        "renderer-lifecycle.spec.cjs",
+        "short-lyrics.spec.cjs",
+        "version-preview.spec.cjs",
+        "visual-parity.spec.cjs"
+    ],
+    "performance": ["full-song-performance.spec.cjs", "long-session.spec.cjs"]
+}

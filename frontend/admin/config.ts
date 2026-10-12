@@ -392,7 +392,7 @@ import { hostFailure } from "./contracts.ts";
         query("#lb-storage-warning").hidden =
             !storageRuntime.restartRequired && query("#lb-storage").value.trim() === (savedConfig.StoragePath?.trim() || "");
         query("#lb-web-status").textContent = rendererRuntime
-            ? `${rendererRuntime.result}. Mechanism: ${rendererRuntime.mechanism}. Web root: ${rendererRuntime.webRoot}`
+            ? rendererRuntime.result + "\nMechanism: " + rendererRuntime.mechanism + "\nWeb root: " + rendererRuntime.webRoot
             : "Renderer status unavailable — use Repair to retry.";
         const lang = config.Defaults.SourceLanguage;
         const languageOptions = query("#lb-default-language-options");
@@ -858,6 +858,15 @@ import { hostFailure } from "./contracts.ts";
                 const row = node("div");
                 row.className = "verticalSection";
                 row.append(node("p", job.request.kind + " · " + job.request.language + " · " + job.state + " · " + job.progress + "%"));
+                if (job.outputDeleted)
+                    row.append(
+                        node(
+                            "p",
+                            "Output deleted" +
+                                (job.outputDeletedAt ? " · " + new Date(job.outputDeletedAt).toLocaleString() : "") +
+                                " · Job history retained",
+                        ),
+                    );
                 if (job.error) {
                     const error = node("div", job.error);
                     error.className = "fieldDescription lb-action-status";
@@ -866,14 +875,15 @@ import { hostFailure } from "./contracts.ts";
                     if (job.failure?.diagnosticId) error.append(node("div", "Diagnostic ID: " + job.failure.diagnosticId));
                     row.append(error);
                 }
-                const actions =
-                    job.state === "pending"
-                        ? ["approve", "reject", "cancel"]
-                        : ["queued", "running"].includes(job.state)
-                          ? ["cancel"]
-                          : ["failed", "settings_changed"].includes(job.state)
-                            ? ["retry"]
-                            : [];
+                const actions = job.outputDeleted
+                    ? []
+                    : job.state === "pending"
+                      ? ["approve", "reject", "cancel"]
+                      : ["queued", "running"].includes(job.state)
+                        ? ["cancel"]
+                        : ["failed", "settings_changed"].includes(job.state)
+                          ? ["retry"]
+                          : [];
                 for (const action of actions)
                     row.append(
                         button(action.charAt(0).toUpperCase() + action.slice(1), async () => {

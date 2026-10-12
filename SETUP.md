@@ -60,7 +60,13 @@ AI translation and pronunciation use separate instructions. Translation output m
 
 ## Saved language versions
 
-Lyrics settings → Versions lists saved translation and pronunciation versions separately. Each lists its service, model, thinking level, and generation time when available. Choose Preview, then Use to save the selection for your account and this original lyric content. Translation choices are separate for each target language. Automatic prefers supplied rows; Provider supplied only excludes generated rows.
+Lyrics settings → Versions includes **Saved originals** as well as saved translation and pronunciation versions. Selected provider originals (including automatic selections), upgrades and imports are saved; provider previews stay temporary. Identical imports reuse the saved entry. Everyone with access to the song can preview a saved original without changing its selection or starting generation. Administrators can select it for the library or delete it after confirmation. Switching originals restores the matching translations, pronunciation, personal auxiliary choices and shared timing correction; generated rows are never remapped between originals.
+
+Deleting a saved original removes that song’s association and its timing correction. A deleted current original is replaced by the previous surviving saved original, or the newest saved original when the previous one is unavailable. Matching previous selections are cleared. If no saved originals remain, current lyrics are cleared and automatic discovery pauses until an explicit retry, import or selection. Shared documents and their dependent versions remain when another song, selection, revert snapshot, composition/donor, improvement offer or unaffected active job requires them. Affected jobs are cancelled transactionally; retained history identifies deleted output and cannot retry it. Media and external lyric files are never deleted.
+
+This development version uses storage schema 5. Existing schema 4 and other unsupported databases are rejected without migration or changes. Use a new empty development storage directory; keep existing production storage untouched.
+
+Saved translation and pronunciation versions are listed separately. Each lists its service, model, thinking level, and generation time when available. Choose Preview, then Use to save the selection for your account and this original lyric content. Translation choices are separate for each target language. Automatic prefers supplied rows; Provider supplied only excludes generated rows.
 
 Generate creates a new saved version, retains earlier outputs and your current displayed choice, and is subject to the usual external-generation permissions, approval, and quotas. Version choices do not alter other users or the administrator’s original-lyric selection. Changing the original lyric version exposes only matching generated outputs; older outputs remain stored with their original content.
 
@@ -131,3 +137,8 @@ Title matching ignores recognized featured-artist clauses, including those prece
 Administrator settings use five compact native Jellyfin tabs. Sources retain enabled order and inline credential setup; Language services show capabilities and configured status, with tests using saved settings. Display defaults apply to accounts without their own saved preferences. Storage-change instructions and destructive maintenance are disclosed beside their actions. Save settings remains visible, preserves edits after failure, and becomes available only after settings load successfully. Failed loads offer Retry.
 
 Language services list their roles and language limitations: Kawazu provides local Japanese romaji; Google provides translation and pronunciation for the supported languages listed in its row; AI capabilities depend on the configured model; DeepL and LibreTranslate provide translation only, with provider/server language support. Display defaults use the same Original/Pronunciation/Translation controls as the playback Display tab. Chinese translation script is selected through Chinese (Simplified) or Chinese (Traditional); Chinese original text has its own script choice. Auto-detect keeps language-specific defaults in a disclosure, and selecting a language reveals its relevant controls without discarding hidden settings.
+
+
+## Browser rendering quality
+
+For reduced rendering load, open Lyrics settings → Display → Text sizes and layout and choose **Low power** under Rendering quality. Artwork becomes stationary and glyph lift/glow is disabled; timed highlighting remains. Standard remains the default. The selection is saved in this browser, not server configuration. See [performance validation](PERFORMANCE.md) for measurement limits.

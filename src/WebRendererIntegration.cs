@@ -72,6 +72,7 @@ public sealed class WebRendererIntegration : BackgroundService
 
     public override void Dispose()
     {
+        Interlocked.CompareExchange(ref active, null, this);
         detach?.Invoke();
         base.Dispose();
     }
