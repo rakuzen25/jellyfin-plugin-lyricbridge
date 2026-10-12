@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 
 namespace LyricBridge;
 
-public sealed record WebRendererStatus(bool Enabled, string Mechanism, string WebRoot, string Result);
+public sealed record WebRendererStatus(bool Enabled, string Mechanism, string WebRoot, string Result, string Severity = "info");
 
 /// <summary>Owns renderer injection at the Jellyfin host boundary, never lyric storage.</summary>
 public sealed class WebRendererIntegration : BackgroundService
@@ -88,7 +88,7 @@ public sealed class WebRendererIntegration : BackgroundService
             catch (Exception error) { logger.LogWarning("LyricBridge web transformation registration failed ({Type}); checking direct injection", error.GetType().Name); }
             var index = Path.Combine(webRoot, "index.html");
             if (!File.Exists(index))
-                return Set(isEnabled, transformed && isEnabled ? "file-transformation" : "none", transformed ? "Transformation registered; local index unavailable" : "Web index not found; use the separate installer for a separately hosted client");
+                return Set(isEnabled, transformed && isEnabled ? "file-transformation" : "none", transformed ? "Transformation registered; local index unavailable" : "Web index not found; use the separate installer for a separately hosted client", transformed ? "info" : "error");
             var original = await File.ReadAllTextAsync(index, token);
             var clean = Normalize(original, false, revision);
             var updated = Normalize(original, isEnabled && !transformed, revision);
@@ -101,14 +101,14 @@ public sealed class WebRendererIntegration : BackgroundService
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or RegexMatchTimeoutException)
         {
             logger.LogWarning("LyricBridge web injection could not reconcile ({Type})", error.GetType().Name);
-            return Set(enabled(), transformed && enabled() ? "file-transformation" : "none", transformed ? "Serve-time transformation registered, but disk cleanup failed; check web-root permissions before uninstall" : "Web index could not be updated; check web-root permissions and HTML, or install File Transformation compatible with your Jellyfin version");
+            return Set(enabled(), transformed && enabled() ? "file-transformation" : "none", transformed ? "Serve-time transformation registered, but disk cleanup failed; check web-root permissions before uninstall" : "Web index could not be updated; check web-root permissions and HTML, or install File Transformation compatible with your Jellyfin version", transformed ? "warning" : "error");
         }
         finally { gate.Release(); }
     }
 
-    private WebRendererStatus Set(bool isEnabled, string mechanism, string result)
+    private WebRendererStatus Set(bool isEnabled, string mechanism, string result, string severity = "info")
     {
-        var next = new WebRendererStatus(isEnabled, mechanism, webRoot, result);
+        var next = new WebRendererStatus(isEnabled, mechanism, webRoot, result, severity);
         Volatile.Write(ref status, next);
         return next;
     }

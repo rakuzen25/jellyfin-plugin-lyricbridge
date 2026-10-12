@@ -391,9 +391,24 @@ import { hostFailure } from "./contracts.ts";
         query("#lb-effective-storage").textContent = "Active path: " + (storageRuntime.activeStoragePath || "Unavailable — reload settings to retry");
         query("#lb-storage-warning").hidden =
             !storageRuntime.restartRequired && query("#lb-storage").value.trim() === (savedConfig.StoragePath?.trim() || "");
-        query("#lb-web-status").textContent = rendererRuntime
-            ? rendererRuntime.result + "\nMechanism: " + rendererRuntime.mechanism + "\nWeb root: " + rendererRuntime.webRoot
-            : "Renderer status unavailable — use Repair to retry.";
+        const rendererStatus = query("#lb-web-status");
+        const severity = rendererRuntime?.severity || (rendererRuntime ? "info" : "warning");
+        rendererStatus.dataset.state = severity;
+        rendererStatus.setAttribute("role", severity === "error" ? "alert" : "status");
+        const statusLines = rendererRuntime
+            ? [
+                  (severity === "error" ? "Renderer error: " : severity === "warning" ? "Renderer warning: " : "") + rendererRuntime.result,
+                  "Mechanism: " + rendererRuntime.mechanism,
+                  "Web root: " + rendererRuntime.webRoot,
+              ]
+            : ["Renderer warning: status unavailable — use Repair to retry."];
+        rendererStatus.replaceChildren(
+            ...statusLines.map((text) => {
+                const line = document.createElement("div");
+                line.textContent = text;
+                return line;
+            }),
+        );
         const lang = config.Defaults.SourceLanguage;
         const languageOptions = query("#lb-default-language-options");
         if (languageOptions) {
@@ -770,6 +785,8 @@ import { hostFailure } from "./contracts.ts";
             rendererRuntime = await call<WebRendererStatus>("admin/web-renderer/repair", "POST");
             refreshDependentControls();
         } catch {
+            query("#lb-web-status").dataset.state = "error";
+            query("#lb-web-status").setAttribute("role", "alert");
             failure(query("#lb-web-status"), "Renderer repair failed. Reload settings and retry.");
         } finally {
             control.disabled = false;

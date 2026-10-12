@@ -74,6 +74,7 @@ declare global {
 }
 
 export interface WebRendererStatus {
+    severity?: "info" | "warning" | "error";
     enabled: boolean;
     mechanism: string;
     webRoot: string;

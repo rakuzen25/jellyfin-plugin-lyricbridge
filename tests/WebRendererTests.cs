@@ -7,6 +7,16 @@ public sealed class WebRendererTests
 {
     private const string Revision = "0123456789abcdef";
     [Fact]
+    public async Task MissingIndexReportsErrorUnlessTransformationIsAvailable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        using var direct = new WebRendererIntegration(root, () => true, NullLogger<WebRendererIntegration>.Instance, Revision, () => false);
+        Assert.Equal("error", (await direct.Repair(CancellationToken.None)).Severity);
+        using var transformation = new WebRendererIntegration(root, () => true, NullLogger<WebRendererIntegration>.Instance, Revision, () => true);
+        Assert.Equal("info", (await transformation.Repair(CancellationToken.None)).Severity);
+    }
+
+    [Fact]
     public void InjectionIsIdempotentAndScoped()
     {
         const string original = "<html><head><script src=\"other.js\"></script></HEAD><body>fixture</body></html>";

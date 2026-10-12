@@ -31,7 +31,10 @@
                 #LyricBridgeConfig button:focus-visible,#LyricBridgeConfig summary:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
                 #LyricBridgeConfig .lb-settings-group { margin: 0 0 24px; }
                 #LyricBridgeConfig #lb-renderer-settings .fieldDescription { margin:8px 0 16px; line-height:1.5; }
-                #LyricBridgeConfig #lb-web-status { white-space:pre-line; }
+                #LyricBridgeConfig #lb-web-status { overflow-wrap:anywhere; }
+                #LyricBridgeConfig #lb-web-status > :first-child { font-weight:600; }
+                #LyricBridgeConfig #lb-web-status[data-state="error"] > :first-child { color:#e77; }
+                #LyricBridgeConfig #lb-web-status[data-state="warning"] > :first-child { color:#dba84c; }
                 #LyricBridgeConfig #lb-renderer-settings .lb-actions button { margin:0; }
                 #LyricBridgeConfig h4 { margin: 0 0 12px; }
                 #LyricBridgeConfig .lb-field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 16px; }
