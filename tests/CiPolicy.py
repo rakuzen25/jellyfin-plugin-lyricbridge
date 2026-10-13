@@ -20,7 +20,23 @@ from source_inventory import source_files
 ROOT = Path(__file__).resolve().parent.parent
 
 
-class PolicyTests(unittest.TestCase):
+class IsolatedCiTestCase(unittest.TestCase):
+    def setUp(self):
+        # Runner context must never select a different policy path or enable real
+        # GitHub calls. Individual scenarios opt into push/release context below.
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith("GITHUB_")
+            and key not in {"GH_TOKEN", "CI_RUN_HEAD_SHA", "CI_JOB_RESULTS"}
+        }
+        environment["GITHUB_EVENT_NAME"] = "pull_request"
+        context = patch.dict(os.environ, environment, clear=True)
+        context.start()
+        self.addCleanup(context.stop)
+
+
+class PolicyTests(IsolatedCiTestCase):
     def test_representative_impacts(self):
         cases = {
             "README.md": set(),
@@ -475,7 +491,7 @@ class PolicyTests(unittest.TestCase):
             ci.verify_run("owner/repo", "100", receipt)
 
 
-class CumulativeCoverageTests(unittest.TestCase):
+class CumulativeCoverageTests(IsolatedCiTestCase):
     def test_real_git_ancestry_rejects_divergent_force_push_history(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -809,7 +825,7 @@ class CumulativeCoverageTests(unittest.TestCase):
         self.assertFalse(ci.finish(ROOT, selection, {})["coverage"]["complete"])
 
 
-class MetadataTests(unittest.TestCase):
+class MetadataTests(IsolatedCiTestCase):
     def test_metadata_only_schedule_does_not_launch_full_runtime_suite(self):
         with (
             patch.object(
