@@ -1,13 +1,15 @@
 # Validation and release execution
 
 CI selects **check groups**, not individual backend methods. Selection is conservative;
-unknown paths and missing diff history require the full suite. `scripts/ci.py` is the
+unknown paths fail the impact job before expensive checks, while missing diff history
+requires full coverage. `scripts/ci.py` is the
 single impact/evidence policy; `tests/CiPolicy.py` exercises its failure paths.
 
 ## What runs
 
 | Group | Inputs and invariant | Execution |
 | --- | --- | --- |
+| Metadata | Renovate JSON, CODEOWNERS, issue/PR templates | Independent syntax and targeted formatting checks; no frontend bundle |
 | Frontend | Maintained TS, checked tooling, lint/format/unused-code rules, unit decisions | One Linux job; strict build produces browser assets once |
 | Backend | C# application, SQLite transactions, host adaptation and locked dependencies | All discoverable backend tests; isolated roots and mocked providers |
 | Tooling | Python checks, architecture boundaries, release/catalog/local fixture logic | One independent job |
@@ -25,11 +27,47 @@ Documentation-only changes do not build/test the application. Release metadata a
 gets identity validation; a release always builds and verifies its own artifacts.
 Renderer/runtime/CSS and shared browser dependency changes require performance coverage.
 Packaging-only changes do not independently trigger five-minute browser sessions.
-Backend contracts also exercise browser consumers; shared CI policy and unknown paths
-fall back to the full gate. The Actions impact summary records selected, reused and
+Backend contracts also exercise browser consumers; shared CI policy
+requires the full gate. The Actions impact summary records classifications, selected, reused and
 unneeded groups.
 
+## File classification
+
+Every maintained tracked file and changed path must match a rule in `scripts/ci.py`.
+New files under established source/test directories inherit that directory's conservative
+coverage. Unknown root files or unknown GitHub configuration fail quickly with their
+paths; add an explicit rule and regression before validation can pass. Deletes and both
+sides of renames are checked too. Do not use a catch-all rule to silence the failure.
+
+The same classification owns selection and fingerprints. Automation metadata does not
+invalidate runtime evidence or trigger packaging; a scheduled metadata-only change runs
+the lightweight metadata group without browser stress. Workflows, shared Actions and
+selection policy retain broad coverage. Editable source archives include repository
+metadata and always use exact current contents when release artifacts are built.
+
+Run `python3 scripts/ci.py metadata-check` with the pinned pnpm/Node environment for
+local checks. JSON is parsed, YAML/Markdown are parsed/formatted by Prettier, and
+CODEOWNERS patterns/owners receive basic syntax and tracked-local-path checks. This
+does not claim complete Renovate schema or remote owner-permission validation.
+
 ## Evidence and retries
+
+Ordinary pushes cancel unfinished validation on the same branch. Their comparison
+starts at the newest trustworthy successful ancestor, not the previous push, so
+cancelled or failed commits remain covered. PRs compare against their merge base.
+Code-group fingerprint differences from the baseline also require those groups.
+Missing history or baseline evidence requires all groups, with reuse of matching
+completed successes allowed. Explicit full validation still executes everything.
+
+Schema-3 receipts include metadata checks and record comparison mode, baseline commit/run and coverage identity,
+fallback reasons, and reused group origins. A successful full run establishes coverage;
+a successful cumulative push extends it. Older narrow receipts cannot establish a
+baseline. Baseline and evidence searches examine at most three pages of 100 runs.
+Expired receipts, non-ancestor commits and unavailable APIs cannot establish coverage.
+Passed groups from failed runs can be reused; unfinished groups cannot, and a newer
+matching failure blocks older successful evidence.
+Older receipts cannot attest the new metadata group. Changing this selection policy
+requires broad validation once; subsequent metadata-only changes receive narrow checks.
 
 A `lyricbridge-validation-receipt` artifact records checked commit/tree, orchestrating
 workflow SHA/run/repository, policy/input hashes, group results and final artifact hashes.
@@ -60,8 +98,9 @@ Old candidates without receipts cannot use upload-only retries; validate them ag
 The daily lightweight sentinel compares meaningful group fingerprints against successful
 **full** validation. If unchanged, it skips the expensive suite. Documentation/release
 bookkeeping alone does not cause a full run. New runtime/dependency/test/tooling inputs
-without a matching full pass trigger one full run. The shared main validation concurrency
-prevents a scheduled run from duplicating active main validation. Idle safety receipts carry forward the authenticated full input baseline, so daily
+without a matching full pass trigger one full run. Scheduled safety runs have an
+independent concurrency group and are not cancelled by ordinary branch pushes.
+Release attachment also remains non-cancelling. Idle safety receipts carry forward the authenticated full input baseline, so daily
 no-op runs do not force a full run merely by pushing older evidence out of the search
 window. This never renews artifact or advisory evidence. Manual safety runs
 always execute the full suite. Missing evidence falls back conservatively.
@@ -86,8 +125,22 @@ on failures. Explicit Bash pipefail prevents a logging pipeline from hiding test
 
 ## Local commands
 
+`pnpm check` includes Ruff formatting/linting, Mypy and .NET whitespace formatting,
+in addition to the frontend checks. Python formatting is enforced in the tooling
+job; .NET formatting is enforced in the backend job and its log is retained.
+The .NET gate uses `dotnet format whitespace` with `.editorconfig`, covering maintained
+`src/` and `tests/` C# files while excluding vendor and build output. It does not apply
+semantic analyzer fixes or require reference assemblies/package restoration.
+Use the pinned SDK from `global.json`; `LYRICBRIDGE_DOTNET` and `LYRICBRIDGE_PYTHON`
+can override executable locations for local checks.
+
 ```sh
 pnpm check
+pnpm check:python
+pnpm check:dotnet
+# Apply formatting before checking again:
+pnpm format:python
+pnpm format:dotnet
 pnpm build && pnpm test
 python3 tests/CiPolicy.py
 python3 tests/ReleaseBoundaries.py

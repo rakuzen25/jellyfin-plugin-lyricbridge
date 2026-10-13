@@ -127,9 +127,14 @@ for path in sorted(plugin.rglob("*")):
             "file": relative,
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             "package": package or "project-source",
-            "version": dependencies[package]["resolved"] if package else (
-                ET.parse("vendor/Lyricify.Lyrics.Helper/Lyricify.Lyrics.Helper.csproj").getroot().findtext(".//Version")
-                if path.name == "Lyricify.Lyrics.Helper.dll" else version
+            "version": dependencies[package]["resolved"]
+            if package
+            else (
+                ET.parse("vendor/Lyricify.Lyrics.Helper/Lyricify.Lyrics.Helper.csproj")
+                .getroot()
+                .findtext(".//Version")
+                if path.name == "Lyricify.Lyrics.Helper.dll"
+                else version
             ),
             "notices": ["notices/" + notice for notice in licenses],
         }

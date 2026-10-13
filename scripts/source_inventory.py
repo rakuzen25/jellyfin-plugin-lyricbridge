@@ -6,6 +6,7 @@ from pathlib import Path
 ROOTS = ("src", "frontend", "vendor", "scripts", "tests", "browser-tests", ".github")
 EXCLUDED = {"bin", "obj", ".git", "node_modules", "results", "__pycache__"}
 CONFIGS = {
+    "renovate.json",
     "LICENSE",
     "NOTICE",
     "Directory.Build.props",

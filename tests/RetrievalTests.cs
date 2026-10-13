@@ -5,32 +5,32 @@ public static class RetrievalTests
 {
     public static async Task Run(string root)
     {
-        var track=new TrackMultiArtistMetadata{Title="fixture",Artists=["artist"]};
-        var line=new FakeSource("QQ","[00:01.00]hi");var word=new FakeSource("NetEase","[1000,1000](1000,500,0)h(1500,500,0)i");
-        var logger=new TestLogger();var retrieval=new Retrieval(new Store(Path.Combine(root,"retrieval")),ProviderRegistry.WithSources(line,word),logger);var item=Guid.NewGuid();
-        var tasks=Enumerable.Range(0,8).Select(_=>retrieval.Get(item,track,false,CancellationToken.None)).ToArray();var results=await Task.WhenAll(tasks);
-        Check(results.All(r=>r?.WordTimed==true)&&line.Searches==1&&word.Searches==1,"prefer word timing and deduplicate concurrent retrieval");
-        var manual=await retrieval.Select(item,new("QQ","42","fixture","artist","album",10000,100),CancellationToken.None);
-        Check((await retrieval.Get(item,track,false,CancellationToken.None))?.Manual==true,"preserve manual selection");
-        Check((await retrieval.Get(item,track,true,CancellationToken.None))?.WordTimed==true,"explicit timing upgrade");
-        using(var cancel=new CancellationTokenSource(5)){try{await retrieval.Get(Guid.NewGuid(),track,false,cancel.Token);throw new Exception("Cancellation ignored");}catch(OperationCanceledException){}}
-        var missing=new FakeSource("LRCLIB",null){Missing=true};var noMatch=new Retrieval(new Store(Path.Combine(root,"missing")),ProviderRegistry.WithSources(missing),logger);var absent=Guid.NewGuid();
-        await Task.WhenAll(Enumerable.Range(0,5).Select(_=>noMatch.Get(absent,track,false,CancellationToken.None)));Check(missing.Searches==1,"deduplicate negative results");
-        var failing=new FakeSource("QQ",null){Failure=true};var failed=new Retrieval(new Store(Path.Combine(root,"failed")),ProviderRegistry.WithSources(failing),logger);
-        await failed.Get(Guid.NewGuid(),track,false,CancellationToken.None);await failed.Get(Guid.NewGuid(),track,false,CancellationToken.None);
-        Check(failing.Searches==1&&!logger.Messages.Any(s=>s.Contains("SECRET")),"provider failure backoff and secret redaction");
+        var track = new TrackMultiArtistMetadata { Title = "fixture", Artists = ["artist"] };
+        var line = new FakeSource("QQ", "[00:01.00]hi"); var word = new FakeSource("NetEase", "[1000,1000](1000,500,0)h(1500,500,0)i");
+        var logger = new TestLogger(); var retrieval = new Retrieval(new Store(Path.Combine(root, "retrieval")), ProviderRegistry.WithSources(line, word), logger); var item = Guid.NewGuid();
+        var tasks = Enumerable.Range(0, 8).Select(_ => retrieval.Get(item, track, false, CancellationToken.None)).ToArray(); var results = await Task.WhenAll(tasks);
+        Check(results.All(r => r?.WordTimed == true) && line.Searches == 1 && word.Searches == 1, "prefer word timing and deduplicate concurrent retrieval");
+        var manual = await retrieval.Select(item, new("QQ", "42", "fixture", "artist", "album", 10000, 100), CancellationToken.None);
+        Check((await retrieval.Get(item, track, false, CancellationToken.None))?.Manual == true, "preserve manual selection");
+        Check((await retrieval.Get(item, track, true, CancellationToken.None))?.WordTimed == true, "explicit timing upgrade");
+        using (var cancel = new CancellationTokenSource(5)) { try { await retrieval.Get(Guid.NewGuid(), track, false, cancel.Token); throw new Exception("Cancellation ignored"); } catch (OperationCanceledException) { } }
+        var missing = new FakeSource("LRCLIB", null) { Missing = true }; var noMatch = new Retrieval(new Store(Path.Combine(root, "missing")), ProviderRegistry.WithSources(missing), logger); var absent = Guid.NewGuid();
+        await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => noMatch.Get(absent, track, false, CancellationToken.None))); Check(missing.Searches == 1, "deduplicate negative results");
+        var failing = new FakeSource("QQ", null) { Failure = true }; var failed = new Retrieval(new Store(Path.Combine(root, "failed")), ProviderRegistry.WithSources(failing), logger);
+        await failed.Get(Guid.NewGuid(), track, false, CancellationToken.None); await failed.Get(Guid.NewGuid(), track, false, CancellationToken.None);
+        Check(failing.Searches == 1 && !logger.Messages.Any(s => s.Contains("SECRET")), "provider failure backoff and secret redaction");
         Console.WriteLine("PASS: genuine word-timing preference, concurrent retrieval deduplication, manual retention/upgrade, cancellation, negative cache, provider backoff, redacted logging.");
     }
-    static void Check(bool condition,string message){if(!condition)throw new Exception(message);}
+    static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
 }
-public sealed class FakeSource(string name,string? lyrics) : ILyricSource
+public sealed class FakeSource(string name, string? lyrics) : ILyricSource
 {
-    public string Name=>name;public int Searches;public bool Missing,Failure;
-    public async Task<List<Candidate>> Search(TrackMultiArtistMetadata track,CancellationToken token){Interlocked.Increment(ref Searches);await Task.Delay(30,token);if(Failure)throw new Exception("SECRET API credential");return Missing?[]:[new(Name,"42","fixture","artist","album",10000,100)];}
-    public Task<RawLyrics?> Fetch(Candidate candidate,CancellationToken token)=>Task.FromResult(lyrics==null?null:new RawLyrics(lyrics));
+    public string Name => name; public int Searches; public bool Missing, Failure;
+    public async Task<List<Candidate>> Search(TrackMultiArtistMetadata track, CancellationToken token) { Interlocked.Increment(ref Searches); await Task.Delay(30, token); if (Failure) throw new Exception("SECRET API credential"); return Missing ? [] : [new(Name, "42", "fixture", "artist", "album", 10000, 100)]; }
+    public Task<RawLyrics?> Fetch(Candidate candidate, CancellationToken token) => Task.FromResult(lyrics == null ? null : new RawLyrics(lyrics));
 }
 public sealed class TestLogger : ILogger<Retrieval>
 {
-    public List<string> Messages=[];public IDisposable? BeginScope<TState>(TState state) where TState:notnull=>null;public bool IsEnabled(LogLevel level)=>true;
-    public void Log<TState>(LogLevel level,EventId id,TState state,Exception? exception,Func<TState,Exception?,string> formatter)=>Messages.Add(formatter(state,exception));
+    public List<string> Messages = []; public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null; public bool IsEnabled(LogLevel level) => true;
+    public void Log<TState>(LogLevel level, EventId id, TState state, Exception? exception, Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
 }

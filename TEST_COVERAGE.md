@@ -24,6 +24,9 @@ The retired scripts listed below duplicated these workflows or relied on credent
 ## Execution groups and consolidation
 
 See [CI.md](CI.md) for selection, scheduling, evidence reuse and local commands.
+`tests/CiPolicy.py` also covers complete tracked-file classification, unknown deletes/renames,
+metadata-only selection and scheduling, runtime-fingerprint isolation, malformed metadata,
+and preservation of outstanding renderer coverage. No runtime test was removed for these checks.
 `browser-tests/groups.json` is the enforced file inventory. Workflow decisions run in
 desktop Chromium; tagged banner/saved-version layout cases additionally runs across
 viewports/engines. Rendering integration runs across all four supported projects;

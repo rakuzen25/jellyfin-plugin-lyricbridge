@@ -1,4 +1,5 @@
 """Validate and merge independent plugin entries into a shared local Jellyfin catalog."""
+
 import argparse
 import copy
 from datetime import datetime
@@ -33,10 +34,16 @@ def validate_catalog(value: object) -> list[dict]:
             if not isinstance(release, dict):
                 raise ValueError("Invalid version entry")
             for key in ("version", "targetAbi"):
-                if not isinstance(release.get(key), str) or not re.fullmatch(r"\d+\.\d+\.\d+\.\d+", release[key]):
-                    raise ValueError("Versions and ABIs must have four numeric components")
+                if not isinstance(release.get(key), str) or not re.fullmatch(
+                    r"\d+\.\d+\.\d+\.\d+", release[key]
+                ):
+                    raise ValueError(
+                        "Versions and ABIs must have four numeric components"
+                    )
             # Normalized version identity avoids 01.0.0.0 and 1.0.0.0 duplicates.
-            version = ".".join(str(int(component)) for component in release["version"].split("."))
+            version = ".".join(
+                str(int(component)) for component in release["version"].split(".")
+            )
             if version in seen:
                 raise ValueError("Duplicate plugin version")
             seen.add(version)
@@ -44,10 +51,21 @@ def validate_catalog(value: object) -> list[dict]:
             if not isinstance(url, str):
                 raise ValueError("Release download URL is required")
             parsed = urlparse(url)
-            if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
-                raise ValueError("Release download URLs require HTTPS without credentials, query strings or fragments")
+            if (
+                parsed.scheme != "https"
+                or not parsed.hostname
+                or parsed.username
+                or parsed.password
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise ValueError(
+                    "Release download URLs require HTTPS without credentials, query strings or fragments"
+                )
             checksum = release.get("checksum")
-            if not isinstance(checksum, str) or not re.fullmatch(r"[0-9a-fA-F]{32}", checksum):
+            if not isinstance(checksum, str) or not re.fullmatch(
+                r"[0-9a-fA-F]{32}", checksum
+            ):
                 raise ValueError("Jellyfin requires a 32-digit MD5 package checksum")
             timestamp = release.get("timestamp")
             if not isinstance(timestamp, str):
@@ -66,13 +84,23 @@ def merge_catalog(existing: object, incoming: object) -> list[dict]:
     entries = validate_catalog(incoming)
     for entry in entries:
         guid = uuid.UUID(entry["guid"])
-        target = next((plugin for plugin in result if uuid.UUID(plugin["guid"]) == guid), None)
+        target = next(
+            (plugin for plugin in result if uuid.UUID(plugin["guid"]) == guid), None
+        )
         if target is None:
             result.append(copy.deepcopy(entry))
             continue
         for version in entry["versions"]:
             identity = tuple(int(part) for part in version["version"].split("."))
-            old = next((item for item in target["versions"] if tuple(int(part) for part in item["version"].split(".")) == identity), None)
+            old = next(
+                (
+                    item
+                    for item in target["versions"]
+                    if tuple(int(part) for part in item["version"].split("."))
+                    == identity
+                ),
+                None,
+            )
             if old is not None:
                 same_artifact = (
                     old["sourceUrl"] == version["sourceUrl"]
@@ -100,10 +128,16 @@ def main() -> None:
     parser.add_argument("--entry", type=Path, required=True)
     parser.add_argument("--catalog-output", type=Path, required=True)
     args = parser.parse_args()
-    if args.catalog_output.resolve() in (args.catalog_input.resolve(), args.entry.resolve()):
+    if args.catalog_output.resolve() in (
+        args.catalog_input.resolve(),
+        args.entry.resolve(),
+    ):
         parser.error("Write to a separate candidate file; inputs must remain unchanged")
     try:
-        merged = merge_catalog(json.loads(args.catalog_input.read_text()), json.loads(args.entry.read_text()))
+        merged = merge_catalog(
+            json.loads(args.catalog_input.read_text()),
+            json.loads(args.entry.read_text()),
+        )
     except (ValueError, OSError) as error:
         # Do not expose raw URLs or malformed input bodies in diagnostics.
         if isinstance(error, json.JSONDecodeError):

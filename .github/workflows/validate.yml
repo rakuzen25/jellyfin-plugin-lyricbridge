@@ -31,8 +31,8 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: validation-${{ github.repository }}-${{ inputs.scheduled && 'scheduled' || inputs.release_tag || github.head_ref || github.ref_name }}
-  cancel-in-progress: ${{ inputs.release_tag == '' && !inputs.scheduled }}
+  group: validation-${{ github.repository }}-${{ (inputs.scheduled || github.workflow == 'Changed-input full safety check') && 'scheduled' || inputs.release_tag || github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ inputs.release_tag == '' && !inputs.scheduled && github.workflow != 'Changed-input full safety check' }}
 defaults:
   run:
     shell: bash
@@ -45,6 +45,7 @@ jobs:
   impact:
     runs-on: ubuntu-24.04
     outputs:
+      metadata: ${{ steps.plan.outputs.metadata }}
       frontend: ${{ steps.plan.outputs.frontend }}
       backend: ${{ steps.plan.outputs.backend }}
       tooling: ${{ steps.plan.outputs.tooling }}
@@ -73,7 +74,6 @@ jobs:
             else
               echo "Comparison history unavailable; selecting full validation."
               BASE=""
-              FULL=true
             fi
           fi
           args=(--reuse --base "$BASE")
@@ -86,6 +86,27 @@ jobs:
           name: validation-plan
           path: dist/plan.json
           if-no-files-found: error
+  metadata:
+    needs: impact
+    if: needs.impact.outputs.metadata == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          node: "true"
+      - run: mkdir -p dist/evidence
+      - run: python3 scripts/ci.py metadata-check 2>&1 | tee dist/evidence/metadata.log
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: evidence-metadata
+          path: dist/evidence/
+          if-no-files-found: warn
   frontend:
     needs: impact
     if: needs.impact.outputs.web == 'true'
@@ -138,6 +159,8 @@ jobs:
           dotnet: "true"
           references: "true"
       - run: mkdir -p dist/evidence
+      - name: Check .NET formatting
+        run: bash scripts/format-dotnet.sh 2>&1 | tee dist/evidence/dotnet-format.log
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: browser-assets
@@ -425,10 +448,15 @@ jobs:
             browser-tests/results-run.*/
           if-no-files-found: warn
   validate:
-    needs: [impact, frontend, backend, tooling, workflow, rendering, performance, package, installation, reproducibility, advisories]
+    needs: [impact, metadata, frontend, backend, tooling, workflow, rendering, performance, package, installation, reproducibility, advisories]
     if: always()
     runs-on: ubuntu-24.04
     steps:
+      - name: Report selection failure
+        if: needs.impact.result != 'success'
+        run: |
+          echo "Validation selection failed; inspect the impact job for classification or comparison errors."
+          exit 1
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.ref || github.sha }}
