@@ -24,6 +24,7 @@ CONFIGS = {
     "pyproject.toml",
     "requirements-check.txt",
     ".node-version",
+    ".python-version",
     ".editorconfig",
     ".gitignore",
     ".dockerignore",

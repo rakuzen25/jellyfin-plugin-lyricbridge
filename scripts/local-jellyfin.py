@@ -209,7 +209,7 @@ def wait_ready(port: int) -> None:
                         f"\nReady: {url}\nTest media: {DATA / 'media'}\nAdd /media as a music library. Configuration and data are retained across rebuilds."
                     )
                     return
-        except (OSError, http.client.HTTPException):
+        except OSError, http.client.HTTPException:
             # The published port can accept connections before Jellyfin is ready.
             pass
         time.sleep(1)

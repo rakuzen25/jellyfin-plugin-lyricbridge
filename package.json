@@ -1,10 +1,10 @@
 {
     "name": "lyricbridge",
     "private": true,
-    "packageManager": "pnpm@10.33.4",
+    "packageManager": "pnpm@12.11.2",
     "engines": {
-        "node": "26.10.0",
-        "pnpm": "10.33.4"
+        "node": "26.11.1",
+        "pnpm": "12.11.2"
     },
     "scripts": {
         "build": "pnpm --dir frontend run build",
@@ -18,9 +18,10 @@
         "check": "pnpm lint && pnpm format:check && pnpm knip && pnpm typecheck && pnpm run check:python && pnpm run check:dotnet",
         "lint": "eslint . --max-warnings 0",
         "lint:fix": "pnpm lint --fix",
-        "format": "prettier --write \"frontend/**/*.{ts,mjs,json}\" \"browser-tests/*.{cjs,json}\" \"*.{json,mjs,yaml}\" \".github/**/*.yml\"",
-        "format:check": "prettier --check \"frontend/**/*.{ts,mjs,json}\" \"browser-tests/*.{cjs,json}\" \"*.{json,mjs,yaml}\" \".github/**/*.yml\"",
-        "knip": "knip"
+        "format": "prettier --write \"frontend/**/*.{ts,mjs,json}\" \"browser-tests/*.{cjs,mjs,json}\" \"scripts/**/*.mjs\" \"*.{json,mjs,yaml}\" \".github/**/*.yml\"",
+        "format:check": "prettier --check \"frontend/**/*.{ts,mjs,json}\" \"browser-tests/*.{cjs,mjs,json}\" \"scripts/**/*.mjs\" \"*.{json,mjs,yaml}\" \".github/**/*.yml\"",
+        "knip": "knip",
+        "test:tooling": "node --test scripts/*.test.mjs"
     },
     "devDependencies": {
         "@eslint/js": "10.0.1",
@@ -30,6 +31,6 @@
         "knip": "6.41.0",
         "prettier": "3.9.10",
         "typescript": "5.9.3",
-        "typescript-eslint": "8.71.1"
+        "typescript-eslint": "8.71.2"
     }
 }

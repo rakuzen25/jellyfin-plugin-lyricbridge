@@ -87,6 +87,7 @@ with zipfile.ZipFile(root / f"lyricbridge-source-{version}.zip") as archive:
         "release-please-config.json",
         ".release-please-manifest.json",
         "version.txt",
+        ".python-version",
         "RELEASING.md",
         "scripts/release.py",
     ):

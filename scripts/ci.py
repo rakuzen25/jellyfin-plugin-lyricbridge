@@ -91,7 +91,11 @@ def known_impacts(path: str, root: Path | None = None) -> set[str]:
         return {"artifacts"}
     if path == "Directory.Build.props":
         return {"backend", "frontend", "tooling", "workflow", "rendering", "artifacts"}
-    if path.startswith((".github/workflows/", ".github/actions/")) or path in POLICY:
+    if (
+        path == ".github/actionlint.yaml"
+        or path.startswith((".github/workflows/", ".github/actions/"))
+        or path in POLICY
+    ):
         return all_groups
     if path.startswith("frontend/renderer") or path.startswith("frontend/assets/"):
         return {"frontend", "rendering", "performance", "artifacts"}

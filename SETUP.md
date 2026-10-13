@@ -138,7 +138,6 @@ Administrator settings use five compact native Jellyfin tabs. Sources retain ena
 
 Language services list their roles and language limitations: Kawazu provides local Japanese romaji; Google provides translation and pronunciation for the supported languages listed in its row; AI capabilities depend on the configured model; DeepL and LibreTranslate provide translation only, with provider/server language support. Display defaults use the same Original/Pronunciation/Translation controls as the playback Display tab. Chinese translation script is selected through Chinese (Simplified) or Chinese (Traditional); Chinese original text has its own script choice. Auto-detect keeps language-specific defaults in a disclosure, and selecting a language reveals its relevant controls without discarding hidden settings.
 
-
 ## Browser rendering quality
 
 For reduced rendering load, open Lyrics settings → Display → Text sizes and layout and choose **Low power** under Rendering quality. Artwork becomes stationary and glyph lift/glow is disabled; timed highlighting remains. Standard remains the default. The selection is saved in this browser, not server configuration. See [performance validation](PERFORMANCE.md) for measurement limits.

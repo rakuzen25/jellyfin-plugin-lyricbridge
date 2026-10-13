@@ -116,7 +116,7 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
                 info = call_json("/System/Info/Public")
                 if info.get("Version", "").startswith("12.2"):
                     return
-            except (urllib.error.URLError, TimeoutError, ConnectionError):
+            except urllib.error.URLError, TimeoutError, ConnectionError:
                 pass
             time.sleep(0.5)
         raise RuntimeError("Disposable Jellyfin did not become ready.")

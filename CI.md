@@ -113,6 +113,21 @@ always execute the full suite. Missing evidence falls back conservatively.
 
 ## Builds and caches
 
+CI uses Ubuntu 26.04, the exact Node/Python pins and pnpm version declared by
+`package.json`. Every Python-invoking job installs `.python-version` before execution;
+only tooling/install jobs restore Python checker dependencies. Release upload tooling
+uses the executing revision's Python pin. Python 3.15 is the supported local minimum.
+
+`node scripts/check-toolchain.mjs` verifies Node/pnpm before dependency restoration.
+pnpm's automatic pre-script installation is disabled: restoration remains explicit
+and frozen. Only esbuild may run dependency lifecycle scripts. Reviewed, exact-version
+release-age exclusions created during the migration do not authorize other versions.
+
+Browser execution first checks the declared/installed Playwright version against the
+tagged, digest-pinned noble image, then verifies browser executables inside the offline
+container. Package/image updates belong to one Renovate group; paired patches may
+automerge after current-base validation, while minor/major updates need review.
+
 Browser jobs consume one verified `browser-assets` bundle. The candidate is assembled in
 a disposable clean source root using that bundle after checking its input and asset
 hashes. A second independent clean root rebuilds from the editable-source archive and

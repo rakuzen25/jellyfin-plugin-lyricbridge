@@ -4,6 +4,7 @@ All application tests use synthetic responses or an owned disposable Jellyfin in
 
 | Behavior | Maintained checks |
 | --- | --- |
+| Exact Node/pnpm identity, browser package/image agreement, Renovate automerge exceptions and image extraction | `pnpm test:tooling`, pre-restore toolchain guard and browser executable guard |
 | Authentication, libraries, native lyrics, admin/user isolation, reset, base URL, restart and uninstall | `tests/PackageInstallation.py`, backend reset/admission/workflow regressions |
 | Provider precedence, ranking, retrieval/cancellation, generation identity/snapshots/partial output, selections and transactional retention | Discoverable scenario groups in `tests/StorageTests.csproj` |
 | Saved originals, auxiliary restoration, shared/donor references, deletion rollback, stale admission/confirmation and generation/local completion races | `SavedOriginalTests.cs`, `SavedOriginalApiTests.cs`, `saved-originals.spec.cjs` |

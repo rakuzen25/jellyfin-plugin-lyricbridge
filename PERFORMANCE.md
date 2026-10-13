@@ -53,7 +53,6 @@ phones, thermal throttling or real provider/network latency. The three-second
 numbers above are historical measurements and do not describe every later build.
 Current results and artifact hashes belong in `dist/validation.json`.
 
-
 ## Rendering quality and refresh behavior
 
 Standard is the default. It retains 60-fps lyric updates and a 30-fps artwork background, with separate 800/480-pixel desktop/mobile warp limits and existing output limits. WebGL uses the browser's default power preference. Glyph transforms retain their existing 3D form because the 2D experiment did not preserve the visual baseline; identical transform writes are cached.
@@ -63,7 +62,6 @@ Choose **Lyrics settings → Display → Text sizes and layout → Rendering qua
 Identical original timelines retain their nodes and playback/follow state. Auxiliary refreshes update bridge-owned rows and preserve scroll position. Original text, IDs or cue changes still invalidate the timeline. Geometry work is deferred from line-transition writes; cached scroll-space measurements are invalidated by geometry, viewport and relevant boundary-height changes. Paused rendering already settles and then stops; seek/timing/layout events wake it explicitly. Media wake listeners are detached when the active audio/video element changes, preventing removed player nodes from accumulating runtime-owned registrations. A separate regression replaces the element repeatedly; track-source-only stress cannot establish this invariant.
 
 Do not equate JavaScript heap, layer pixel estimates or headless FPS with Chrome's process/GPU memory or physical power use. The pinned Linux browser uses SwiftShader software rendering. Report its results separately from real graphics hardware. Windows heat, GPU memory and ten-minute Standard/Low-power verification require a physical browser run; no automated result substitutes for it.
-
 
 ## Physical Windows verification
 
