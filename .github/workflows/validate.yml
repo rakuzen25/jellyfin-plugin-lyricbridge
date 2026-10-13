@@ -43,7 +43,7 @@ env:
   CI_RUN_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 jobs:
   impact:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       metadata: ${{ steps.plan.outputs.metadata }}
       frontend: ${{ steps.plan.outputs.frontend }}
@@ -89,7 +89,7 @@ jobs:
   metadata:
     needs: impact
     if: needs.impact.outputs.metadata == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -110,7 +110,7 @@ jobs:
   frontend:
     needs: impact
     if: needs.impact.outputs.web == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -147,7 +147,7 @@ jobs:
   backend:
     needs: [impact, frontend]
     if: needs.impact.outputs.backend == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -182,7 +182,7 @@ jobs:
   tooling:
     needs: impact
     if: needs.impact.outputs.tooling == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -209,7 +209,7 @@ jobs:
   workflow:
     needs: [impact, frontend]
     if: needs.impact.outputs.workflow == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -240,7 +240,7 @@ jobs:
   rendering:
     needs: [impact, frontend]
     if: needs.impact.outputs.rendering == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -275,7 +275,7 @@ jobs:
   performance:
     needs: [impact, frontend]
     if: needs.impact.outputs.performance == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -310,7 +310,7 @@ jobs:
   package:
     needs: [impact, frontend]
     if: needs.impact.outputs.artifacts == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -358,7 +358,7 @@ jobs:
   installation:
     needs: [impact, package]
     if: needs.impact.outputs.artifacts == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -388,7 +388,7 @@ jobs:
   reproducibility:
     needs: [impact, package]
     if: needs.impact.outputs.artifacts == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -421,7 +421,7 @@ jobs:
   advisories:
     needs: impact
     if: needs.impact.outputs.artifacts == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -450,7 +450,7 @@ jobs:
   validate:
     needs: [impact, metadata, frontend, backend, tooling, workflow, rendering, performance, package, installation, reproducibility, advisories]
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Report selection failure
         if: needs.impact.result != 'success'

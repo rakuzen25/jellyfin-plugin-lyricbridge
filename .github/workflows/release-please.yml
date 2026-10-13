@@ -8,7 +8,7 @@ permissions:
   actions: read
 jobs:
   release-please:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     concurrency:
       group: release-please-${{ github.repository }}
       cancel-in-progress: false
