@@ -1,5 +1,6 @@
 const { defineConfig } = require("playwright/test");
-const { readdirSync } = require("node:fs");
+const { existsSync, readdirSync } = require("node:fs");
+const { join } = require("node:path");
 const groups = require("./groups.json");
 const entries = Object.values(groups).flat();
 const actual = readdirSync(__dirname).filter((file) => file.endsWith(".spec.cjs"));
@@ -14,6 +15,15 @@ const engines = [
     { name: "firefox", use: { browserName: "firefox" } },
     { name: "webkit", use: { browserName: "webkit" } },
 ];
+if (group === "all" || group === "rendering") {
+    for (const engine of engines) {
+        for (const snapshot of ["multilingual-playback", "display-settings"]) {
+            const file = join(__dirname, "visual-parity.spec.cjs-snapshots", `${snapshot}-${engine.name}-linux.png`);
+            if (!existsSync(file))
+                throw new Error(`Missing reviewed visual baseline: ${file}. Restore the committed baseline; do not regenerate it in CI.`);
+        }
+    }
+}
 const projects = [];
 if (group === "all" || group === "workflow")
     projects.push({ ...engines[0], name: "workflow-chromium", testMatch: groups.workflow, grepInvert: /@layout/ });
