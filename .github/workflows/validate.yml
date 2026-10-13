@@ -425,20 +425,7 @@ jobs:
             browser-tests/results-run.*/
           if-no-files-found: warn
   validate:
-    needs:
-      [
-        impact,
-        frontend,
-        backend,
-        tooling,
-        workflow,
-        rendering,
-        performance,
-        package,
-        installation,
-        reproducibility,
-        advisories,
-      ]
+    needs: [impact, frontend, backend, tooling, workflow, rendering, performance, package, installation, reproducibility, advisories]
     if: always()
     runs-on: ubuntu-24.04
     steps:
