@@ -140,11 +140,6 @@ function document(v: unknown): v is BridgeDocument {
                 number(v.timingCorrection.seconds) &&
                 typeof v.timingCorrection.hash === "string" &&
                 typeof v.timingCorrection.fingerprint === "string")) &&
-        (v.previousSelection == null ||
-            (isRecord(v.previousSelection) &&
-                (v.previousSelection.lyrics == null || lyrics(v.previousSelection.lyrics)) &&
-                (v.previousSelection.instrumental == null ||
-                    (isRecord(v.previousSelection.instrumental) && typeof v.previousSelection.instrumental.source === "string")))) &&
         (improvement == null ||
             (isRecord(improvement) &&
                 typeof improvement.baselineHash === "string" &&

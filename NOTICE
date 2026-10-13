@@ -6,7 +6,11 @@ Its editable TypeScript/CSS, generated JavaScript and original license notices a
 
 See vendor/UPSTREAM.md and the included license files for source revisions and notices.
 
-LyricBridge companion UI SVG glyphs are original project artwork covered by the project license. They require no external fonts or network assets. Native Jellyfin configuration icons remain supplied by Jellyfin.
+LyricBridge static companion UI icons use Lucide 1.55.0, licensed under ISC,
+with inherited Feather icons under MIT. See LUCIDE-LICENSE for the complete
+upstream copyright and license notices. Icons are bundled locally without
+external fonts or network assets. The animated instrumental note remains
+part of the MPL-2.0 LyricMotion-derived renderer.
 
 Chinese conversion uses OpenccNetLib 1.7.0 (MIT) and its OpenCC dictionary data
 (Apache-2.0). See OPENCC-LICENSE, OPENCC-DATA-LICENSE and

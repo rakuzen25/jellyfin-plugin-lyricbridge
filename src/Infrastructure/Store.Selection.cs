@@ -5,6 +5,31 @@ namespace LyricBridge;
 public sealed partial class Store : ISelectionRepository
 {
     public ImprovementOffer? Improvement(Guid item) => Get<ImprovementOffer>("better", item.ToString("N"));
+    public ImprovementOffer? TryOffer(Guid item, VersionSnapshot expected, ImprovementOffer offer, RawLyrics? raw = null, Candidate? assessedBaseline = null, RichLyrics? displayedBaseline = null)
+    {
+        lock (writeGate)
+        {
+            if (IsResetting || (operationEpoch.Value is long started && started != Epoch)) return null;
+            using var connection = Open(); using var transaction = connection.BeginTransaction();
+            var id = item.ToString("N"); var current = ReadSelection(connection, transaction, id);
+            var selectedLyrics = current.Lyrics ?? displayedBaseline;
+            if (selectedLyrics == null || Codec.Serialize(current) != Codec.Serialize(expected) || selectedLyrics.Hash != offer.BaselineHash
+                || current.Rejected != null || current.Instrumental?.Manual == true
+                || selectedLyrics.Hash == offer.Lyrics.Hash || Codec.Serialize(selectedLyrics.Lines) == Codec.Serialize(offer.Lyrics.Lines)) return null;
+            var selectedCandidate = current.Assessment?.Candidate ?? assessedBaseline;
+            if (selectedCandidate?.Assessment == null || selectedCandidate.Source != selectedLyrics.Source || selectedCandidate.Id != selectedLyrics.ProviderId) return null;
+            var baseline = selectedCandidate with { Assessment = LyricRanking.WithDocument(selectedCandidate.Assessment, selectedLyrics) };
+            var reason = LyricRanking.Improvement(offer.Candidate, baseline); if (reason == null) return null;
+            offer = offer with { Reason = reason, Description = LyricRanking.ImprovementDescription(offer.Candidate, baseline, reason) };
+            var existing = ReadRecord<ImprovementOffer>(connection, transaction, "better", id);
+            if (existing?.BaselineHash == offer.BaselineHash && LyricRanking.Compare(offer.Candidate, existing.Candidate) >= 0) return existing;
+            WriteRecord(connection, transaction, "document", selectedLyrics.Hash, selectedLyrics);
+            WriteRecord(connection, transaction, "document", offer.Lyrics.Hash, offer.Lyrics);
+            if (raw != null) WriteRecord(connection, transaction, "raw", offer.Lyrics.Hash, raw);
+            WriteRecord(connection, transaction, "better", id, offer);
+            transaction.Commit(); return offer;
+        }
+    }
     public SelectionAssessment? PreviewAssessment(Candidate candidate) => Get<SelectionAssessment>("preview-assessment", LyricRanking.Key(candidate));
     public void ClearRejection(Guid item)
     {
@@ -44,7 +69,6 @@ public sealed partial class Store : ISelectionRepository
             if (offer is null || offer.Lyrics.Hash != offerHash || offer.BaselineHash != baselineHash) return "upgrade_offer_changed";
             var lyrics = Codec.Deserialize<RichLyrics>(Codec.Serialize(offer.Lyrics))!;
             lyrics.Manual = true;
-            WriteRecord(connection, transaction, "previous", id, current);
             WriteSelection(connection, transaction, id, new(lyrics, null, null, new SelectionAssessment(lyrics.Hash, offer.Candidate)), null);
             transaction.Commit();
             return null;
@@ -85,7 +109,7 @@ public sealed partial class Store : ISelectionRepository
         return ReadSelection(connection, transaction, item.ToString("N"));
     }
 
-    public void ApplySelection(Guid item, VersionSnapshot selection, RawLyrics? raw = null, bool remember = true)
+    public void ApplySelection(Guid item, VersionSnapshot selection, RawLyrics? raw = null)
     {
         lock (writeGate)
         {
@@ -94,25 +118,7 @@ public sealed partial class Store : ISelectionRepository
             using var connection = Open();
             using var transaction = connection.BeginTransaction();
             var id = item.ToString("N");
-            if (remember) WriteRecord(connection, transaction, "previous", id, ReadSelection(connection, transaction, id));
             WriteSelection(connection, transaction, id, selection, raw);
-            transaction.Commit();
-        }
-    }
-
-    public void RevertSelection(Guid item)
-    {
-        lock (writeGate)
-        {
-            if (IsResetting || (operationEpoch.Value is long started && started != Epoch))
-                throw new WorkflowException(409, "reset_in_progress", "The managed lyric library was reset. Reload before making changes.", true);
-            using var connection = Open();
-            using var transaction = connection.BeginTransaction();
-            var id = item.ToString("N");
-            var previous = ReadRecord<VersionSnapshot>(connection, transaction, "previous", id)
-                ?? throw new InvalidOperationException("No previous selection.");
-            WriteRecord(connection, transaction, "previous", id, ReadSelection(connection, transaction, id));
-            WriteSelection(connection, transaction, id, previous, null);
             transaction.Commit();
         }
     }

@@ -51,7 +51,7 @@ public static class RankingTests
         var supplied = Timed(10); foreach (var line in supplied.Lines) { line.Translations["zh"] = "translation"; line.Pronunciation = "pronunciation"; }
         supplied.Lines[0].Translations["en"] = "extra language";
         var analysis = LyricRanking.Analyze(supplied); Check(analysis.Auxiliary.Completeness == 200, "multiple translations do not inflate completeness");
-        var both = exact with { Assessment = LyricRanking.WithDocument(exact.Assessment!, supplied) with { ProviderOrder = 7 } };
+        var both = exact with { Verification = "verified", Assessment = LyricRanking.WithDocument(exact.Assessment!, supplied) with { ProviderOrder = 7 } };
         var onlyTranslation = Timed(10); foreach (var line in onlyTranslation.Lines) line.Translations["zh"] = "translation";
         var one = exact with { Id = "one", Assessment = LyricRanking.WithDocument(exact.Assessment!, onlyTranslation) with { ProviderOrder = 0 } };
         Check(LyricRanking.Compare(both, one) < 0, "supplied completeness breaks metadata/timing ties before provider order");
@@ -60,7 +60,7 @@ public static class RankingTests
         partial.Lines[1].Pronunciation = " "; partial.Lines[1].Translations["zh"] = " "; partial.Lines[0].Background = new() { Text = "backing", Pronunciation = "reading", Translations = new() { ["zh"] = "text" } };
         Check(LyricRanking.Analyze(partial).Auxiliary.Completeness == 20, "blank and background rows do not inflate completeness");
         Check(LyricRanking.Compare(one with { Assessment = one.Assessment! with { Score = 100 } }, both with { Assessment = both.Assessment! with { Score = 99 } }) < 0, "metadata score precedes auxiliary completeness");
-        Check(LyricRanking.Improvement(both, one) == null, "auxiliary tie-break does not create intrusive upgrade offers");
+        Check(LyricRanking.Improvement(both, one) == "auxiliary-completeness", "auxiliary ranking creates improvement offers");
         var doc = Timed(8); var original = Codec.Serialize(doc); Check(LyricRanking.Timing(doc).Rank == 3, "80 percent mostly"); Check(LyricRanking.Timing(Timed(7)).Rank == 2, "70 percent partially"); Check(LyricRanking.Timing(Timed(0)).Rank == 1, "line timing");
         doc.Lines[0].Background = new() { Text = "background", Cues = [new(0, 2, 0, 10), new(2, 10, 10, 20)] }; doc.Lines[1].Pronunciation = "aux"; doc.Lines[1].Translations["zh"] = "aux"; Check(LyricRanking.Timing(doc).Coverage == 80, "auxiliary/background excluded");
         var full = Timed(0); full.Lines.ForEach(l => l.Cues = [new(0, l.Text.Length, l.Start!.Value, l.End)]); Check(LyricRanking.Timing(full).Rank == 1, "whole-line cues are not words");
@@ -69,9 +69,9 @@ public static class RankingTests
         var malformed = Timed(10); malformed.Lines[0].Cues[1] = new(6, 11, 10, 5); Check(LyricRanking.Timing(malformed).InvalidCues == 1, "invalid time order");
         var a = matching.Assess(C("a")) with { Assessment = matching.Assess(C("a")).Assessment! with { Timing = LyricRanking.Timing(Timed(0)) } };
         var b = matching.Assess(C("b")) with { Assessment = matching.Assess(C("b")).Assessment! with { Timing = LyricRanking.Timing(Timed(8)) } };
-        Check(LyricRanking.Compare(b, a) < 0 && LyricRanking.Improvement(b, a) == "timing", "higher timing upgrade");
-        Check(LyricRanking.Improvement(b with { Assessment = b.Assessment! with { Score = 99 } }, b) == null, "score difference is not offer");
-        var low = a with { Assessment = a.Assessment! with { Score = 70, Tier = 1 } }; Check(LyricRanking.Compare(a, low) < 0 && LyricRanking.Improvement(a, low) == "recording-match", "tier precedes timing");
+        Check(LyricRanking.Compare(b, a) < 0 && LyricRanking.Improvement(b with { Verification = "verified" }, a) == "timing", "higher timing upgrade");
+        Check(LyricRanking.Improvement(b with { Verification = "verified", Assessment = b.Assessment! with { Score = b.Assessment.Score + 1 } }, b) == "match-score", "score difference creates offer");
+        var low = a with { Assessment = a.Assessment! with { Score = 70, Tier = 1 } }; Check(LyricRanking.Compare(a, low) < 0 && LyricRanking.Improvement(a with { Verification = "verified" }, low) == "recording-match", "tier precedes timing");
         var duplicate = new MatchingSession(Query()); await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => Task.Run(() => duplicate.Assess(C())))); Check(duplicate.Metrics.Assessments == 1, "assessment deduplicated concurrently");
         var store = new Store(Path.Combine(root, "ranking")); var source = new RankSource(); var retrieval = new Retrieval(store, ProviderRegistry.WithSources(source), NullLogger<Retrieval>.Instance); var session = new MatchingSession(Query()); var candidate = session.Assess(C()); await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => session.Verify(retrieval, source, candidate, CancellationToken.None, _ => { }))); Check(session.Metrics.Verifications == 1 && session.Metrics.ParsePasses == 1 && source.Fetches == 1, "verification and parse shared");
         var fallback = new RankSource { MissingFirst = true }; var engine = new Retrieval(store, ProviderRegistry.WithSources(fallback), NullLogger<Retrieval>.Instance); var f = new MatchingSession(Query()); var results = new List<Verification>(); await f.RunProvider(engine, fallback, 0, false, CancellationToken.None, _ => { }, null, results.Add); Check(results.Any(v => v.Lyrics != null) && f.Metrics.Verifications == 3 && fallback.Fetches == 3, "bounded three-candidate fallback");

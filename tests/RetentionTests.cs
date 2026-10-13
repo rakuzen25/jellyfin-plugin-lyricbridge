@@ -18,14 +18,13 @@ public sealed class RetentionTests
                 store.CachePreview(verification, now.AddDays(-2)); return verification;
             }
             var unused = Preview("unused"); var saved = Preview("saved"); var job = Preview("job"); var donor = Preview("donor");
-            var previous = Preview("previous"); var timing = Preview("timing"); var offered = Preview("offered"); var active = Preview("active");
+            var timing = Preview("timing"); var offered = Preview("offered"); var active = Preview("active");
             var expiredHandle = store.CacheCandidate(unused.Candidate, now.AddDays(-2));
             var activeHandle = store.CacheCandidate(active.Candidate, now.AddDays(-2));
             Assert.NotNull(store.GetCandidate(activeHandle));
             var selected = Guid.NewGuid(); store.Save(selected, saved.Lyrics!); store.Delete("selected", selected.ToString("N"));
             store.Put("job", "history", new Job { Hash = job.Lyrics!.Hash, State = "complete" });
             store.Put("variant", "saved-variant", new Variant("saved-variant", saved.Lyrics!.Hash, "translation", "en", "fixture", "", new(), Origin: new("fixture", "donor", donor.Lyrics!.Hash)));
-            store.Put("previous", "item", new VersionSnapshot(previous.Lyrics, null));
             store.Put("timing-correction", "item", new TimingCorrection(timing.Lyrics!.Hash, "fingerprint", 1));
             store.Put("better", "item", new ImprovementOffer(saved.Lyrics.Hash, offered.Lyrics!, offered.Candidate, "fixture", "fixture"));
             Assert.NotNull(store.GetPreview("fixture:active"));
@@ -34,7 +33,7 @@ public sealed class RetentionTests
             Assert.NotNull(store.GetCandidate(activeHandle));
             Assert.Null(store.Get<RichLyrics>("document", unused.Lyrics!.Hash));
             Assert.Null(store.Get<RawLyrics>("raw", unused.Lyrics.Hash));
-            foreach (var protectedPreview in new[] { saved, job, donor, previous, timing, offered, active })
+            foreach (var protectedPreview in new[] { saved, job, donor, timing, offered, active })
                 Assert.NotNull(store.Get<RichLyrics>("document", protectedPreview.Lyrics!.Hash));
             Assert.NotNull(store.GetJob("history"));
             // A repeated preview must not demote content that was explicitly saved.

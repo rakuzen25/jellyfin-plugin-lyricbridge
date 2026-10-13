@@ -48,7 +48,7 @@ At most three provider pipelines run concurrently, retaining per-provider thrott
 
 The first usable result opens a two-second comparison window, bounded by the overall deadline. All providers finishing closes it early. The best result collected then is committed. Later discovery keeps the displayed selection stable and offers only a higher match tier or a higher timing category within the same tier. Coverage, score and provider preference alone do not create an offer.
 
-Offers identify a better recording match or better timing, explain the comparison, and are tied to the current content hash. Applying is administrator-only; preview cancellation, dismissal and Revert remain available. Changed selections reject stale offers. Instrumental evidence remains distinct from empty searches and failures.
+Offers identify a better recording match or better timing, explain the comparison, and are tied to the current content hash. Applying is administrator-only; preview cancellation, dismissal and saved-version selection remain available. Changed selections reject stale offers. Instrumental evidence remains distinct from empty searches and failures.
 
 ## Manual search and performance
 

@@ -1,4 +1,4 @@
-const { test } = require("playwright/test");
+const { test, expect } = require("playwright/test");
 const assert = require("node:assert/strict");
 const { demo } = require("./demo-fixture.cjs");
 test("multilingual playback, settings and scrolling preserve auxiliary rows", async ({ page }, testInfo) => {
@@ -63,4 +63,100 @@ test("multilingual playback, settings and scrolling preserve auxiliary rows", as
     assert(Array.isArray(diagnostics.currentMotionPlan));
     assert.deepEqual(errors, []);
     await page.screenshot({ path: testInfo.outputPath("playback.png"), fullPage: true });
+});
+
+test("timing controls share settings styling and retain icon interactions", async ({ page }, testInfo) => {
+    await demo(page);
+    await page.waitForSelector(".ak-enhanced-line .lb-pronunciation");
+    await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
+    const settings = page.locator(".lb-popup");
+    const style = (node) => {
+        const css = getComputedStyle(node);
+        return Object.fromEntries(
+            ["backgroundImage", "backgroundColor", "borderColor", "borderRadius", "color", "font", "minHeight", "padding", "gap"].map((key) => [
+                key,
+                css[key],
+            ]),
+        );
+    };
+    const settingsButton = await settings.getByRole("button", { name: "Adjust timing", exact: true }).evaluate(style);
+    const settingsClose = await settings.getByRole("button", { name: "Close", exact: true }).evaluate(style);
+    const settingsPanel = await settings.evaluate((node) => {
+        const css = getComputedStyle(node);
+        return { background: css.backgroundImage, radius: css.borderRadius, border: css.borderColor, font: css.font };
+    });
+    await settings.getByRole("button", { name: "Adjust timing", exact: true }).click();
+    const timing = page.locator("#ak-lyrics-timing-popover");
+    await expect(timing).toBeVisible();
+    const staticIcons = await page.locator(".lb-icon").evaluateAll((nodes) =>
+        nodes.map((node) => {
+            const css = getComputedStyle(node);
+            return [css.width, css.height, parseFloat(css.strokeWidth), node.getAttribute("aria-hidden"), node.getAttribute("focusable")];
+        }),
+    );
+    for (const attrs of staticIcons) assert.deepEqual(attrs, ["20px", "20px", 2, "true", "false"]);
+    const reset = timing.getByRole("button", { name: "Reset", exact: true });
+    const minus = timing.getByRole("button", { name: "Decrease timing by 0.1 seconds", exact: true });
+    const plus = timing.getByRole("button", { name: "Increase timing by 0.1 seconds", exact: true });
+    const sync = timing.getByRole("button", { name: "Sync lyric to now", exact: true });
+    await expect(reset).toBeDisabled();
+    await expect(timing.locator(".ak-timing-current-value")).toHaveText("+0.0s");
+    // A horizontal SVG path has a zero-height box in Chromium/WebKit. Dispatch on
+    // the path to exercise delegation; normal button/icon clicks follow below.
+    await plus.locator("svg path").first().dispatchEvent("click");
+    await expect(timing.locator(".ak-timing-current-value")).toHaveText("+0.1s");
+    await expect(reset).toBeEnabled();
+    assert.deepEqual(await reset.evaluate(style), settingsButton);
+    assert.deepEqual(await timing.getByRole("button", { name: "Close", exact: true }).evaluate(style), settingsClose);
+    const timingPanel = await timing.evaluate((node) => {
+        const css = getComputedStyle(node);
+        return { background: css.backgroundImage, radius: css.borderRadius, border: css.borderColor, font: css.font };
+    });
+    // Mobile settings use sheet corners; compact timing retains the desktop panel radius.
+    assert.equal(timingPanel.radius, "16px");
+    assert.equal(timingPanel.background, settingsPanel.background);
+    assert.equal(timingPanel.border, settingsPanel.border);
+    assert.equal(timingPanel.font, settingsPanel.font);
+    await minus.locator("svg").click();
+    await expect(reset).toBeDisabled();
+    await plus.click();
+    await reset.locator("svg path").first().click();
+    await expect(timing.locator(".ak-timing-current-value")).toHaveText("+0.0s");
+    await sync.locator("svg circle").first().click();
+    await expect(timing.getByRole("button", { name: "Tap lyric to sync…", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(timing.locator('[data-ak-timing-action="sync-one"] .lb-icon')).toHaveCount(1);
+    await page.locator(".ak-enhanced-line").first().click();
+    await expect(timing).toHaveCount(0);
+    await page.locator(".ak-lyrics-timing-chip").click();
+    await expect(sync).toHaveAttribute("aria-pressed", "false");
+    await expect(sync.locator(".lb-icon")).toHaveCount(1);
+    await plus.click();
+    await reset.click();
+    const box = await timing.boundingBox();
+    const viewport = page.viewportSize();
+    assert(box.x >= 0 && box.x + box.width <= viewport.width, "timing fits viewport width");
+    assert(box.y >= 0 && box.y + box.height <= viewport.height, "timing fits viewport height");
+    await timing.screenshot({ path: testInfo.outputPath("timing-panel.png") });
+    await timing.getByRole("button", { name: "Close", exact: true }).locator("svg path").first().click();
+    await expect(timing).toHaveCount(0);
+    await expect(page.locator(".ak-lyrics-timing-chip")).toBeFocused();
+    await page.locator(".ak-lyrics-timing-chip").click();
+    await sync.click();
+    await page.keyboard.press("Escape");
+    await expect(timing).toHaveCount(0);
+    await expect(page.locator(".lyricPage")).not.toHaveClass(/ak-timing-pick-mode/);
+    await page.locator(".ak-lyrics-timing-chip").click();
+    await page.locator("h1").click();
+    await expect(timing).toHaveCount(0);
+    await page.locator(".ak-enhanced-line").nth(2).hover();
+    await page.mouse.wheel(0, 500);
+    const follow = page.getByRole("button", { name: "Resume following the playing lyric" });
+    await expect(follow).toBeVisible();
+    await expect(follow.locator(".lb-icon")).toHaveCount(1);
+    assert.deepEqual(await follow.evaluate(style), settingsButton);
+    await page.screenshot({ path: testInfo.outputPath("sync-button.png") });
+    const time = await page.locator("audio").evaluate((audio) => audio.currentTime);
+    await follow.locator("svg circle").first().click();
+    await expect(follow).toBeHidden();
+    assert.equal(await page.locator("audio").evaluate((audio) => audio.currentTime), time, "Sync does not seek paused playback");
 });

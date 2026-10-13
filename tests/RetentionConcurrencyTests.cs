@@ -15,8 +15,6 @@ public sealed class RetentionConcurrencyTests
     [InlineData("timing", false)]
     [InlineData("history", true)]
     [InlineData("history", false)]
-    [InlineData("revert", true)]
-    [InlineData("revert", false)]
     public async Task CleanupAndReferenceCommitCannotLeaveDanglingDocuments(string operation, bool cleanupFirst)
     {
         var directory = Path.Combine(Path.GetTempPath(), "lyricbridge-retention-race-" + Guid.NewGuid().ToString("N"));
@@ -36,7 +34,6 @@ public sealed class RetentionConcurrencyTests
             var item = Guid.NewGuid();
             if (operation == "variant") store.Save(Guid.NewGuid(), donor);
             if (operation == "donor") store.Save(item, original);
-            if (operation == "revert") store.ApplySelection(item, new(original, null));
             var expected = store.Selection(item);
             var variant = new Variant("saved", original.Hash, "pronunciation", "en", "fixture", "", new() { { "line", "text" } }, Origin: new("fixture", donor.ProviderId, donor.Hash), OriginType: "supplied");
             bool Reference()
@@ -47,7 +44,6 @@ public sealed class RetentionConcurrencyTests
                     case "variant": case "donor": return store.SaveSuppliedVariant(variant, new(donor.Hash), "choice", item, expected);
                     case "timing": return store.SaveTiming(item, expected, new(original.Hash, "timeline", 1));
                     case "history": return store.PersistRequest(new() { Id = "history", Hash = original.Hash, State = "pending" }, store.Epoch, original);
-                    case "revert": store.ApplySelection(item, new(donor, null)); store.RevertSelection(item); return true;
                     default: throw new InvalidOperationException(operation);
                 }
             }
@@ -73,7 +69,7 @@ public sealed class RetentionConcurrencyTests
             if (await referenceTask)
             {
                 Assert.NotNull(store.GetDocument(original.Hash));
-                if (operation is "variant" or "donor" or "revert") Assert.NotNull(store.GetDocument(donor.Hash));
+                if (operation is "variant" or "donor") Assert.NotNull(store.GetDocument(donor.Hash));
             }
             else
             {

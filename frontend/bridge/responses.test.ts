@@ -41,7 +41,6 @@ const fixture = () => ({
     auxiliaryChoices: { translation: "auto", pronunciation: "provider" },
     track: { title: "Fixture", artist: "Artist", album: "", durationMs: null },
     timingCorrection: { hash: "current", fingerprint: "timeline", seconds: 0.5 },
-    previousSelection: { lyrics: null, instrumental: null },
     variants: [],
     improvement: null,
     errors: [],

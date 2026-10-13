@@ -1,16 +1,16 @@
 const { test, expect } = require("playwright/test");
 const path = require("node:path");
 const { demo } = require("./demo-fixture.cjs");
-// Baselines were captured from the pre-extraction web ZIP using the same
-// synthetic, seekable media fixture. Override is used only to recapture them.
-// WebKit images were individually reviewed/refreshed for Playwright 1.64's
-// font rasterization and native media/checkbox controls; other engines retain
-// their earlier baselines. See DEPENDENCY_UPGRADES.md.
+// Original baselines predate renderer extraction. Intentional settings and
+// Lucide icon updates were reviewed across all four projects; provenance and
+// current asset hashes are recorded in visual-baseline-provenance.json.
 test("paused multilingual playback and settings preserve the visual baseline", async ({ page, browserName }) => {
     // Keep the pre-extraction capture's artwork grace period independent of host load.
     const start = new Date("2026-01-01T00:00:00Z");
     await page.clock.install({ time: start });
-    await page.clock.pauseAt(new Date(start.getTime() + 100));
+    // Freeze relative to the installed clock so slow browser startup cannot
+    // make the requested pause time fall into the past. No fixture is loaded yet.
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.addInitScript(() => localStorage.setItem("lyricbridge.renderer.accent", "ruby"));
     const root = process.env.LYRICBRIDGE_VISUAL_BASELINE_ROOT;

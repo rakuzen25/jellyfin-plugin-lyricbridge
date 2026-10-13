@@ -9,7 +9,7 @@ public sealed record LyricPayload(
     string? TimingFingerprint, TimingCorrection? TimingCorrection, TrackSummary? Track,
     string[] DetectedLanguages, AuxiliaryChoices AuxiliaryChoices, RichLyrics? Lyrics,
     List<Variant> Variants, Preferences Preferences, Preferences AccountPreferences,
-    SongLanguagePreferences SongOverrides, VersionSnapshot? PreviousSelection,
+    SongLanguagePreferences SongOverrides,
     string State, bool Complete, int Finished, int Total, List<SafeError> Errors,
     List<InstrumentalEvidence> Instrumental, RichLyrics? Better, MatchAssessment? MatchAssessment,
     ImprovementSummary? Improvement, MatchingMetrics? MatchingMetrics, LocalState? Pronunciation,

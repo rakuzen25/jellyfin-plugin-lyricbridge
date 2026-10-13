@@ -222,3 +222,7 @@ until the new jobs have executed on GitHub. Runner minutes may rise while wall t
 Backend tests use xUnit v3 and Microsoft Testing Platform on the pinned .NET 10 SDK.
 VSTest and older SDK test runners are unsupported. Fixtures remain serial; CI retains TRX
 and console evidence even on failure and rejects runs that execute no tests.
+
+Prettier checks maintained TypeScript, JavaScript tooling, JSON, YAML, frontend CSS
+and administrator HTML. Generated output and vendored sources are excluded; the
+demo HTML fixture is excluded because browser tests use exact inline-script hooks.

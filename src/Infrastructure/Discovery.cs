@@ -18,7 +18,7 @@ public sealed class Discovery(Store store, ProviderRegistry registry, Retrieval 
             if (store.IsResetting || admittedEpoch != store.Epoch) throw new WorkflowException(409, "reset_in_progress", "Managed lyric reset in progress.", true);
             Sweep();
             if (retry) store.ResumeDiscovery(item);
-            if (store.DiscoverySuppressed(item)) return new() { State = "missing", Complete = true };
+            if (store.DiscoverySuppressed(item)) return new() { State = "cleared", Complete = true };
             if (store.Get<MatchRejection>("rejected-match", item.ToString("N")) != null) return new() { State = "rejected", Complete = true };
             var mark = store.Get<InstrumentalEvidence>("instrumental", item.ToString("N"));
             if (mark != null && (mark.Manual || (!retry && mark.Expires > DateTime.UtcNow))) return new() { State = "instrumental", Instrumental = [mark], Complete = true };
@@ -43,9 +43,17 @@ public sealed class Discovery(Store store, ProviderRegistry registry, Retrieval 
     }
     public LyricOutcome Status(Guid item)
     {
-        if (store.DiscoverySuppressed(item)) return new() { State = "missing", Complete = true };
+        if (store.DiscoverySuppressed(item)) return new() { State = "cleared", Complete = true };
         if (store.Get<MatchRejection>("rejected-match", item.ToString("N")) != null) return new() { State = "rejected", Complete = true };
-        if (entries.TryGetValue(item, out var entry)) { lock (entry.Gate) return Copy(entry.Value); }
+        if (entries.TryGetValue(item, out var entry))
+        {
+            lock (entry.Gate)
+            {
+                var value = Copy(entry.Value); var latest = store.Improvement(item);
+                if (latest != null && latest.BaselineHash == value.Lyrics?.Hash) { value.Offer = latest; value.Better = latest.Lyrics; }
+                return value;
+            }
+        }
         var mark = store.Get<InstrumentalEvidence>("instrumental", item.ToString("N"));
         if (mark != null && (mark.Manual || mark.Expires > DateTime.UtcNow)) return new() { State = "instrumental", Instrumental = [mark], Complete = true };
         var selected = retrieval.Selected(item); var offer = store.Get<ImprovementOffer>("better", item.ToString("N")); if (offer?.BaselineHash != selected?.Hash) offer = null; return new() { State = "ready", Lyrics = selected, Assessment = store.Get<SelectionAssessment>("selection-assessment", item.ToString("N"))?.Candidate.Assessment, Instrumental = Evidence(item), Better = offer?.Lyrics, Offer = offer, Complete = true };
@@ -67,8 +75,7 @@ public sealed class Discovery(Store store, ProviderRegistry registry, Retrieval 
             var active = searches.Values.Where(s => !s.Work.IsCompleted).ToList();
             if (active.Count >= 16 || active.Count(s => s.UserId == user) >= 2)
                 throw new ServiceFailure("search_limit", "Too many active searches. Wait for a search to finish and retry.", DateTimeOffset.UtcNow.AddSeconds(15));
-            var session = new SearchSession { UserId = user, ItemId = item, Admission = ticket };
-            session.Cancellation.CancelAfter(TimeSpan.FromSeconds(15));
+            var session = new SearchSession { UserId = user, ItemId = item, Admission = ticket, Baseline = store.Selection(item) };
             searches[session.Id] = session; session.Work = SearchWork(session, track, only, ticket);
             return Snapshot(session);
         }
@@ -84,24 +91,40 @@ public sealed class Discovery(Store store, ProviderRegistry registry, Retrieval 
     }
     public SearchSession? SearchStatus(string id, Guid user) => searches.TryGetValue(id, out var s) && s.UserId == user ? Snapshot(s) : null;
     public bool CancelSearch(string id, Guid user) { if (!searches.TryGetValue(id, out var s) || s.UserId != user) return false; s.Cancellation.Cancel(); return true; }
-    private static SearchSession Snapshot(SearchSession s) { lock (s) return new() { Id = s.Id, UserId = s.UserId, ItemId = s.ItemId, State = s.State, Finished = s.Finished, Total = s.Total, Candidates = s.Candidates.ToList(), Errors = s.Errors.ToList(), Recommended = s.Recommended, Metrics = s.Metrics }; }
+    private static SearchSession Snapshot(SearchSession s) { lock (s) return new() { Id = s.Id, UserId = s.UserId, ItemId = s.ItemId, State = s.State, Finished = s.Finished, Total = s.Total, Candidates = s.Candidates.ToList(), Errors = s.Errors.ToList(), Recommended = s.Recommended, Improvement = s.Improvement, Metrics = s.Metrics }; }
     private async Task SearchWork(SearchSession session, TrackMultiArtistMetadata track, string? only, StoreAdmission ticket)
     {
         using var operation = store.Operation(ticket);
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(session.Cancellation.Token, deadline.Token);
         session.Total = registry.Sources.Count(s => string.IsNullOrWhiteSpace(only) || s.Name == only); var matching = new MatchingSession(track, minimumMatch?.Invoke() ?? 70); session.Metrics = matching.Metrics;
-        await retrieval.Collect(matching, true, session.Cancellation.Token, e => { lock (session) session.Errors.Add(e); }, candidate => { lock (session) session.Candidates.Add(candidate); }, verification =>
+        await retrieval.Collect(matching, true, budget.Token, e => { lock (session) session.Errors.Add(e); }, candidate => { lock (session) session.Candidates.Add(candidate); }, verification =>
         {
             var c = verification.Candidate; retrieval.CachePreview(verification);
             lock (session)
             {
                 var index = session.Candidates.FindIndex(x => LyricRanking.Key(x) == LyricRanking.Key(c)); if (index >= 0) session.Candidates[index] = c;
-                var best = session.Candidates.Where(x => x.Verification == "verified" && x.Assessment?.Eligible == true).MinBy(x => x, Comparer<Candidate>.Create(LyricRanking.Compare)); session.Recommended = best == null ? null : LyricRanking.Key(best);
+
             }
         }, only, () => { lock (session) session.Finished++; });
-        lock (session) session.State = session.Cancellation.IsCancellationRequested ? "cancelled" : "complete";
+        lock (session)
+        {
+            session.State = session.Cancellation.IsCancellationRequested ? "cancelled" : deadline.IsCancellationRequested ? "timed_out" : "complete";
+            session.Candidates.Sort(LyricRanking.Compare);
+            if (session.State == "cancelled") return;
+            var best = session.Candidates.FirstOrDefault(x => x.Verification == "verified" && x.Assessment?.Eligible == true);
+            session.Recommended = best == null ? null : LyricRanking.Key(best);
+            var baseline = session.Baseline;
+            if (best == null || baseline?.Lyrics == null || baseline.Assessment?.Candidate.Assessment == null) return;
+            var assessed = baseline.Assessment.Candidate with { Assessment = LyricRanking.WithDocument(baseline.Assessment.Candidate.Assessment, baseline.Lyrics) };
+            var reason = LyricRanking.Improvement(best, assessed); if (reason == null) return;
+            var lyrics = Preview(best); if (lyrics == null || lyrics.Hash == baseline.Lyrics.Hash) return;
+            var offer = store.TryOffer(session.ItemId, baseline, new(baseline.Lyrics.Hash, lyrics, best, reason, LyricRanking.ImprovementDescription(best, assessed, reason)), store.Get<RawLyrics>("raw", lyrics.Hash));
+            if (offer != null && LyricRanking.Key(offer.Candidate) == LyricRanking.Key(best))
+                session.Improvement = new(LyricRanking.Key(best), offer.Lyrics.Hash, offer.BaselineHash, offer.Reason, offer.Description);
+        }
     }
     public RichLyrics? Preview(Candidate candidate) => store.GetPreview(candidate.Source + ":" + candidate.Id);
-    public void Remember(Guid item) => store.Put("previous", item.ToString("N"), store.Selection(item));
     public void Mark(Guid item, bool clear)
     {
         Invalidate(item);
@@ -131,7 +154,6 @@ public sealed class Discovery(Store store, ProviderRegistry registry, Retrieval 
         lock (searchAdmission)
             foreach (var session in admitted) if (searches.TryRemove(session.Id, out var removed)) removed.Cancellation.Dispose();
     }
-    public void Revert(Guid item) { Invalidate(item); store.RevertSelection(item); Invalidate(item); }
     private void Sweep() { foreach (var s in searches.Values.Where(s => s.Created < DateTime.UtcNow.AddMinutes(-5))) if (searches.TryRemove(s.Id, out var removed)) { removed.Cancellation.Cancel(); removed.Cancellation.Dispose(); } foreach (var pair in entries.Where(p => p.Value.Created < DateTime.UtcNow.AddMinutes(-10) && p.Value.Value.Complete)) if (entries.TryRemove(pair.Key, out var e)) e.Cancellation.Dispose(); }
     public void Dispose() { foreach (var e in entries.Values) { e.Cancellation.Cancel(); e.Cancellation.Dispose(); } foreach (var s in searches.Values) { s.Cancellation.Cancel(); s.Cancellation.Dispose(); } }
 }

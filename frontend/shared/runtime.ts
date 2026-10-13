@@ -41,6 +41,7 @@ interface BridgePort {
 declare global {
     const __LYRICBRIDGE_VERSION__: string;
     interface GlobalEventHandlersEventMap {
+        "lyricbridge:timing-panel": CustomEvent<HTMLElement>;
         viewshow: Event;
         viewbeforehide: Event;
         loadingdone: Event;

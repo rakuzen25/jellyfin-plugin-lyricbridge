@@ -38,7 +38,6 @@ export interface BridgeDocument {
     pronunciation?: { state: string; error?: string | null } | null;
     timingFingerprint?: string | null;
     timingCorrection?: { seconds: number; hash: string; fingerprint: string } | null;
-    previousSelection?: { lyrics?: RichLyrics | null; instrumental?: { source: string } | null } | null;
     better?: RichLyrics | null;
     improvement?: { baselineHash: string; description?: string; reason?: string; assessment?: MatchAssessment | null } | null;
     matchAssessment?: MatchAssessment | null;

@@ -9,7 +9,6 @@ public sealed class SelectionService(ISelectionRepository repository, Retrieval 
     public void SelectOriginal(Guid item, string hash) { repository.SelectOriginal(item, hash); discovery.Invalidate(item); }
     public VersionSnapshot Snapshot(Guid item) => repository.Selection(item);
     public void ClearRejection(Guid item) => repository.ClearRejection(item);
-    public void Revert(Guid item) => discovery.Revert(item);
     public void Mark(Guid item, bool clear) => discovery.Mark(item, clear);
     public void Reject(Guid item) { discovery.Invalidate(item); repository.ApplySelection(item, new(null, null, new MatchRejection())); }
     public async Task<(LyricOutcome Outcome, RichLyrics? Original)> Preview(Audio item, Candidate candidate, CancellationToken token)

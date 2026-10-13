@@ -35,7 +35,7 @@ public sealed class SelectionRepositoryTests
     }
 
     [Fact]
-    public void RevertSwapsCompleteSelectionsAndTransactionsRollBack()
+    public void SelectionsClearClassificationAndTransactionsRollBack()
     {
         var directory = Path.Combine(Path.GetTempPath(), "lyricbridge-selection-" + Guid.NewGuid().ToString("N"));
         try
@@ -44,10 +44,10 @@ public sealed class SelectionRepositoryTests
             var lyrics = new RichLyrics { Source = "fixture", Lines = [new() { Id = "line", Text = "original" }] };
             store.ApplySelection(item, new(lyrics, null), new("original"));
             store.ApplySelection(item, new(null, null, new MatchRejection()));
-            store.RevertSelection(item);
+            store.SelectOriginal(item, Codec.ContentHash(lyrics));
             Assert.Equal("original", store.Selection(item).Lyrics!.Lines[0].Text);
             Assert.Null(store.Selection(item).Rejected);
-            store.RevertSelection(item);
+            store.ApplySelection(item, new(null, null, new MatchRejection()));
             Assert.NotNull(store.Selection(item).Rejected); Assert.Null(store.Selection(item).Lyrics);
             using (var connection = new SqliteConnection("Data Source=" + Path.Combine(directory, "index.sqlite")))
             {
@@ -55,10 +55,11 @@ public sealed class SelectionRepositoryTests
                 command.CommandText = "CREATE TRIGGER fail_selection BEFORE INSERT ON records WHEN NEW.kind='selected' BEGIN SELECT RAISE(ABORT,'synthetic failure'); END;";
                 command.ExecuteNonQuery();
             }
-            var before = Codec.Serialize(store.Get<VersionSnapshot>("previous", id));
+            var before = Codec.Serialize(store.Selection(item));
             Assert.Throws<SqliteException>(() => store.ApplySelection(item, new(lyrics, null)));
             Assert.NotNull(store.Selection(item).Rejected);
-            Assert.Equal(before, Codec.Serialize(store.Get<VersionSnapshot>("previous", id)));
+            Assert.Equal(before, Codec.Serialize(store.Selection(item)));
+            Assert.Empty(store.All<VersionSnapshot>("previous"));
         }
         finally { SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }

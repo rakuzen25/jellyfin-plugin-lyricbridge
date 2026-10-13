@@ -62,7 +62,7 @@ AI translation and pronunciation use separate instructions. Translation output m
 
 Lyrics settings → Versions includes **Saved originals** as well as saved translation and pronunciation versions. Selected provider originals (including automatic selections), upgrades and imports are saved; provider previews stay temporary. Identical imports reuse the saved entry. Everyone with access to the song can preview a saved original without changing its selection or starting generation. Administrators can select it for the library or delete it after confirmation. Switching originals restores the matching translations, pronunciation, personal auxiliary choices and shared timing correction; generated rows are never remapped between originals.
 
-Deleting a saved original removes that song’s association and its timing correction. A deleted current original is replaced by the previous surviving saved original, or the newest saved original when the previous one is unavailable. Matching previous selections are cleared. If no saved originals remain, current lyrics are cleared and automatic discovery pauses until an explicit retry, import or selection. Shared documents and their dependent versions remain when another song, selection, revert snapshot, composition/donor, improvement offer or unaffected active job requires them. Affected jobs are cancelled transactionally; retained history identifies deleted output and cannot retry it. Media and external lyric files are never deleted.
+Deleting a saved original removes that song’s association and its timing correction. A deleted current original is replaced by the newest remaining saved original. If no saved originals remain, current lyrics are cleared and automatic discovery pauses until an explicit retry, import or selection. Shared documents and their dependent versions remain when another song, selection, composition/donor, improvement offer or unaffected active job requires them. Affected jobs are cancelled transactionally; retained history identifies deleted output and cannot retry it. Media and external lyric files are never deleted.
 
 This development version uses storage schema 5. Existing schema 4 and other unsupported databases are rejected without migration or changes. Use a new empty development storage directory; keep existing production storage untouched.
 
@@ -80,7 +80,7 @@ LyricMotion’s timing controls remain personal to the current browser. In Lyric
 
 ## Wrong matches, imports and combined sources
 
-In **Find lyric versions**, administrators can choose **None of these match** to clear the current selection and suspend automatic matching for that track. This is not an instrumental classification. **Search again** clears the shared rejection only for administrators; ordinary users may search and preview without changing it; scheduled discovery leaves rejected tracks alone. **Use existing Jellyfin lyrics** selects lyrics already available through Jellyfin; **Import lyrics** accepts a text lyric file up to 1 MB and stores it under the plugin’s writable storage, without touching the media mount. Manual imports are preserved and can be reverted.
+In **Lyrics settings → Versions**, administrators can choose **Remove lyrics** to clear the current selection and suspend automatic matching for that track. This is not an instrumental classification. **Search again** clears the shared rejection only for administrators; ordinary users may search and preview without changing it; scheduled discovery leaves rejected tracks alone. **Use Jellyfin lyrics** selects lyrics already available through Jellyfin; **Import lyrics** accepts a text lyric file up to 1 MB and stores it under the plugin’s writable storage, without touching the media mount. Manual imports remain available as saved original versions.
 
 Under Pronunciation or Translation, **Choose … from another source** searches for a donor version. Review the original-to-donor mappings, adjust unmatched lines, and save with **Use mapped …**. Automatic suggestions use normalized original text, sequence, and timing to resolve repeated lines; ambiguous lines remain unmatched. Saves reject duplicate or reordered mappings. Unmatched rows stay absent. Donor rows keep the current original lyric version’s activation windows and word timing, and shared timing corrections remain attached to the unchanged original version. Donor documents and raw provider responses remain available in plugin storage; the resulting supplied rows appear as a separate saved auxiliary version.
 
@@ -116,7 +116,7 @@ The automatic minimum defaults to 70 in Sources → Advanced matching. Recording
 
 Find versions keeps all displayed candidates stable while checking their lyrics. Expand Match details for server-computed field results, recording/duration warnings and verified lead-line word coverage. Recommended identifies the best eligible verified recording. Sort by best match deliberately reorders the existing rows; it does not select or save anything. Administrators can preview and manually use a conflicting result when its warnings reflect metadata problems.
 
-Cached lyrics do not search again whenever the view opens. Search again explicitly looks for improved recordings or timing. Offers only appear for a higher match tier, or a higher timing category within the same tier; small score/coverage differences do not cause repeated prompts. Preview before applying and use Revert to restore the prior version. See RANKING.md for all limits.
+Cached lyrics do not search again whenever the view opens. Search again explicitly looks for improved recordings or timing. Offers only appear for a higher match tier, or a higher timing category within the same tier; small score/coverage differences do not cause repeated prompts. Preview before applying and select a saved original in Versions to restore it. See RANKING.md for all limits.
 
 ### Musixmatch verification failures
 
@@ -141,3 +141,16 @@ Language services list their roles and language limitations: Kawazu provides loc
 ## Browser rendering quality
 
 For reduced rendering load, open Lyrics settings → Display → Text sizes and layout and choose **Low power** under Rendering quality. Artwork becomes stationary and glyph lift/glow is disabled; timed highlighting remains. Standard remains the default. The selection is saved in this browser, not server configuration. See [performance validation](PERFORMANCE.md) for measurement limits.
+
+### Song actions and restoration
+
+Settings tabs are **Song → Versions → Display**. The original-lyrics section in
+Versions owns search, import, Jellyfin selection, rejection and instrumental
+classification. Shared changes remain administrator-only and classification changes
+require confirmation. Search keeps provider track ID in an Advanced disclosure in the search form, which collapses into the query summary; it does not duplicate these actions.
+
+The one-step Revert action and endpoint have been removed. Restore lyrics by choosing
+a saved original; change rejected/instrumental classification explicitly. No undo
+snapshots are created or returned by the current API. This change does not migrate or
+delete existing databases. Deleting the current original selects the newest remaining
+saved original, retaining that version's timing and auxiliary choices.

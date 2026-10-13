@@ -119,8 +119,6 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
         if (!Admin) return Error(403, "permission_denied", "An administrator must apply the upgrade.");
         var item = Item(id); return item == null ? NotFound() : JsonData(await selection.Upgrade(item, hash, baselineHash, token));
     }
-    [HttpPost("items/{id:guid}/revert")]
-    public IActionResult Revert(Guid id) { if (!Admin) return Error(403, "permission_denied", "An administrator must revert the library selection."); if (Item(id) == null) return NotFound(); selection.Revert(id); return NoContent(); }
     [HttpPost("items/{id:guid}/instrumental")]
     public IActionResult Mark(Guid id, InstrumentalInput input) { if (!Admin) return Error(403, "permission_denied", "An administrator must change the instrumental classification."); if (Item(id) == null) return NotFound(); selection.Mark(id, input.Clear); return NoContent(); }
     [HttpPost("admin/reset")]

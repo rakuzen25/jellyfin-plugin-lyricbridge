@@ -2,7 +2,7 @@ const { test, expect } = require("playwright/test");
 const path = require("node:path");
 const { readFileSync } = require("node:fs");
 
-test("@workflow typed configuration preserves unsaved edits and paginates history", async ({ page }) => {
+test("@workflow typed configuration preserves unsaved edits and paginates history", async ({ page }, testInfo) => {
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.route("**/*", (route) =>
@@ -125,12 +125,40 @@ test("@workflow typed configuration preserves unsaved edits and paginates histor
     ).toBe(true);
     await page.locator("#lb-web-repair").click();
     await expect.poll(() => page.evaluate(() => window.calls.includes("/base/LyricBridge/admin/web-renderer/repair"))).toBe(true);
+    const saveState = await page.locator("#lb-config-status").textContent();
+    await page.locator(".lb-maintenance > summary").click();
+    await page.locator("#lb-reset-open").click();
+    await page.locator("#lb-reset-word").fill("RESET");
+    await expect(page.locator("#lb-reset-submit")).toBeEnabled();
+    await expect(page.locator("#lb-config-status")).toHaveText(saveState || "");
+    await expect(page.locator("#lb-reset-cancel")).toHaveClass(/raised/);
+    await page.locator("#lb-reset-cancel").click();
+    await expect(page.locator("#lb-reset-confirm")).toBeHidden();
+    await expect(page.locator("#lb-config-status")).toHaveText(saveState || "");
     await page.locator("#lb-web-enabled").uncheck();
     await page.locator("#lb-storage").fill("/synthetic-unsaved");
     await page.getByRole("button", { name: "Save settings", exact: true }).click();
     await expect(page.locator("#lb-config-status")).toContainText("Settings were not saved");
     await page.getByRole("tab", { name: "Sources", exact: true }).click();
     await expect(page.locator("[data-source=Spotify] input[type=checkbox]")).toBeDisabled();
+    const up = page.getByRole("button", { name: "Move up QQ", exact: true });
+    await expect(up).toBeDisabled();
+    const down = page.getByRole("button", { name: "Move down QQ", exact: true });
+    await expect(down.locator("svg.lb-icon")).toHaveAttribute("aria-hidden", "true");
+    expect(
+        await down.locator("svg").evaluate((node) => {
+            const css = getComputedStyle(node);
+            return [css.width, css.height, parseFloat(css.strokeWidth)];
+        }),
+    ).toEqual(["20px", "20px", 2]);
+    await expect(page.locator("#lb-sources .material-icons")).toHaveCount(0);
+    await down.locator("svg path").click();
+    await expect(page.locator("#lb-sources [data-source]").first()).toHaveAttribute("data-source", "NetEase");
+    await page.getByRole("button", { name: "Move up QQ", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#lb-sources [data-source]").first()).toHaveAttribute("data-source", "QQ");
+    await page.screenshot({ path: testInfo.outputPath("admin-source-icons.png"), fullPage: true });
+
     await page.getByRole("tab", { name: "General", exact: true }).click();
     await expect(page.locator("#lb-storage")).toHaveValue("/synthetic-unsaved");
     await page.evaluate(() => (window.failSave = false));

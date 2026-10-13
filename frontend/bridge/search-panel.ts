@@ -1,13 +1,13 @@
 import { requireValue } from "../shared/invariants.ts";
 import type { LyricLine, RichLyrics } from "../shared/lyrics.ts";
 import type {} from "../shared/runtime.ts";
-import { createApi } from "./api.ts";
+import { BridgeRequestError, createApi } from "./api.ts";
 import type { BridgeDocument, SourceCapability, TrackScope } from "./contracts.ts";
 import { button, disclosure, e, field, select } from "./controls.ts";
 import type { AuxiliaryKind, Preferences } from "./models.ts";
 import { PreviewSession } from "./preview-session.ts";
 import { parseDocument } from "./responses.ts";
-import type { Candidate, MatchAssessment, SearchQuery, SearchResults } from "./search-models.ts";
+import type { Candidate, MatchAssessment, SearchImprovement, SearchQuery, SearchResults } from "./search-models.ts";
 import { parseSearchAdmission, parseSearchResults, rankCandidates } from "./search-models.ts";
 import { SearchSession } from "./search-session.ts";
 interface Context {
@@ -26,12 +26,9 @@ interface Dependencies {
     closePopup: () => void;
     closeSearch: (restore?: boolean) => void;
     documentState: () => BridgeDocument;
-    confirmation: (parent: HTMLElement, message: string, action: () => unknown, label?: string, trigger?: HTMLElement | undefined) => void;
     api: (path: string, method?: string, body?: unknown, signal?: AbortSignal | null | undefined) => Promise<unknown>;
     playbackPreview: PreviewSession<TrackScope, BridgeDocument>;
     refreshSong: (force?: boolean) => Promise<void>;
-    render: (doc: RichLyrics | null | undefined) => void;
-    importLyrics: (existing: boolean) => Promise<void>;
     updatePanelBounds: () => void;
     metrics: { decorations: number; requests: number; stale: number; searchRowUpdates: number; searchSorts: number; maxSearchPaintMs: number };
     defaults: Preferences;
@@ -59,12 +56,9 @@ export function createSearchPanel(dependencies: Dependencies) {
         closePopup,
         closeSearch,
         documentState,
-        confirmation,
         api,
         playbackPreview,
         refreshSong,
-        render,
-        importLyrics,
         updatePanelBounds,
         metrics,
         defaults,
@@ -84,11 +78,12 @@ export function createSearchPanel(dependencies: Dependencies) {
         closeSearch();
         const target = context.scope;
         context.searchPopup = e("section", "lb-popup lb-search");
+        document.querySelectorAll(".lb-upgrade").forEach((node) => node.remove());
         context.searchPopup.setAttribute("role", "dialog");
-        context.searchPopup.setAttribute("aria-label", "Search versions");
+        context.searchPopup.setAttribute("aria-label", better ? "Preview lyric update" : "Search versions");
         const head = e("header", "lb-popup-header");
         head.append(
-            e("h2", "", "Search versions"),
+            e("h2", "", better ? "Preview lyric update" : "Search versions"),
             button("Cancel", () => closeSearch(), "lb-close", { icon: "close", iconOnly: true }),
         );
         const form = e("div", "lb-search-form");
@@ -147,62 +142,26 @@ export function createSearchPanel(dependencies: Dependencies) {
                     .join(" · "),
             ),
         );
-        const { root: footer, content: footerBody } = disclosure("More options", "lb-search-footer");
-        const footerActions = e("div", "lb-song-actions");
-        footerBody.append(footerActions);
-        if (!mixKind && context.current?.canSelect) {
-            footerActions.append(
-                button(
-                    "None of these match",
-                    async () => {
-                        confirmation(
-                            footerBody,
-                            "Clear the selected lyrics and stop automatic matching until Search again or a manual selection?",
-                            async () => {
-                                await api("items/" + requireValue(target).itemId + "/reject-matches", "POST");
-                                if (context.scope !== target) return;
-                                playbackPreview.discard();
-                                closeSearch(false);
-                                await refreshSong(true);
-                                render(null);
-                            },
-                            "Confirm no match",
-                        );
-                    },
-                    "",
-                    { icon: "warning" },
-                ),
-            );
-            footerActions.append(
-                button("Use Jellyfin lyrics", () => importLyrics(true), "", { icon: "library" }),
-                button("Import lyrics", () => importLyrics(false), "", { icon: "import" }),
-            );
-        }
-        context.searchPopup.append(footer);
         document.body.append(context.searchPopup);
         updatePanelBounds();
         requireValue(context.searchPopup.querySelector("button")).focus();
         let picked = null;
-        let collapseAfterResults = true;
+        let improvement: SearchImprovement | null = null;
+        let finalized = false;
         const rendered = new Map<
             string,
-            { container: HTMLElement; row: HTMLButtonElement; badge: HTMLElement; warning: HTMLElement; signature: string | null; usage: HTMLElement }
+            {
+                container: HTMLElement;
+                row: HTMLButtonElement;
+                badge: HTMLElement;
+                warning: HTMLElement;
+                signature: string | null;
+                usage: HTMLElement;
+                explanation: HTMLElement;
+            }
         >();
         const candidates = new Map<string, Candidate>();
-        const sort = button(
-            "Sort by best match",
-            () => {
-                const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-                for (const c of [...candidates.values()].sort(rankCandidates))
-                    list.append(requireValue(rendered.get(c.source + ":" + c.id)).container);
-                focused?.focus({ preventScroll: true });
-                metrics.searchSorts++;
-            },
-            "",
-            { icon: "sort" },
-        );
-        sort.disabled = true;
-        toolbar.append(sort, sourceFailures);
+        toolbar.append(sourceFailures);
         const timingName = (value: string | undefined) =>
             ({
                 "mostly-word-timed": "Mostly word-timed",
@@ -245,6 +204,8 @@ export function createSearchPanel(dependencies: Dependencies) {
             parent.append(details);
         };
         const pick = async (candidate: Candidate) => {
+            const displayedOffer = better?.source === candidate.source && better.providerId === candidate.id ? better : null;
+            const upgrade = improvement?.key === candidate.source + ":" + candidate.id ? improvement : null;
             if (matchMedia("(max-width:760px)").matches) list.hidden = true;
             picked = candidate;
             list.querySelectorAll<HTMLElement>(".lb-result").forEach((n) =>
@@ -276,10 +237,10 @@ export function createSearchPanel(dependencies: Dependencies) {
                 usage.dataset.usageKey = candidate.source + ":" + candidate.id;
                 preview.append(usage);
                 context.searchUsageRefresh?.();
-                if (better && documentState().improvement?.description)
+                if (displayedOffer && documentState().improvement?.description)
                     preview.append(e("p", "lb-help", requireValue(documentState().improvement).description));
                 explanation(preview, candidate.assessment || data.matchAssessment);
-                if (list.hidden)
+                if (list.hidden && !displayedOffer)
                     preview.prepend(
                         button(
                             "Back to results",
@@ -301,18 +262,19 @@ export function createSearchPanel(dependencies: Dependencies) {
                     preview.append(block);
                 }
                 const saveVersion = async () => {
+                    const upgrade = improvement?.key === candidate.source + ":" + candidate.id ? improvement : null;
                     try {
                         await api(
                             "items/" +
                                 requireValue(target).itemId +
-                                (better
+                                (displayedOffer || upgrade
                                     ? "/upgrade?hash=" +
-                                      encodeURIComponent(better.hash) +
+                                      encodeURIComponent(upgrade?.hash || requireValue(displayedOffer).hash) +
                                       "&baselineHash=" +
-                                      encodeURIComponent(documentState().improvement?.baselineHash || "")
+                                      encodeURIComponent(upgrade?.baselineHash || documentState().improvement?.baselineHash || "")
                                     : "/select"),
                             "POST",
-                            better ? undefined : candidate,
+                            displayedOffer || upgrade ? undefined : candidate,
                         );
                         if (context.scope !== target || context.searchPopup !== searchPanel) return;
                         playbackPreview.discard();
@@ -320,11 +282,28 @@ export function createSearchPanel(dependencies: Dependencies) {
                         await refreshSong(true);
                         status("Lyric version saved", false, 4000);
                     } catch (error) {
-                        showError(error, context.searchPlaybackBar || preview);
+                        if (context.scope !== target || context.searchPopup !== searchPanel) return;
+                        if (
+                            error instanceof BridgeRequestError &&
+                            ["lyric_version_changed", "upgrade_offer_changed", "upgrade_unavailable"].includes(error.details.code)
+                        ) {
+                            improvement = null;
+                            for (const entry of rendered.values()) {
+                                entry.badge.hidden = true;
+                                entry.explanation.hidden = true;
+                            }
+                            showError(error, context.searchPlaybackBar || preview, () => {
+                                void search();
+                            });
+                            void refreshSong().catch((cause: unknown) => {
+                                if (context.scope === target && context.searchPopup === searchPanel) showError(cause, searchPanel);
+                            });
+                        } else showError(error, context.searchPlaybackBar || preview);
                     }
                 };
                 const previewActions = e("div", "lb-song-actions");
                 preview.append(previewActions);
+                if (displayedOffer) previewActions.append(button("Search other versions", () => openVersions(), "", { icon: "search" }));
                 previewActions.append(
                     button(
                         "Preview with playback",
@@ -345,7 +324,9 @@ export function createSearchPanel(dependencies: Dependencies) {
                             ];
                             if (canSelect)
                                 actions.push(
-                                    button(better ? "Use improved version" : "Use this version", saveVersion, "lb-primary", { icon: "check" }),
+                                    button(displayedOffer || upgrade ? "Use improved version" : "Use this version", saveVersion, "lb-primary", {
+                                        icon: "check",
+                                    }),
                                 );
                             startPlaybackPreview(
                                 { ...data, itemId: requireValue(target).itemId },
@@ -359,7 +340,9 @@ export function createSearchPanel(dependencies: Dependencies) {
                     ),
                 );
                 if (canSelect)
-                    previewActions.append(button(better ? "Use improved version" : "Use this version", saveVersion, "lb-primary", { icon: "check" }));
+                    previewActions.append(
+                        button(displayedOffer || upgrade ? "Use improved version" : "Use this version", saveVersion, "lb-primary", { icon: "check" }),
+                    );
                 else preview.append(e("p", "lb-help", "Only administrators can apply this selection."));
             } catch (error) {
                 showError(error, preview);
@@ -407,7 +390,15 @@ export function createSearchPanel(dependencies: Dependencies) {
                     row.setAttribute("aria-pressed", "false");
                     row.append(badge);
                     container.append(row);
-                    entry = { container, row, badge, warning, signature: null, usage: e("div", "lb-source-usage") };
+                    entry = {
+                        container,
+                        row,
+                        badge,
+                        warning,
+                        signature: null,
+                        usage: e("div", "lb-source-usage"),
+                        explanation: e("span", "lb-improvement-reason"),
+                    };
                     rendered.set(key, entry);
                     list.append(container);
                 }
@@ -468,22 +459,29 @@ export function createSearchPanel(dependencies: Dependencies) {
                     entry.warning.hidden = !entry.warning.textContent;
                     entry.usage.dataset.usageKey = key;
                     entry.row.append(entry.warning, entry.usage, entry.badge);
+                    entry.row.append(entry.explanation);
                     entry.signature = signature;
                     metrics.searchRowUpdates++;
                 }
-                if (entry.badge.hidden !== (key !== recommended)) entry.badge.hidden = key !== recommended;
-            }
-            if (results.length && collapseAfterResults) {
-                collapseAfterResults = false;
-                queryText.textContent = [title.value, artist.value, provider.selectedOptions[0]?.textContent].filter(Boolean).join(" · ");
-                const editing = form.contains(document.activeElement);
-                form.hidden = true;
-                querySummary.hidden = false;
-                if (editing) requireValue(querySummary.querySelector("button")).focus({ preventScroll: true });
+                const isImprovement = improvement?.key === key;
+                entry.badge.textContent = isImprovement ? "Better than current" : "Recommended";
+                entry.explanation.hidden = !isImprovement;
+                entry.explanation.textContent = isImprovement && improvement?.description ? "Why it’s better: " + improvement.description : "";
+                if (entry.badge.hidden !== (key !== recommended && !isImprovement)) entry.badge.hidden = key !== recommended && !isImprovement;
             }
             context.searchUsageRefresh?.();
-            sort.disabled = rendered.size < 2;
             metrics.maxSearchPaintMs = Math.max(metrics.maxSearchPaintMs || 0, performance.now() - begun);
+        };
+        const finalizeResults = () => {
+            if (finalized) return;
+            finalized = true;
+            const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            const scrollTop = list.scrollTop;
+            for (const candidate of [...candidates.values()].sort(rankCandidates))
+                list.append(requireValue(rendered.get(candidate.source + ":" + candidate.id)).container);
+            focused?.focus({ preventScroll: true });
+            list.scrollTop = scrollTop;
+            metrics.searchSorts++;
         };
         const searchPanel = context.searchPopup;
         const request = context.lastRequest;
@@ -506,14 +504,25 @@ export function createSearchPanel(dependencies: Dependencies) {
             },
             (state) => {
                 if (context.scope !== target || context.searchPopup !== searchPanel) return;
+                if (state.kind === "admitting") stopSearch.hidden = false;
                 if (state.kind === "failed") {
+                    stopSearch.hidden = true;
                     showError(state.error, searchPanel);
                     return;
                 }
                 if (state.kind !== "results") return;
                 const data = state.value;
-                paint(data.candidates, data.recommended);
-                progress.textContent = `${data.finished}/${data.total} sources · ${data.state}`;
+                const terminal = data.state !== "searching";
+                stopSearch.hidden = terminal;
+                improvement = terminal && data.state !== "cancelled" ? data.improvement || null : null;
+                paint(data.candidates, terminal ? data.recommended : null);
+                if (terminal && !finalized) {
+                    finalizeResults();
+                    void refreshSong().catch((error: unknown) => {
+                        if (context.scope === target && context.searchPopup === searchPanel) showError(error, searchPanel);
+                    });
+                }
+                progress.textContent = `${data.finished}/${data.total} sources · ${data.state === "cancelled" ? "search stopped" : data.state === "timed_out" ? "finished (search deadline reached)" : data.state}`;
                 const errors = data.errors || [];
                 sourceFailures.hidden = !errors.length;
                 const failureSignature = JSON.stringify(errors);
@@ -529,13 +538,36 @@ export function createSearchPanel(dependencies: Dependencies) {
             },
         );
         context.searchSession = session;
+        const stopSearch = button(
+            "Stop search",
+            () => {
+                session.cancel();
+                finalizeResults();
+                stopSearch.hidden = true;
+                progress.textContent = "Search stopped · results received so far";
+                progress.tabIndex = -1;
+                progress.focus({ preventScroll: true });
+            },
+            "",
+            { icon: "close" },
+        );
+        stopSearch.hidden = true;
+        toolbar.append(stopSearch);
+        const collapseFields = (parts: string[]) => {
+            queryText.textContent = parts.filter(Boolean).join(" · ");
+            const editing = form.contains(document.activeElement);
+            form.hidden = true;
+            querySummary.hidden = false;
+            if (editing) querySummary.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+        };
         const search = () => {
             if (context.scope !== target || context.searchPopup !== searchPanel) return;
             picked = null;
+            improvement = null;
+            finalized = false;
             rendered.clear();
             candidates.clear();
-            sort.disabled = true;
-            collapseAfterResults = true;
+            collapseFields([title.value, artist.value, provider.selectedOptions[0]?.textContent || ""]);
             list.hidden = false;
             list.replaceChildren();
             preview.replaceChildren();
@@ -561,14 +593,21 @@ export function createSearchPanel(dependencies: Dependencies) {
                     notice(progress, "Choose a provider and enter its track ID.");
                     return;
                 }
+                collapseFields([title.value, artist.value, idProvider.value, "Track ID: " + id.value.trim()]);
                 pick({ source: idProvider.value, id: id.value.trim(), title: title.value, artist: artist.value, album: "", score: 100 });
             },
             "",
             { icon: "external" },
         );
         advancedBody.append(openTrack);
-        footerBody.append(advanced);
+        form.append(advanced);
         if (better) {
+            context.searchPopup.classList.add("lb-offer-preview");
+            form.hidden = true;
+            querySummary.hidden = true;
+            toolbar.hidden = true;
+            advanced.hidden = true;
+            list.hidden = true;
             const c = {
                 source: requireValue(better.source),
                 id: requireValue(better.providerId),

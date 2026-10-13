@@ -1,5 +1,6 @@
 /* This Source Code Form is subject to the Mozilla Public License, v. 2.0.
  * See https://mozilla.org/MPL/2.0/. */
+import { icon as createIcon, type IconName } from "../shared/icons.ts";
 import { requireValue } from "../shared/invariants.ts";
 import type {} from "../shared/runtime.ts";
 import type { AnimatedWord } from "./karaoke-animation.ts";
@@ -87,7 +88,6 @@ interface Dependencies {
     lifecycle: RendererLifecycle;
     warn: (...args: unknown[]) => void;
     sourceTimelineTicks: (media: HTMLMediaElement | null, frameNow: number, projectClock?: boolean) => number | null;
-    createSvgElement: (name: string, attributes?: Record<string, string | number> | null) => SVGElement;
     TIMING_OFFSET_FINE_STEP_SECONDS: 0.1;
     queueDecoration: () => boolean;
     requestGoogleRomanizationForLyrics: () => void;
@@ -110,7 +110,6 @@ export function createControlsPreferences(dependencies: Dependencies) {
         lifecycle,
         warn,
         sourceTimelineTicks,
-        createSvgElement,
         TIMING_OFFSET_FINE_STEP_SECONDS,
         queueDecoration,
         requestGoogleRomanizationForLyrics,
@@ -225,7 +224,9 @@ export function createControlsPreferences(dependencies: Dependencies) {
         if (current) current.textContent = formatTimingOffset();
 
         if (sync) {
-            sync.textContent = state.timingPickActive ? "Tap lyric to sync…" : "Sync lyric to now";
+            const label = sync.querySelector(".lb-action-label");
+            if (label) label.textContent = state.timingPickActive ? "Tap lyric to sync…" : "Sync lyric to now";
+            sync.setAttribute("aria-pressed", String(state.timingPickActive));
             sync.dataset.akTimingActive = state.timingPickActive ? "true" : "false";
         }
 
@@ -473,9 +474,12 @@ export function createControlsPreferences(dependencies: Dependencies) {
             state.lyricAutoFollowSuspendedUntil === Infinity;
         if (!lyricSyncButton && show) {
             lyricSyncButton = document.createElement("button");
-            lyricSyncButton.className = "lb-sync";
+            lyricSyncButton.className = "lb-button lb-sync";
             lyricSyncButton.type = "button";
-            lyricSyncButton.textContent = "Sync";
+            const label = document.createElement("span");
+            label.className = "lb-action-label";
+            label.textContent = "Sync";
+            lyricSyncButton.append(createIcon("follow"), label);
             lyricSyncButton.setAttribute("aria-label", "Resume following the playing lyric");
             lyricSyncButton.onclick = () => {
                 resumeLyricAutoFollow("sync-button");
@@ -977,77 +981,24 @@ export function createControlsPreferences(dependencies: Dependencies) {
         removeLyricsToolsHostIfEmpty();
     }
 
-    function createTimingActionButton(label: string, action: string, className = "") {
+    function createTimingActionButton(label: string, action: string, glyph: IconName, className = "", iconOnly = false) {
         const button = document.createElement("button");
         button.type = "button";
-        button.className = `ak-timing-action ${className}`.trim();
+        button.className = `lb-button ak-timing-action ${className}`.trim();
         button.dataset.akTimingAction = action;
-        button.textContent = label;
+        button.append(createIcon(glyph));
+        if (iconOnly) {
+            button.classList.add("lb-icon-button");
+            button.setAttribute("aria-label", label);
+            button.dataset.tooltip = label;
+            button.title = label;
+        } else {
+            const text = document.createElement("span");
+            text.className = "lb-action-label";
+            text.textContent = label;
+            button.append(text);
+        }
         return button;
-    }
-
-    function createSpeechIconSvg() {
-        const svg = createSvgElement("svg", {
-            viewBox: "0 0 24 24",
-            fill: "none",
-            stroke: "currentColor",
-            "stroke-width": "2",
-            "stroke-linecap": "round",
-            "stroke-linejoin": "round",
-            "aria-hidden": "true",
-            focusable: "false",
-        });
-        svg.classList.add("ak-romanization-speech-icon");
-
-        svg.appendChild(
-            createSvgElement("path", {
-                d: "M8.8 20v-4.1l1.9.2a2.3 2.3 0 0 0 2.164-2.1V8.3A5.37 5.37 0 0 0 2 8.25c0 2.8.656 3.054 1 4.55a5.77 5.77 0 0 1 .029 2.758L2 20",
-            }),
-        );
-        svg.appendChild(
-            createSvgElement("path", {
-                d: "M19.8 17.8a7.5 7.5 0 0 0 .003-10.603",
-            }),
-        );
-        svg.appendChild(
-            createSvgElement("path", {
-                d: "M17 15a3.5 3.5 0 0 0-.025-4.975",
-            }),
-        );
-
-        return svg;
-    }
-
-    function createTimingIconSvg() {
-        const svg = createSvgElement("svg", {
-            viewBox: "0 0 24 24",
-            fill: "none",
-            stroke: "currentColor",
-            "stroke-width": "2",
-            "stroke-linecap": "round",
-            "stroke-linejoin": "round",
-            "aria-hidden": "true",
-            focusable: "false",
-        });
-        svg.classList.add("ak-timing-clock-icon");
-        svg.appendChild(
-            createSvgElement("circle", {
-                cx: "12",
-                cy: "13",
-                r: "8",
-            }),
-        );
-        svg.appendChild(
-            createSvgElement("path", {
-                d: "M12 9v4l2.5 1.5",
-            }),
-        );
-        svg.appendChild(
-            createSvgElement("path", {
-                d: "M9 2h6M12 2v3",
-            }),
-        );
-        return svg;
     }
 
     function handleTimingPopoverDismissPointerDown(event: Event) {
@@ -1117,35 +1068,44 @@ export function createControlsPreferences(dependencies: Dependencies) {
         popover.dataset.akOwned = "1";
         popover.setAttribute("role", "dialog");
         popover.setAttribute("aria-label", "Lyrics timing assistant");
+        const heading = document.createElement("h2");
+        heading.className = "ak-timing-heading";
+        heading.textContent = "Adjust timing";
+        const header = document.createElement("header");
+        header.className = "lb-popup-header";
+        const close = createTimingActionButton("Close", "close", "close", "", true);
+        header.append(heading, close);
+        popover.appendChild(header);
 
         const compactRow = document.createElement("div");
         compactRow.className = "ak-timing-compact-row";
-        compactRow.appendChild(createTimingActionButton("−0.1", "minus-fine"));
+        compactRow.appendChild(createTimingActionButton("Decrease timing by 0.1 seconds", "minus-fine", "minus", "", true));
 
         const current = document.createElement("strong");
         current.className = "ak-timing-current-value";
         compactRow.appendChild(current);
 
-        compactRow.appendChild(createTimingActionButton("+0.1", "plus-fine"));
+        compactRow.appendChild(createTimingActionButton("Increase timing by 0.1 seconds", "plus-fine", "plus", "", true));
 
-        const sync = createTimingActionButton("Sync lyric to now", "sync-one", "ak-timing-action-wide ak-timing-action-primary");
+        const sync = createTimingActionButton("Sync lyric to now", "sync-one", "sync", "ak-timing-action-wide lb-primary");
         sync.setAttribute("aria-live", "polite");
 
-        const reset = createTimingActionButton("Reset", "reset", "ak-timing-action-wide");
+        const reset = createTimingActionButton("Reset", "reset", "reset", "ak-timing-action-wide");
 
         const timingLabel = document.createElement("div");
         timingLabel.textContent = "Personal timing adjustment";
-        timingLabel.className = "ak-timing-shared-description";
+        timingLabel.className = "ak-timing-shared-description lb-field-label";
         popover.appendChild(timingLabel);
         const sharedLabel = document.createElement("div");
-        sharedLabel.className = "ak-timing-shared-value";
+        sharedLabel.className = "ak-timing-shared-value lb-help";
         popover.appendChild(sharedLabel);
         popover.appendChild(compactRow);
         popover.appendChild(sync);
         popover.appendChild(reset);
 
         popover.addEventListener("click", (event) => {
-            const button = eventElement(event)?.closest<HTMLElement>("[data-ak-timing-action]") ?? null;
+            const target = event.target instanceof Element ? event.target : null;
+            const button = target?.closest<HTMLElement>("[data-ak-timing-action]") ?? null;
 
             if (!button) return;
 
@@ -1154,7 +1114,11 @@ export function createControlsPreferences(dependencies: Dependencies) {
 
             const action = button.dataset.akTimingAction;
 
-            if (action === "minus-fine") {
+            if (action === "close") {
+                removeTimingPopover();
+                state.timingControls?.focus({ preventScroll: true });
+                return;
+            } else if (action === "minus-fine") {
                 adjustTimingOffsetSeconds(-TIMING_OFFSET_FINE_STEP_SECONDS);
             } else if (action === "plus-fine") {
                 adjustTimingOffsetSeconds(TIMING_OFFSET_FINE_STEP_SECONDS);
@@ -1169,6 +1133,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
 
         host.appendChild(popover);
         state.timingPopover = popover;
+        document.dispatchEvent(new CustomEvent("lyricbridge:timing-panel", { detail: popover }));
         installTimingPopoverDismissListeners();
         updateTimingControlsUi();
 
@@ -1219,7 +1184,9 @@ export function createControlsPreferences(dependencies: Dependencies) {
             const icon = document.createElement("span");
             icon.className = "ak-timing-chip-icon";
             icon.setAttribute("aria-hidden", "true");
-            icon.appendChild(createTimingIconSvg());
+            const svg = createIcon("timing");
+            svg.classList.add("ak-timing-clock-icon");
+            icon.appendChild(svg);
 
             const value = document.createElement("span");
             value.className = "ak-timing-chip-value";
@@ -1286,7 +1253,9 @@ export function createControlsPreferences(dependencies: Dependencies) {
             const icon = document.createElement("span");
             icon.className = "ak-romanization-icon";
             icon.setAttribute("aria-hidden", "true");
-            icon.appendChild(createSpeechIconSvg());
+            const svg = createIcon("speech");
+            svg.classList.add("ak-romanization-speech-icon");
+            icon.appendChild(svg);
 
             button.appendChild(icon);
             button.addEventListener("click", (event) => {
@@ -1428,8 +1397,6 @@ export function createControlsPreferences(dependencies: Dependencies) {
         beginTimingSyncMode,
         removeTimingPopover,
         createTimingActionButton,
-        createSpeechIconSvg,
-        createTimingIconSvg,
         handleTimingPopoverDismissPointerDown,
         handleTimingPopoverDismissKeyDown,
         installTimingPopoverDismissListeners,

@@ -1212,7 +1212,6 @@ export function installRenderer() {
         lifecycle,
         warn: (...args) => warn(...args),
         sourceTimelineTicks: (...args) => sourceTimelineTicks(...args),
-        createSvgElement: (...args) => createSvgElement(...args),
         TIMING_OFFSET_FINE_STEP_SECONDS,
         queueDecoration: (...args) => queueDecoration(...args),
         requestGoogleRomanizationForLyrics: (...args) => requestGoogleRomanizationForLyrics(...args),

@@ -24,16 +24,42 @@ public static class LyricRanking
         }
         var coverage = sung == 0 ? 0 : 100d * word / sung; var rank = word > 0 ? (coverage >= 80 ? 3 : 2) : lined > 0 ? 1 : 0; return (new(rank switch { 3 => "mostly-word-timed", 2 => "partially-word-timed", 1 => "line-timed", _ => "plain" }, rank, coverage, sung, word, invalid), new(sung == 0 ? 0 : 100d * translated / sung, sung == 0 ? 0 : 100d * pronounced / sung));
     }
+    private static (int Order, string? Reason) Quality(Candidate a, Candidate b)
+    {
+        var x = a.Assessment; var y = b.Assessment;
+        int order = (y?.Eligible == true).CompareTo(x?.Eligible == true); if (order != 0) return (order, "recording-match");
+        order = (y?.Tier ?? 0).CompareTo(x?.Tier ?? 0); if (order != 0) return (order, "recording-match");
+        order = (y?.Timing?.Rank ?? -1).CompareTo(x?.Timing?.Rank ?? -1); if (order != 0) return (order, "timing");
+        order = (y?.Timing?.Coverage ?? 0).CompareTo(x?.Timing?.Coverage ?? 0); if (order != 0) return (order, "timing-coverage");
+        order = (y?.Score ?? b.Score).CompareTo(x?.Score ?? a.Score); if (order != 0) return (order, "match-score");
+        order = (y?.Auxiliary?.Completeness ?? 0).CompareTo(x?.Auxiliary?.Completeness ?? 0); if (order != 0) return (order, "auxiliary-completeness");
+        return (0, null);
+    }
+    public static int CompareQuality(Candidate a, Candidate b) => Quality(a, b).Order;
     public static int Compare(Candidate a, Candidate b)
     {
-        var x = a.Assessment!; var y = b.Assessment!; int v = y.Eligible.CompareTo(x.Eligible); if (v != 0) return v; v = y.Tier.CompareTo(x.Tier); if (v != 0) return v; v = (y.Timing?.Rank ?? -1).CompareTo(x.Timing?.Rank ?? -1); if (v != 0) return v; v = (y.Timing?.Coverage ?? 0).CompareTo(x.Timing?.Coverage ?? 0); if (v != 0) return v; v = y.Score.CompareTo(x.Score); if (v != 0) return v; v = (y.Auxiliary?.Completeness ?? 0).CompareTo(x.Auxiliary?.Completeness ?? 0); if (v != 0) return v; v = x.ProviderOrder.CompareTo(y.ProviderOrder); return v != 0 ? v : StringComparer.Ordinal.Compare(Key(a), Key(b));
+        var order = CompareQuality(a, b); if (order != 0) return order;
+        order = (a.Assessment?.ProviderOrder ?? 0).CompareTo(b.Assessment?.ProviderOrder ?? 0);
+        return order != 0 ? order : StringComparer.Ordinal.Compare(Key(a), Key(b));
     }
     public static string? Improvement(Candidate candidate, Candidate baseline)
-    { var a = candidate.Assessment; var b = baseline.Assessment; if (a?.Eligible != true || b == null) return null; if (!b.Eligible || a.Tier > b.Tier) return "recording-match"; if (a.Tier == b.Tier && (a.Timing?.Rank ?? -1) > (b.Timing?.Rank ?? -1)) return "timing"; return null; }
+    {
+        if (candidate.Verification != "verified" || candidate.Assessment?.Eligible != true || baseline.Assessment == null) return null;
+        var comparison = Quality(candidate, baseline);
+        return comparison.Order < 0 ? comparison.Reason : null;
+    }
     public static string ImprovementDescription(Candidate candidate, Candidate baseline, string reason)
     {
-        static string Tier(int tier) => tier == 2 ? "Strong" : tier == 1 ? "Possible" : "Low";
-        static string TimingName(TimingAssessment? timing) => timing?.Category.Replace('-', ' ') ?? "unverified timing";
-        return reason == "recording-match" ? Tier(candidate.Assessment!.Tier) + " metadata match improves on the current " + Tier(baseline.Assessment!.Tier) + " match." : TimingName(candidate.Assessment!.Timing) + " improves on the current " + TimingName(baseline.Assessment!.Timing) + " within the same match tier.";
+        var a = candidate.Assessment!; var b = baseline.Assessment!;
+        static string Percent(double value) => value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "%";
+        return reason switch
+        {
+            "recording-match" => $"Recording match: {(b.Eligible ? "eligible" : "ineligible")} tier {b.Tier} → eligible tier {a.Tier}.",
+            "timing" => $"Timing: {b.Timing?.Category ?? "unverified"} → {a.Timing?.Category ?? "unverified"}.",
+            "timing-coverage" => $"Word-timing coverage: {Percent(b.Timing?.Coverage ?? 0)} → {Percent(a.Timing?.Coverage ?? 0)}.",
+            "match-score" => $"Match score: {b.Score} → {a.Score}.",
+            "auxiliary-completeness" => $"Translation: {Percent(b.Auxiliary?.TranslationCoverage ?? 0)} → {Percent(a.Auxiliary?.TranslationCoverage ?? 0)}; pronunciation: {Percent(b.Auxiliary?.PronunciationCoverage ?? 0)} → {Percent(a.Auxiliary?.PronunciationCoverage ?? 0)}.",
+            _ => throw new ArgumentException("Unknown improvement reason.", nameof(reason))
+        };
     }
 }

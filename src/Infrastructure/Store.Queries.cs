@@ -10,5 +10,4 @@ public sealed partial class Store : ILyricQueryRepository
     public IReadOnlyList<Variant> Versions(string hash) => Variants(hash);
     public AuxiliarySelection? AuxiliaryChoice(Guid user, string hash, string kind, string language) => Get<AuxiliarySelection>("auxiliary-choice", user.ToString("N") + ":" + hash + ":" + kind + ":" + language);
     public TimingCorrection? Timing(Guid item, string hash) => Get<TimingCorrection>("timing-correction", item.ToString("N") + ":" + hash);
-    public VersionSnapshot? PreviousSelection(Guid item) => Get<VersionSnapshot>("previous", item.ToString("N"));
 }

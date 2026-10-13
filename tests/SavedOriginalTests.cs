@@ -38,14 +38,13 @@ public sealed class SavedOriginalTests : IDisposable
         Assert.Equal(pronunciation.Key, store.AuxiliaryChoice(user, first.Hash, "pronunciation", "")!.Key);
         Assert.Equal(1.25, store.Timing(item, first.Hash)!.Seconds);
         Assert.Equal("first external file", store.Get<RawLyrics>("raw", first.Hash)!.Original);
-        Assert.Equal(second.Hash, store.PreviousSelection(item)!.Lyrics!.Hash);
-        store.RevertSelection(item); Assert.Equal(second.Hash, store.Selection(item).Lyrics!.Hash);
+        store.SelectOriginal(item, second.Hash); Assert.Equal(second.Hash, store.Selection(item).Lyrics!.Hash);
         store.SelectOriginal(item, first.Hash); Assert.Equal(2, store.Variants(first.Hash).Count);
     }
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void CurrentAndPreviousDeletionClearsReferencesAndPreservesOtherOriginal(bool current)
+    public void OriginalDeletionClearsReferencesAndPreservesOtherOriginal(bool current)
     {
         var store = new Store(directory); var item = Guid.NewGuid(); var first = Lyrics("first"); var second = Lyrics("second");
         store.ApplySelection(item, new(first, null)); store.ApplySelection(item, new(second, null));
@@ -55,9 +54,8 @@ public sealed class SavedOriginalTests : IDisposable
         if (current)
         {
             Assert.Equal(first.Hash, store.Selection(item).Lyrics!.Hash); Assert.False(store.DiscoverySuppressed(item));
-            Assert.Null(store.PreviousSelection(item));
         }
-        else { Assert.Equal(second.Hash, store.Selection(item).Lyrics!.Hash); Assert.Null(store.PreviousSelection(item)); }
+        else { Assert.Equal(second.Hash, store.Selection(item).Lyrics!.Hash); }
         Assert.Throws<WorkflowException>(() => store.SelectOriginal(item, target.Hash));
         Assert.Throws<WorkflowException>(() => store.DeleteOriginal(item, target.Hash));
         AssertNoDanglingReferences();
@@ -65,29 +63,29 @@ public sealed class SavedOriginalTests : IDisposable
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void CurrentDeletionRestoresPreviousOrNewestOriginalWithItsAuxiliaryState(bool previousSurvives)
+    public void CurrentDeletionRestoresNewestRemainingOriginalWithItsAuxiliaryState(bool deleteNewest)
     {
         var store = new Store(directory); var item = Guid.NewGuid(); var user = Guid.NewGuid();
         var older = Lyrics("older"); var recent = Lyrics("recent"); var deleting = Lyrics("deleting");
         store.ApplySelection(item, new(older, null)); store.ApplySelection(item, new(recent, null)); store.ApplySelection(item, new(deleting, null));
         foreach (var saved in store.SavedOriginals(item)) store.Put("saved-original", item.ToString("N") + ":" + saved.Hash,
             saved with { SavedAt = DateTimeOffset.UnixEpoch.AddDays(saved.Hash == recent.Hash ? 2 : 1) });
-        var replacement = previousSurvives ? older : recent;
+        var replacement = deleteNewest ? older : recent;
         var variant = new Variant("restored", replacement.Hash, "translation", "en", "fixture", "", new() { ["line"] = "saved text" });
         store.Put("variant", variant.Key, variant);
         new LanguageVersionService(store).Select(user, replacement, new(replacement.Hash, "translation", variant.Key), "en");
         store.SelectOriginal(item, replacement.Hash);
         Assert.True(store.SaveTiming(item, store.Selection(item), new(replacement.Hash, "timeline", 1.5)));
         store.SelectOriginal(item, deleting.Hash);
-        if (!previousSurvives) store.Delete("previous", item.ToString("N"));
+        if (deleteNewest) store.DeleteOriginal(item, recent.Hash);
         store.DeleteOriginal(item, deleting.Hash);
-        Assert.Equal(replacement.Hash, store.Selection(item).Lyrics!.Hash); Assert.Null(store.PreviousSelection(item));
+        Assert.Equal(replacement.Hash, store.Selection(item).Lyrics!.Hash);
         Assert.False(store.DiscoverySuppressed(item)); Assert.Equal(1.5, store.Timing(item, replacement.Hash)!.Seconds);
         Assert.Equal(variant.Key, store.AuxiliaryChoice(user, replacement.Hash, "translation", "en")!.Key);
         Assert.Single(store.Variants(replacement.Hash)); AssertNoDanglingReferences();
     }
     [Fact]
-    public void DeletingTheSameCurrentAndPreviousOriginalRemovesItsChoicesButKeepsExternalFiles()
+    public void DeletingRepeatedlySelectedOriginalRemovesItsChoicesButKeepsExternalFiles()
     {
         var store = new Store(directory); var song = Guid.NewGuid(); var user = Guid.NewGuid(); var original = Lyrics("original");
         var media = Path.Combine(directory, "external.flac"); var lyricFile = Path.Combine(directory, "external.lrc");
@@ -99,9 +97,25 @@ public sealed class SavedOriginalTests : IDisposable
         new LanguageVersionService(store).Select(user, original, new(original.Hash, "translation", variant.Key), "en");
         Assert.True(store.SaveTiming(song, store.Selection(song), new(original.Hash, "timeline", 2)));
         store.DeleteOriginal(song, original.Hash);
-        Assert.Null(store.Selection(song).Lyrics); Assert.Null(store.PreviousSelection(song)); Assert.Null(store.Timing(song, original.Hash));
+        Assert.Null(store.Selection(song).Lyrics); Assert.Null(store.Timing(song, original.Hash));
         Assert.Null(store.Get<RawLyrics>("raw", original.Hash)); Assert.Empty(store.Variants(original.Hash)); Assert.Empty(store.All<AuxiliarySelection>("auxiliary-choice"));
         Assert.Equal("media sentinel", File.ReadAllText(media)); Assert.Equal("lyric sentinel", File.ReadAllText(lyricFile)); AssertNoDanglingReferences();
+    }
+    [Fact]
+    public void DeletingLastOriginalReportsPausedSearchAcrossRestartUntilRetry()
+    {
+        var store = new Store(directory); var song = Guid.NewGuid(); var original = Lyrics("deleted");
+        store.ApplySelection(song, new(original, null)); store.DeleteOriginal(song, original.Hash);
+        store = new Store(directory);
+        var providers = ProviderRegistry.WithSources();
+        var retrieval = new Retrieval(store, providers, NullLogger<Retrieval>.Instance);
+        using var discovery = new Discovery(store, providers, retrieval);
+        var track = new Lyricify.Lyrics.Models.TrackMultiArtistMetadata { Title = "fixture", Artists = ["fixture"] };
+        Assert.Equal("cleared", discovery.Start(song, track).State);
+        Assert.Equal("cleared", discovery.Status(song).State);
+        discovery.Start(song, track, true);
+        Assert.False(store.DiscoverySuppressed(song));
+        Assert.NotEqual("cleared", discovery.Status(song).State);
     }
     [Fact]
     public void SharedSongAndCompositionReferencesPreserveContentUntilLastOwnerIsRemoved()
@@ -122,14 +136,12 @@ public sealed class SavedOriginalTests : IDisposable
         Assert.True(store.GetJob(unaffected.Id)!.OutputDeleted); AssertNoDanglingReferences();
     }
     [Theory]
-    [InlineData("previous")]
     [InlineData("offer")]
     [InlineData("job")]
     public void ExternalSnapshotsOffersAndBackgroundWorkProtectSharedContent(string owner)
     {
         var store = new Store(directory); var song = Guid.NewGuid(); var other = Guid.NewGuid(); var original = Lyrics("original");
         store.ApplySelection(song, new(original, null));
-        if (owner == "previous") store.Put("previous", other.ToString("N"), new VersionSnapshot(original, null));
         if (owner == "offer") store.Put("better", other.ToString("N"), new ImprovementOffer(original.Hash, original, new("fixture", "id", "title", "artist", "", null, 100), "fixture", "fixture"));
         Job? job = owner == "job" ? Running(store, other, original) : null;
         Assert.True(store.DeleteOriginal(song, original.Hash).SharedContentRetained); Assert.NotNull(store.GetDocument(original.Hash));

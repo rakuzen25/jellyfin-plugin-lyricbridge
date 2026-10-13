@@ -1,3 +1,5 @@
+import { icon, type IconName } from "../shared/icons.ts";
+export { icon } from "../shared/icons.ts";
 /** Native DOM controls shared by bridge settings and search panels. */
 export const e = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string | null) => {
     const node = document.createElement(tag);
@@ -5,41 +7,8 @@ export const e = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, t
     if (text !== undefined) node.textContent = text;
     return node;
 };
-// Small original SVG glyphs: local, font-independent and decorative.
-const glyphs = {
-    close: "M6 6l12 12M18 6L6 18",
-    trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7",
-    settings: "M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6",
-    search: "M15 15l5 5M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0",
-    preview: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0",
-    check: "M4 12l5 5L20 6",
-    retry: "M20 7v5h-5M20 12a8 8 0 1 0-2 6",
-    generate: "M12 3v6M9 6h6M5 12v6M2 15h6M18 13v8M14 17h8",
-    info: "M12 10v7M12 7h.01M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0",
-    warning: "M12 3L2 21h20L12 3M12 9v5M12 17h.01",
-    edit: "M4 20l1-5L16 4l4 4L9 19l-5 1",
-    sort: "M4 6h16M4 12h11M4 18h6",
-    chevron: "M9 5l7 7-7 7",
-    back: "M12 5l-7 7 7 7M5 12h15",
-    external: "M14 3h7v7M21 3L11 13M10 3H3v18h18v-7",
-    import: "M14 3H5v18h14V8l-5-5M14 3v5h5M12 10v7M9 14l3 3 3-3",
-    library: "M4 4h4v16H4zM10 4h4v16h-4zM17 4l4 15-3 1-4-15z",
-    timing: "M9 3h6M12 3v3M18 5l2 2M12 10v5l3 2M21 14a9 9 0 1 1-18 0 9 9 0 0 1 18 0",
-    music: "M9 18V5l11-2v12M9 5l11-2M9 18a3 3 0 1 1-3-3 3 3 0 0 1 3 3M20 15a3 3 0 1 1-3-3 3 3 0 0 1 3 3",
-};
-export const icon = (name: keyof typeof glyphs) => {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("aria-hidden", "true");
-    svg.setAttribute("focusable", "false");
-    svg.classList.add("lb-icon");
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", glyphs[name]);
-    svg.append(path);
-    return svg;
-};
 interface ButtonOptions {
-    icon?: keyof typeof glyphs;
+    icon?: IconName;
     iconOnly?: boolean;
     appearance?: "primary" | "danger" | "text";
 }
@@ -107,4 +76,10 @@ export function toggle(parent: HTMLElement, label: string, value: boolean, chang
     input.checked = value;
     input.onchange = () => change(input.checked);
     return field(parent, label, input, help);
+}
+
+/** Keep inline generation setup and its action button in sync after panel reuse. */
+export function setGenerationPanelOpen(panel: HTMLElement, open: boolean): void {
+    panel.hidden = !open;
+    panel.parentElement?.querySelector<HTMLButtonElement>(`[aria-controls="${panel.id}"]`)?.setAttribute("aria-expanded", String(open));
 }

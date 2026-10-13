@@ -101,7 +101,7 @@ public sealed class WebRendererIntegration : BackgroundService
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or RegexMatchTimeoutException)
         {
             logger.LogWarning("LyricBridge web injection could not reconcile ({Type})", error.GetType().Name);
-            return Set(enabled(), transformed && enabled() ? "file-transformation" : "none", transformed ? "Serve-time transformation registered, but disk cleanup failed; check web-root permissions before uninstall" : "Web index could not be updated; check web-root permissions and HTML, or install File Transformation compatible with your Jellyfin version", transformed ? "warning" : "error");
+            return Set(enabled(), transformed && enabled() ? "file-transformation" : "none", transformed ? "Serve-time transformation registered, but disk cleanup failed; check write access to the web-root directory before uninstall" : "Web index could not be updated; Jellyfin needs write access to the web-root directory, not just index.html. Check directory permissions and HTML, or install File Transformation compatible with your Jellyfin version", transformed ? "warning" : "error");
         }
         finally { gate.Release(); }
     }

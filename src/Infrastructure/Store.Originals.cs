@@ -112,7 +112,6 @@ public sealed partial class Store
             var saved = ReadRecord<SavedOriginal>(c, tx, "saved-original", id + ":" + hash) ?? throw new WorkflowException(404, "original_unavailable", "This saved original is no longer available.");
             var doc = ReadRecord<RichLyrics>(c, tx, "document", hash) ?? throw new WorkflowException(409, "original_unavailable", "The saved original content is unavailable.");
             doc.Manual = true;
-            WriteRecord(c, tx, "previous", id, ReadSelection(c, tx, id));
             WriteSelection(c, tx, id, new(doc, null, null, saved.Assessment), null); tx.Commit();
         }
     }
@@ -139,13 +138,10 @@ public sealed partial class Store
             Fence("song:" + id); Fence("original:" + id + ":" + hash);
             void Remove(string kind, string key) => WriteUnchecked<object>(c, tx, kind, key, null);
             Remove("saved-original", id + ":" + hash); Remove("timing-correction", id + ":" + hash);
-            var previous = ReadRecord<VersionSnapshot>(c, tx, "previous", id);
-            if (previous?.Lyrics?.Hash == hash) Remove("previous", id);
             if (ReadSelection(c, tx, id).Lyrics?.Hash == hash)
             {
                 var surviving = ReadRecords(c, tx).Where(r => r.Kind == "saved-original").Select(r => Codec.Deserialize<SavedOriginal>(r.Payload)!)
-                    .Where(o => o.ItemId == item).OrderByDescending(o => o.Hash == previous?.Lyrics?.Hash)
-                    .ThenByDescending(o => o.SavedAt).ThenBy(o => o.Hash, StringComparer.Ordinal);
+                    .Where(o => o.ItemId == item).OrderByDescending(o => o.SavedAt).ThenBy(o => o.Hash, StringComparer.Ordinal);
                 SavedOriginal? replacement = null; RichLyrics? lyrics = null;
                 foreach (var candidate in surviving)
                 {
@@ -159,7 +155,6 @@ public sealed partial class Store
                     WriteUnchecked(c, tx, "selected", id, lyrics);
                     WriteUnchecked(c, tx, "selection-assessment", id, replacement!.Assessment);
                     Remove("instrumental", id); Remove("rejected-match", id); Remove("discovery-suppressed", id);
-                    if (previous?.Lyrics?.Hash == lyrics.Hash) Remove("previous", id);
                 }
                 else
                 {

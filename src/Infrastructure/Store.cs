@@ -104,5 +104,5 @@ public sealed partial class Store : IJobRepository
             using var compact = c.CreateCommand(); compact.CommandText = "PRAGMA wal_checkpoint(TRUNCATE); VACUUM; PRAGMA wal_checkpoint(TRUNCATE);"; compact.ExecuteNonQuery(); return count;
         }
     }
-    public void Save(Guid item, RichLyrics lyrics, RawLyrics? raw = null) => ApplySelection(item, new(lyrics, null), raw, remember: false);
+    public void Save(Guid item, RichLyrics lyrics, RawLyrics? raw = null) => ApplySelection(item, new(lyrics, null), raw);
 }

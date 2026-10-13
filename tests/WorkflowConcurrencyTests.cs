@@ -84,7 +84,7 @@ public sealed class WorkflowConcurrencyTests : IDisposable
         Assert.Null(store.Get<TimingCorrection>("timing-correction", item.ToString("N") + ":" + first.Hash));
     }
     [Fact]
-    public void UpgradeAtomicallyRemembersSelectionAndConsumesOffer()
+    public void UpgradeAtomicallyReplacesSelectionAndConsumesOffer()
     {
         var store = new Store(directory); var item = Guid.NewGuid();
         var first = new RichLyrics { Lines = [new() { Id = "line", Text = "first" }] }; store.ApplySelection(item, new(first, null));
@@ -95,7 +95,8 @@ public sealed class WorkflowConcurrencyTests : IDisposable
         Assert.True(store.Selection(item).Lyrics!.Manual);
         Assert.Equal("better", store.Selection(item).Lyrics!.Lines[0].Text);
         Assert.Null(store.Get<ImprovementOffer>("better", item.ToString("N")));
-        store.RevertSelection(item); Assert.Equal("first", store.Selection(item).Lyrics!.Lines[0].Text);
+        Assert.Contains(store.SavedOriginals(item), original => original.Hash == first.Hash);
+        store.SelectOriginal(item, first.Hash); Assert.Equal("first", store.Selection(item).Lyrics!.Lines[0].Text);
     }
     [Fact]
     public void ResetRejectsStaleJobAdmissionAndCompletionWithoutRecreatingHistory()

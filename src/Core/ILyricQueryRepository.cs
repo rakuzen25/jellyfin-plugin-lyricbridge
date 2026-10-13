@@ -12,5 +12,4 @@ public interface ILyricQueryRepository
     IReadOnlyList<Variant> Versions(string hash);
     AuxiliarySelection? AuxiliaryChoice(Guid user, string hash, string kind, string language);
     TimingCorrection? Timing(Guid item, string hash);
-    VersionSnapshot? PreviousSelection(Guid item);
 }

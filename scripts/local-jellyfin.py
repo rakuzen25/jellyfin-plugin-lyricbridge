@@ -75,7 +75,7 @@ def install() -> None:
     archive = REPOSITORY / "dist" / f"lyricbridge-{release.version}.zip"
     if not archive.is_file():
         raise SystemExit(
-            "Package not found. Run without --no-build to build the current checkout."
+            "Package not found. Run python3 scripts/local-jellyfin.py rebuild to build the current checkout."
         )
     plugins = DATA / "config/plugins"
     plugins.mkdir(parents=True, exist_ok=True)
@@ -160,10 +160,8 @@ def media_paths(requested: list[str] | None) -> list[str]:
     return paths
 
 
-def start(port: int, no_build: bool, requested_mounts: list[str] | None = None) -> None:
+def start(port: int, requested_mounts: list[str] | None = None) -> None:
     mounts = media_paths(requested_mounts)
-    if not no_build:
-        build()
     DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
     for name in ("config", "cache", "media"):
         (DATA / name).mkdir(exist_ok=True)
@@ -197,6 +195,12 @@ def start(port: int, no_build: bool, requested_mounts: list[str] | None = None) 
     wait_ready(port)
 
 
+def rebuild(port: int, requested_mounts: list[str] | None = None) -> None:
+    mounts = media_paths(requested_mounts)
+    build()
+    start(port, mounts)
+
+
 def wait_ready(port: int) -> None:
     url = f"http://localhost:{port}/web/"
     for _ in range(60):
@@ -221,13 +225,12 @@ def wait_ready(port: int) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "command", choices=("start", "rebuild", "stop", "status", "logs")
+        "command",
+        choices=("start", "rebuild", "stop", "status", "logs"),
+        help="start uses the existing plugin ZIP; rebuild packages the checkout first",
     )
     parser.add_argument(
         "--port", type=int, default=18096, help="Localhost-only port (default: 18096)"
-    )
-    parser.add_argument(
-        "--no-build", action="store_true", help="Use the existing local plugin ZIP"
     )
     mount_options = parser.add_mutually_exclusive_group()
     mount_options.add_argument(
@@ -247,9 +250,9 @@ def main() -> None:
     if not shutil.which("docker"):
         parser.error("Docker is required")
     if args.command in ("start", "rebuild"):
-        start(
+        action = rebuild if args.command == "rebuild" else start
+        action(
             args.port,
-            args.no_build,
             [] if args.clear_media_mounts else args.media_mount,
         )
     else:

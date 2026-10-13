@@ -18,8 +18,8 @@
         "check": "pnpm lint && pnpm format:check && pnpm knip && pnpm typecheck && pnpm run check:python && pnpm run check:dotnet",
         "lint": "eslint . --max-warnings 0",
         "lint:fix": "pnpm lint --fix",
-        "format": "prettier --write \"frontend/**/*.{ts,mjs,json}\" \"browser-tests/*.{cjs,mjs,json}\" \"scripts/**/*.mjs\" \"*.{json,mjs,yaml}\" \".github/**/*.yml\"",
-        "format:check": "prettier --check \"frontend/**/*.{ts,mjs,json}\" \"browser-tests/*.{cjs,mjs,json}\" \"scripts/**/*.mjs\" \"*.{json,mjs,yaml}\" \".github/**/*.yml\"",
+        "format": "prettier --write \"frontend/**/*.{ts,mjs,json,css,html}\" \"browser-tests/*.{cjs,mjs,json}\" \"scripts/**/*.mjs\" \"*.{json,mjs,yaml}\" \".github/**/*.yml\"",
+        "format:check": "prettier --check \"frontend/**/*.{ts,mjs,json,css,html}\" \"browser-tests/*.{cjs,mjs,json}\" \"scripts/**/*.mjs\" \"*.{json,mjs,yaml}\" \".github/**/*.yml\"",
         "knip": "knip",
         "test:tooling": "node --test scripts/*.test.mjs"
     },

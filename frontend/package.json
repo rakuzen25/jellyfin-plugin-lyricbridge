@@ -11,5 +11,8 @@
     "devDependencies": {
         "esbuild": "0.28.2",
         "typescript": "5.9.3"
+    },
+    "dependencies": {
+        "lucide": "1.55.0"
     }
 }

@@ -6,7 +6,7 @@ import type {} from "../shared/runtime.ts";
 import { createApi } from "./api.ts";
 import { auxiliary as auxiliaryText } from "./auxiliary.ts";
 import type { BridgeDocument, ServiceCapability, SourceCapability, TrackScope } from "./contracts.ts";
-import { button, disclosure, e, icon, section, select } from "./controls.ts";
+import { button, disclosure, e, icon, section, select, setGenerationPanelOpen } from "./controls.ts";
 import { createDisplayPanel } from "./display-panel.ts";
 import { GenerationMonitor, activeGeneration, parseGenerationJob, type GenerationJob } from "./generation-state.ts";
 import { createLyricDecoration } from "./lyric-view.ts";
@@ -178,7 +178,6 @@ export function installBridge() {
                 doc?.preferences?.sourceLanguage,
                 doc?.preferences?.translationLanguage,
                 doc?.songOverrides,
-                doc?.previousSelection,
                 doc?.savedOriginals,
                 doc?.canDeleteOriginals,
             ]);
@@ -260,7 +259,20 @@ export function installBridge() {
         if (!tools) return;
         const node = tools.querySelector<HTMLElement>(".lb-status");
         notice(node, message, ttl);
-        if (message) requireValue(node).prepend(icon(error ? "warning" : message.startsWith("Searching") ? "info" : "check"));
+        if (message) {
+            const name = error
+                ? "warning"
+                : message.startsWith("Searching") || ["missing", "cleared", "rejected"].includes(current?.state || "")
+                  ? "info"
+                  : "check";
+            if (requireValue(node).dataset.icon !== name || !requireValue(node).querySelector(":scope > .lb-icon")) {
+                requireValue(node)
+                    .querySelectorAll(":scope > .lb-icon")
+                    .forEach((existing) => existing.remove());
+                requireValue(node).prepend(icon(name));
+            }
+            requireValue(node).dataset.icon = name;
+        }
         requireValue(node).classList.toggle("lb-error", error);
     }
     function showError(cause: unknown, parent: HTMLElement | null | undefined = undefined, retryAction: () => unknown = retry) {
@@ -284,9 +296,16 @@ export function installBridge() {
         if (box.dataset.noticeSignature === signature) return;
         box.dataset.noticeSignature = signature;
         box.dataset.noticeKey = key;
-        box.replaceChildren(icon("warning"), e("strong", "", safeMessage(error)));
+        const informational = error.details?.code === "local_lyrics_missing";
+        box.classList.toggle("lb-notice", informational);
+        box.replaceChildren(
+            icon(informational ? "info" : "warning"),
+            e("strong", "", informational ? "Jellyfin has no lyrics for this song. Try importing a file." : safeMessage(error)),
+        );
+        const actions = e("div", "lb-notice-actions");
+        box.append(actions);
         const d = error.details;
-        if (d) {
+        if (d && !informational) {
             const details = e("details", "lb-error-details");
             details.append(
                 e("summary", "", "Details"),
@@ -298,11 +317,11 @@ export function installBridge() {
             );
             for (const sourceError of error.providerErrors || [])
                 details.append(e("p", "", sourceError.message + (sourceError.diagnosticId ? " · Reference " + sourceError.diagnosticId : "")));
-            box.append(details);
+            actions.append(details);
         }
-        if (d?.code === "sign_in_required") box.append(button("Sign in", () => (location.hash = "/login"), "", { icon: "external" }));
+        if (d?.code === "sign_in_required") actions.append(button("Sign in", () => (location.hash = "/login"), "", { icon: "external" }));
         else if (d?.code === "service_not_configured")
-            box.append(
+            actions.append(
                 button(
                     "Set up service",
                     () => {
@@ -314,7 +333,7 @@ export function installBridge() {
                 ),
             );
         else if (d?.retryable)
-            box.append(
+            actions.append(
                 button(
                     "Retry",
                     () => {
@@ -326,7 +345,7 @@ export function installBridge() {
                 ),
             );
         if (!host.classList.contains("lb-job-banner"))
-            box.append(
+            actions.append(
                 button(
                     "Dismiss",
                     () => {
@@ -342,7 +361,7 @@ export function installBridge() {
                         box.remove();
                     },
                     "",
-                    { icon: "close", iconOnly: true },
+                    { icon: "close" },
                 ),
             );
     }
@@ -402,6 +421,7 @@ export function installBridge() {
             instrumental: "",
             rejected: "No correct lyric match selected",
             missing: "No lyrics found",
+            cleared: "No version selected · automatic search paused",
             failed: "No lyrics available (some sources failed)",
         };
         const initialWait = documentState().state === "searching" && performance.now() - requireValue(trackScope().loadingStarted) < 300;
@@ -417,7 +437,7 @@ export function installBridge() {
             lyricHost()?.append(message);
             if (lyricContainer()?.querySelector<HTMLElement>(".lyricsLine")) render(null);
         }
-        if (["missing", "failed", "rejected"].includes(requireValue(documentState().state)))
+        if (["missing", "failed", "rejected", "cleared"].includes(requireValue(documentState().state)))
             requireValue(tools).append(button("Search again", retry, "lb-retry", { icon: "retry" }));
         const providerKey =
             documentState().state === "partial" && documentState().errors?.length
@@ -435,7 +455,7 @@ export function installBridge() {
         if (providerKey)
             showError(
                 {
-                    message: "Some lyric sources failed. Available lyrics were retained.",
+                    message: "Some sources unavailable. Showing available lyrics.",
                     details: { code: "partial_provider_failure", retryable: true },
                     providerErrors: documentState().errors,
                     noticeKey: providerKey,
@@ -452,35 +472,45 @@ export function installBridge() {
             requireValue(tools).append(d);
         }
         if (
+            !searchPopup &&
+            documentState().canSelect &&
             documentState().better &&
             trackScope().dismissedUpgrade !==
                 (requireValue(documentState().better).hash ||
                     requireValue(documentState().better).source + ":" + requireValue(documentState().better).providerId)
         ) {
-            requireValue(tools).append(
-                button(
-                    documentState().improvement?.reason === "recording-match"
-                        ? "Better recording match available — Preview"
-                        : "Better timing available — Preview",
-                    () => openVersions(requireValue(documentState().better)),
-                    "lb-upgrade lb-primary",
-                    { icon: "timing" },
+            const offer = e("div", "lb-upgrade lb-upgrade-offer");
+            const reason = documentState().improvement?.reason;
+            offer.append(
+                e(
+                    "span",
+                    "lb-upgrade-description",
+                    reason === "recording-match"
+                        ? "Better recording match"
+                        : reason === "auxiliary-completeness"
+                          ? "Lyric update available"
+                          : reason === "match-score"
+                            ? "Better lyric match"
+                            : "Better timing",
                 ),
             );
-            requireValue(tools).append(
+            const actions = e("div", "lb-upgrade-actions");
+            actions.append(
+                button("Preview", () => openVersions(requireValue(documentState().better)), "lb-primary", { icon: "preview" }),
                 button(
-                    "Dismiss timing offer",
+                    "Dismiss",
                     () => {
                         trackScope().dismissedUpgrade =
                             requireValue(documentState().better).hash ||
                             requireValue(documentState().better).source + ":" + requireValue(documentState().better).providerId;
                         updateStatus();
                     },
-                    "lb-upgrade",
-                    { icon: "timing" },
+                    "",
+                    { icon: "close" },
                 ),
             );
-            if (!documentState().canSelect) requireValue(tools).append(e("span", "lb-source-note", "An administrator must apply this upgrade."));
+            offer.append(actions);
+            requireValue(tools).append(offer);
         }
         if (documentState().pronunciation?.state === "running" || documentState().pronunciation?.state === "queued")
             requireValue(tools).append(e("span", "lb-local-status", "Generating pronunciation…"));
@@ -544,18 +574,20 @@ export function installBridge() {
         popup.setAttribute("role", "dialog");
         popup.setAttribute("aria-label", "Lyrics settings");
         const head = e("header", "lb-popup-header");
-        head.append(
+        const heading = e("div", "lb-settings-heading");
+        heading.append(
             e("h2", "", current?.track?.title || current?.lyrics?.title || "Lyrics settings"),
-            button("Close", closePopup, "", { icon: "close", iconOnly: true }),
+            e("p", "lb-settings-artist", current?.track?.artist || current?.lyrics?.artist || ""),
         );
+        head.append(heading, button("Close", closePopup, "", { icon: "close", iconOnly: true }));
         const tabs = e("div", "lb-tabs");
         tabs.setAttribute("role", "tablist");
         tabs.setAttribute("aria-label", "Lyrics settings");
         const body = e("div", "lb-panel-body");
         for (const [name, cls] of [
             ["Song", "lb-song-panel"],
-            ["Display", "lb-display-panel"],
             ["Versions", "lb-versions-panel"],
+            ["Display", "lb-display-panel"],
         ]) {
             const tab = button(requireValue(name), () => activateSettingsTab(requireValue(name)));
             tab.dataset.tab = name;
@@ -692,6 +724,7 @@ export function installBridge() {
         const stateText: Record<string, string> = {
             instrumental: "Instrumental — no sung lyrics",
             missing: "No lyrics found",
+            cleared: "No version selected · automatic search paused",
             failed: "Lyrics could not be retrieved",
             rejected: "Automatic matching paused",
             searching: "Searching for lyrics…",
@@ -803,67 +836,38 @@ export function installBridge() {
                 if (scope === target) buildSongSummary(parent);
             },
             "",
-            { icon: "retry" },
+            { icon: "reset" },
         );
         reset.disabled = !overrides.sourceLanguage && !overrides.translationLanguage;
         language.append(reset);
-        const timing = disclosure("Shared timing");
-        timing.root.dataset.section = "timing";
-        parent.append(timing.root);
-        buildSharedTiming(timing.content);
-        if (current?.canSelect) {
-            const maintenance = disclosure("Song maintenance");
-            maintenance.root.dataset.section = "maintenance";
-            parent.append(maintenance.root);
-            const more = maintenance.content;
-            const maintenanceActions = e("div", "lb-song-actions");
-            more.append(maintenanceActions);
-            const markButton = button(
-                documentState().state === "instrumental" ? "Clear instrumental mark" : "Mark instrumental",
-                () =>
-                    confirmation(
-                        more,
-                        "Change the instrumental classification for everyone?",
-                        () => mark(documentState().state === "instrumental"),
-                        "Confirm classification",
-                        markButton,
-                    ),
-                "",
-                { icon: "music" },
-            );
-            maintenanceActions.append(markButton);
-            if (documentState().previousSelection)
-                maintenanceActions.append(
-                    button(
-                        "Revert previous selection",
-                        () => confirmation(more, "Restore the previous library selection for everyone?", () => action("revert"), "Revert selection"),
-                        "",
-                        { icon: "retry" },
-                    ),
-                );
-        }
         parent.querySelectorAll("details").forEach((n) => (n.open = expanded.includes(n.dataset.section)));
     }
     function buildSharedTiming(parent: HTMLElement) {
+        const target = scope;
         const shared = current?.timingCorrection?.seconds || 0;
+        const hash = current?.lyrics?.hash;
+        const fingerprint = current?.timingFingerprint;
         parent.append(e("p", "lb-help", "Shared: " + shared.toFixed(1) + " s. Your timing adjustment is additional."));
         if (!current?.lyrics || !documentState().canSelect || !documentState().timingFingerprint) return;
         const feedback = e("p", "lb-version-status");
         parent.append(feedback);
         async function save(reset: boolean) {
-            const target = trackScope(),
-                motion = window.JellyfinLyricMotion,
+            if (!target || scope !== target || !parent.isConnected) return;
+            const motion = window.JellyfinLyricMotion,
                 seconds = reset ? 0 : shared + (motion?.timing?.().seconds || 0);
             notice(feedback, "Saving…");
             try {
                 await api("items/" + target.itemId + "/timing", "POST", {
-                    hash: requireValue(documentState().lyrics).hash,
-                    fingerprint: documentState().timingFingerprint,
+                    hash,
+                    fingerprint,
                     seconds,
                 });
                 if (scope !== target) return;
                 if (!reset) motion?.setTimingOffset?.(0, true, false);
                 await refreshSong();
+                if (scope !== target || !parent.isConnected) return;
+                parent.replaceChildren();
+                buildSharedTiming(parent);
                 status("Shared timing correction saved", false, 4000);
             } catch (error) {
                 showError(error, parent);
@@ -872,7 +876,7 @@ export function installBridge() {
         const actions = e("div", "lb-song-actions");
         actions.append(
             button("Save timing for everyone", () => save(false), "", { icon: "timing" }),
-            button("Reset shared timing", () => save(true), "", { icon: "retry" }),
+            button("Reset shared timing", () => save(true), "", { icon: "reset" }),
         );
         parent.append(actions);
     }
@@ -1008,6 +1012,8 @@ export function installBridge() {
         importLyrics: (...args) => importLyrics(...args),
         capabilities: (...args) => capabilities(...args),
         generate: (...args) => generate(...args),
+        mark: (...args) => mark(...args),
+        reject: () => action("reject-matches"),
     });
 
     async function action(name: string) {
@@ -1175,9 +1181,9 @@ export function installBridge() {
                     if (scope !== target) return;
                     openPopup("Versions");
                     const section = requireValue(popup).querySelector<HTMLElement>('[data-song-kind="' + kind + '"]');
-                    const generation = section?.querySelector<HTMLDetailsElement>(".lb-generation");
+                    const generation = section?.querySelector<HTMLElement>(".lb-generation");
                     if (!generation) return;
-                    generation.open = true;
+                    setGenerationPanelOpen(generation, true);
                     drawJobDetails(generation, kind);
                     const detail = generation.querySelector<HTMLElement>('[data-job-detail="' + job.id + '"]');
                     if (detail) {
@@ -1249,6 +1255,7 @@ export function installBridge() {
             updateStatus();
         }
         if (ending.pending && scope) accept(ending.pending.data, scope, true, ending.pending.order);
+        if (scope && current) updateStatus();
         settingsButton?.focus();
     }
     async function importLyrics(existing: boolean) {
@@ -1262,7 +1269,8 @@ export function installBridge() {
                 await refreshSong(true);
                 status("Local lyrics selected", false, 4000);
             } catch (error) {
-                showError(error, searchPopup || popup || tools);
+                if (scope !== target) return;
+                showError(error, popup?.querySelector<HTMLElement>(".lb-original-feedback") || searchPopup || tools);
             }
         };
         if (existing) return submit("");
@@ -1273,7 +1281,10 @@ export function installBridge() {
             const file = input.files?.[0];
             if (!file) return;
             if (file.size > 1000000) {
-                showError(new Error("Choose a lyric file up to 1 MB."), searchPopup || tools);
+                showError(
+                    new Error("Choose a lyric file up to 1 MB."),
+                    popup?.querySelector<HTMLElement>(".lb-original-feedback") || searchPopup || tools,
+                );
                 return;
             }
             await submit(await file.text());
@@ -1423,12 +1434,9 @@ export function installBridge() {
         closePopup: (...args) => closePopup(...args),
         closeSearch: (...args) => closeSearch(...args),
         documentState: (...args) => documentState(...args),
-        confirmation: (...args) => confirmation(...args),
         api: (...args) => api(...args),
         playbackPreview,
         refreshSong: (...args) => refreshSong(...args),
-        render: (...args) => render(...args),
-        importLyrics: (...args) => importLyrics(...args),
         updatePanelBounds: (...args) => updatePanelBounds(...args),
         metrics,
         defaults,
@@ -1488,6 +1496,15 @@ export function installBridge() {
             },
         }),
     );
+    lifetime.on(document, "lyricbridge:timing-panel", (event) => {
+        if (!(event instanceof CustomEvent) || !(event.detail instanceof HTMLElement) || !scope || !isLyrics()) return;
+        const panel = event.detail;
+        if (!panel.isConnected || panel.querySelector(".lb-shared-timing")) return;
+        const timing = disclosure("Shared timing", "lb-shared-timing", false);
+        timing.root.dataset.section = "timing";
+        panel.append(timing.root);
+        buildSharedTiming(timing.content);
+    });
     lifetime.on(document, "keydown", (event) => {
         if (event.key === "Escape") {
             closePopup();

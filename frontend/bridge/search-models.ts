@@ -31,12 +31,20 @@ export interface SearchQuery {
     artist: string;
     source: string | null;
 }
+export interface SearchImprovement {
+    key: string;
+    hash: string;
+    baselineHash: string;
+    reason: string;
+    description: string;
+}
 export interface SearchResults {
     state: string;
     finished: number;
     total: number;
     candidates: Candidate[];
     recommended?: string | null;
+    improvement?: SearchImprovement | null;
     errors: RequestFailure[];
 }
 function record(value: unknown): value is Record<string, unknown> {
@@ -105,6 +113,16 @@ export function parseSearchAdmission(value: unknown): { id: string } {
         throw new Error("Jellyfin returned an invalid search session. Retry the search.");
     return { id: value.id };
 }
+function searchImprovement(value: unknown): value is SearchImprovement {
+    return (
+        record(value) &&
+        typeof value.key === "string" &&
+        typeof value.hash === "string" &&
+        typeof value.baselineHash === "string" &&
+        typeof value.reason === "string" &&
+        typeof value.description === "string"
+    );
+}
 export function parseSearchResults(value: unknown): SearchResults {
     if (
         !record(value) ||
@@ -115,7 +133,8 @@ export function parseSearchResults(value: unknown): SearchResults {
         !value.candidates.every(candidate) ||
         !Array.isArray(value.errors) ||
         !value.errors.every(requestFailure) ||
-        !(value.recommended == null || typeof value.recommended === "string")
+        !(value.recommended == null || typeof value.recommended === "string") ||
+        !(value.improvement == null || searchImprovement(value.improvement))
     )
         throw new Error("Jellyfin returned invalid search results. Retry the search.");
     return {
@@ -125,6 +144,7 @@ export function parseSearchResults(value: unknown): SearchResults {
         candidates: value.candidates,
         errors: value.errors,
         recommended: value.recommended,
+        improvement: value.improvement,
     };
 }
 /** Shared search ordering used by the UI without changing provider ranking policy. */

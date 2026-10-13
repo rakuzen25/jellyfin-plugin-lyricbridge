@@ -27,11 +27,13 @@ export function versionRow(version: VersionRow) {
     row.append(heading, content);
     return { row, heading, content };
 }
-export function updateVersionRow(row: HTMLElement, active: boolean, expanded: boolean) {
+export function updateVersionRow(row: HTMLElement, active: boolean, expanded: boolean, effectiveUsage?: string) {
     row.dataset.active = String(active);
-    requireValue(row.querySelector<HTMLElement>(".lb-active-label")).textContent = active ? "In use" : "";
+    requireValue(row.querySelector<HTMLElement>(".lb-active-label")).textContent = active ? "In use" : effectiveUsage || "";
     requireValue(row.querySelector<HTMLElement>(".lb-version-toggle")).setAttribute("aria-expanded", String(expanded));
     requireValue(row.querySelector<HTMLElement>(".lb-version-content")).hidden = !expanded;
     const use = row.querySelector<HTMLButtonElement>(".lb-use-version");
     if (use) use.disabled = active;
+    const preview = row.querySelector<HTMLButtonElement>(".lb-preview-version");
+    if (preview) preview.disabled = active || !!effectiveUsage || preview.dataset.loading === "true";
 }

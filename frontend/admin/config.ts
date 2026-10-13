@@ -1,3 +1,4 @@
+import { icon } from "../shared/icons.ts";
 import type { Configuration, JobSummary, WebRendererStatus } from "./contracts.ts";
 import { hostFailure } from "./contracts.ts";
 (() => {
@@ -116,7 +117,8 @@ import { hostFailure } from "./contracts.ts";
         for (const ticket of noticeTimers.values()) clearTimeout(ticket.timer);
         noticeTimers.clear();
     });
-    function changed() {
+    function changed(event?: Event) {
+        if (event?.target instanceof Element && event.target.closest("[data-config-transient]")) return;
         dirty = true;
         configRevision++;
         notice(status, "Unsaved changes");
@@ -324,9 +326,9 @@ import { hostFailure } from "./contracts.ts";
                 sources();
                 changed();
             };
-            for (const [delta, icon, label] of [
-                [-1, "keyboard_arrow_up", "Move up"],
-                [1, "keyboard_arrow_down", "Move down"],
+            for (const [delta, glyph, label] of [
+                [-1, "up", "Move up"],
+                [1, "down", "Move down"],
             ] as const) {
                 const b = button(label, () => move(delta));
                 b.className = "paper-icon-button-light";
@@ -334,10 +336,7 @@ import { hostFailure } from "./contracts.ts";
                 b.title = label;
                 b.dataset.tooltip = label;
                 b.disabled = index + delta < 0 || index + delta >= config.Sources.length;
-                const symbol = node("span", icon);
-                symbol.className = "material-icons";
-                symbol.setAttribute("aria-hidden", "true");
-                b.replaceChildren(symbol);
+                b.replaceChildren(icon(glyph));
                 header.append(b);
             }
             if (["Spotify", "AppleMusic", "Musixmatch"].includes(s.Name)) {

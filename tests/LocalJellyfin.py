@@ -36,12 +36,12 @@ class LocalSandboxTests(unittest.TestCase):
                 patch.object(sandbox, "wait_ready"),
                 patch.object(sandbox, "run") as run,
             ):
-                sandbox.start(18096, True, [str(media), str(media)])
+                sandbox.start(18096, [str(media), str(media)])
                 expected = f"type=bind,src={media},dst={media},readonly"
                 self.assertEqual(run.call_args.args.count(expected), 1)
-                sandbox.start(18096, True)
+                sandbox.start(18096)
                 self.assertIn(expected, run.call_args.args)
-                sandbox.start(18096, True, [])
+                sandbox.start(18096, [])
                 self.assertNotIn(expected, run.call_args.args)
                 self.assertEqual(
                     json.loads((data / "media-mounts.json").read_text()), []
@@ -56,9 +56,55 @@ class LocalSandboxTests(unittest.TestCase):
                 patch.object(sandbox, "install") as install,
             ):
                 with self.assertRaisesRegex(SystemExit, "directory not found"):
-                    sandbox.start(18096, False, [str(Path(directory) / "missing")])
+                    sandbox.rebuild(18096, [str(Path(directory) / "missing")])
                 build.assert_not_called()
                 install.assert_not_called()
+
+    def test_start_uses_package_and_rebuild_builds_before_install(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            with (
+                patch.object(sandbox, "DATA", Path(directory)),
+                patch.object(
+                    sandbox, "build", side_effect=lambda: calls.append("build")
+                ),
+                patch.object(
+                    sandbox, "install", side_effect=lambda: calls.append("install")
+                ),
+                patch.object(sandbox, "run"),
+                patch.object(sandbox, "wait_ready"),
+            ):
+                sandbox.start(18096)
+                self.assertEqual(calls, ["install"])
+                calls.clear()
+                sandbox.rebuild(18096)
+                self.assertEqual(calls, ["build", "install"])
+
+    def test_cli_dispatches_start_and_rebuild_without_build_flag(self) -> None:
+        for command in ("start", "rebuild"):
+            with (
+                self.subTest(command=command),
+                patch.object(sys, "argv", ["local-jellyfin.py", command]),
+                patch.object(sandbox.shutil, "which", return_value="docker"),
+                patch.object(sandbox, "start") as start,
+                patch.object(sandbox, "rebuild") as rebuild,
+            ):
+                sandbox.main()
+                selected, other = (
+                    (start, rebuild) if command == "start" else (rebuild, start)
+                )
+                selected.assert_called_once_with(18096, None)
+                other.assert_not_called()
+
+    def test_failed_rebuild_does_not_replace_running_installation(self) -> None:
+        with (
+            patch.object(sandbox, "media_paths", return_value=[]),
+            patch.object(sandbox, "build", side_effect=SystemExit("build failed")),
+            patch.object(sandbox, "start") as start,
+        ):
+            with self.assertRaisesRegex(SystemExit, "build failed"):
+                sandbox.rebuild(18096)
+            start.assert_not_called()
 
     def test_relative_media_mount_is_rejected(self) -> None:
         with self.assertRaisesRegex(SystemExit, "absolute directory"):

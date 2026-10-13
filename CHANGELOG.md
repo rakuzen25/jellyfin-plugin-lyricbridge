@@ -37,7 +37,7 @@
 
 Initial release candidate for Jellyfin 12.2 / .NET 10 on Linux x64. Install into empty LyricBridge storage; no preview data migration is provided. The plugin GUID remains unchanged.
 
-* Provider discovery, ranked manual search, transactional selection/upgrade/revert, lyric imports and native Jellyfin integration.
+* Provider discovery, ranked manual search, transactional selection/upgrade, lyric imports and native Jellyfin integration.
 * Saved multilingual versions, partial pronunciation, explicit generation profiles, approval/quota enforcement and immutable running-job settings.
 * Per-account and per-song preferences, timing corrections, retained job history and reference-safe temporary cleanup.
 * Strict TypeScript bridge and renderer modules, owned asynchronous work and standalone supported pronunciation behavior.

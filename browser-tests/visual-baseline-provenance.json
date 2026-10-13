@@ -6,5 +6,38 @@
         "jellyfin-lyric-motion.js": "78a5abec1c78c0d9caa62a88bdd653a6d8d5d39cd43378963b9156b651c2815b",
         "lyricbridge.css": "8ebd4bc44c686114ffbb0b54f08234a5c2dc6eb2caacec58e4342ab6e7712763",
         "jellyfin-lyric-motion.css": "dd714613035d957bea04a560da809395518f5eb0ce030688a1d0449b88e19e2f"
-    }
+    },
+    "reviewedUpdates": [
+        {
+            "date": "2026-10-13",
+            "reason": "Requested song/artist settings heading and Song \u2192 Versions \u2192 Display tab order; reviewed all four actual settings images and mobile diff. Playback baselines unchanged.",
+            "files": [
+                "display-settings-chromium-linux.png",
+                "display-settings-mobile-chromium-linux.png",
+                "display-settings-firefox-linux.png",
+                "display-settings-webkit-linux.png"
+            ]
+        },
+        {
+            "date": "2026-10-13",
+            "reason": "Requested migration of all static companion controls to locally bundled Lucide 1.55.0 icons, standardized at 20px with stroke width 2. Reviewed settings, playback toolbar, timing, Sync and admin icons across desktop/mobile Chromium, Firefox and WebKit. Reviewed small native Firefox media-control capture differences; lyric layout and animated instrumental note remain unchanged.",
+            "playwrightImage": "mcr.microsoft.com/playwright:v1.64.0-noble@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f",
+            "sourceAssets": {
+                "lyricbridge.js": "c708f2424b74e7a364c6d0f4d6f4b8181878939a771bd40bf9b73428dd2a497e",
+                "jellyfin-lyric-motion.js": "fefe20bd7bdc65d477ca32963ff8e2cdee9960aa071508f4efc6c145a9d42895",
+                "lyricbridge.css": "27090b5a6cda8860004401c5a8f5d0f7389fb30cb52f4b61db2433c0289b787d",
+                "jellyfin-lyric-motion.css": "decb424ec14e1f657f606f3368eb9fe0664230d18c87c6af32b18b6d6c2356a3"
+            },
+            "files": [
+                "display-settings-chromium-linux.png",
+                "display-settings-firefox-linux.png",
+                "display-settings-mobile-chromium-linux.png",
+                "display-settings-webkit-linux.png",
+                "multilingual-playback-chromium-linux.png",
+                "multilingual-playback-firefox-linux.png",
+                "multilingual-playback-mobile-chromium-linux.png",
+                "multilingual-playback-webkit-linux.png"
+            ]
+        }
+    ]
 }

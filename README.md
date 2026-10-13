@@ -34,7 +34,7 @@ Provider pronunciation takes priority. Missing Japanese romaji is prepared autom
 
 Manual scrolling stops automatic following. **Sync** recentres the active block and resumes following; it does not seek or change timing offset. Seeking or changing tracks also resumes following.
 
-**Versions → Find versions** opens a progressive search and preview dialog. Edit title/artist, filter sources, and preview lyrics or temporary playback before saving. Cancel restores the previous version and playback position. Only administrators can save, apply upgrades, mark instrumentals, or revert; other users can preview. Provider IDs are under Advanced.
+**Versions → Search versions** opens a progressive search and preview dialog. Edit title/artist, filter sources, and preview lyrics or temporary playback before saving. Cancel restores the previous version and playback position. Only administrators can save, apply upgrades, reject matches, or mark instrumentals; other users can preview. Provider IDs are under Advanced.
 
 An administrator can search candidate versions, select a version, enter a provider track ID, or explicitly search again for better timing. Manual selections are retained until another explicit selection/upgrade. QQ overrides use numeric song IDs; a search candidate also retains its song MID for line-lyrics fallback.
 

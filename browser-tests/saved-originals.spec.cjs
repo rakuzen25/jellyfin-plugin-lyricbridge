@@ -53,8 +53,8 @@ test("@workflow saved originals preview, switching, and confirmed current deleti
     await expect.poll(() => page.evaluate(() => window.LyricBridge.current.lyrics?.hash)).toBe("saved-import");
     const current = saved(page).locator('[data-hash="saved-import"]');
     await current.getByRole("button", { name: "Delete", exact: true }).click();
-    await expect(current.locator(".lb-confirmation")).toContainText("Job history is kept");
-    await expect(current.locator(".lb-confirmation")).toContainText("external lyric files are never deleted");
+    await expect(current.locator(".lb-confirmation")).toContainText("Shared content and job history are kept");
+    await expect(current.locator(".lb-confirmation")).toContainText("Media files are untouched");
     await current.getByRole("button", { name: "Cancel", exact: true }).click();
     expect(await page.evaluate(() => window.originalDeletion)).toBeUndefined();
     await current.getByRole("button", { name: "Delete", exact: true }).click();
@@ -182,13 +182,16 @@ test("@layout version accordions preserve one open row, stable headers and brows
     await other.click();
     await expect(other).toHaveAttribute("aria-expanded", "false");
     await page.getByRole("tab", { name: "Song", exact: true }).click();
-    const timing = page.locator('[data-section="timing"]');
+    await expect(page.locator('.lb-popup [data-section="timing"]')).toHaveCount(0);
+    await page.getByRole("button", { name: "Adjust timing", exact: true }).click();
+    const timing = page.locator('#ak-lyrics-timing-popover [data-section="timing"]');
     const header = timing.locator("summary");
     const closed = await header.boundingBox();
     await header.click();
     const open = await header.boundingBox();
     expect(open.height).toBe(closed.height);
     expect(open.x).toBe(closed.x);
+    await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
     await page.getByRole("tab", { name: "Display", exact: true }).click();
     const layout = page.locator(".lb-display-panel .lb-disclosure").filter({ hasText: "Text sizes and layout" });
     await layout.locator("summary").click();
@@ -198,19 +201,14 @@ test("@layout version accordions preserve one open row, stable headers and brows
     expect(new Set(controls.map((x) => JSON.stringify(x))).size).toBe(1);
 });
 
-test("@workflow current-only originals can preview but cannot be deleted", async ({ page }) => {
+test("@workflow current-only originals disable redundant preview and use", async ({ page }) => {
     await demo(page);
     await versions(page);
     const current = saved(page).locator('[data-active="true"]');
     await expect(current).toContainText("Currently supplied");
     await expect(current.getByRole("button", { name: "Delete", exact: true })).toHaveCount(0);
     await expect(current.getByRole("button", { name: "Use", exact: true })).toBeDisabled();
-    await current.getByRole("button", { name: "Preview", exact: true }).click();
-    await expect(current.locator(".lb-preview-block")).toHaveCount(3);
-    await current.getByRole("button", { name: "Preview with playback", exact: true }).click();
-    await expect(page.locator(".lb-preview-playback-bar")).toBeVisible();
-    await page.getByRole("button", { name: "Return to versions", exact: true }).click();
-    await expect(current.getByRole("button", { name: "Preview", exact: true })).toBeFocused();
+    await expect(current.getByRole("button", { name: "Preview", exact: true })).toBeDisabled();
 });
 
 test("@workflow search versions keeps auxiliary donor mapping contextual", async ({ page }) => {

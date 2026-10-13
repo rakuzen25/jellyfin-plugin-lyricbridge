@@ -8,6 +8,7 @@ await rm("../dist/web", { recursive: true, force: true });
 await mkdir("../dist/web", { recursive: true });
 await cp("assets", "../dist/web", { recursive: true });
 await cp("../NOTICE", "../dist/web/NOTICE.txt");
+await cp("../vendor/LUCIDE-LICENSE", "../dist/web/LUCIDE-LICENSE.txt");
 await build({
     entryPoints: ["bridge.ts"],
     outfile: "../dist/web/lyricbridge.js",

@@ -72,7 +72,7 @@ public sealed class Retrieval(Store store, ProviderRegistry registry, ILogger<Re
                 if (v.Lyrics == null) return; results.Add(v); if (outcome.Lyrics == null) { window ??= CommitLater(); return; }
                 if (outcome.Lyrics.Hash == v.Lyrics.Hash) return; var baselineCandidate = new Candidate(outcome.Lyrics.Source, outcome.Lyrics.ProviderId, outcome.Lyrics.Title, outcome.Lyrics.Artist, "", null, 0, Assessment: outcome.Assessment); var reason = LyricRanking.Improvement(v.Candidate, baselineCandidate); if (reason == null) return;
                 if (outcome.Offer != null && LyricRanking.Compare(v.Candidate, outcome.Offer.Candidate) >= 0) return;
-                var offer = new ImprovementOffer(outcome.Lyrics.Hash, v.Lyrics, v.Candidate, reason, LyricRanking.ImprovementDescription(v.Candidate, baselineCandidate, reason)); outcome.Offer = offer; outcome.Better = v.Lyrics; store.Put("better", id, offer); store.Put("document", v.Lyrics.Hash, v.Lyrics); if (v.Raw != null) store.Put("raw", v.Lyrics.Hash, v.Raw);
+                var proposed = new ImprovementOffer(outcome.Lyrics.Hash, v.Lyrics, v.Candidate, reason, LyricRanking.ImprovementDescription(v.Candidate, baselineCandidate, reason)); var offer = store.TryOffer(item, store.Selection(item), proposed, v.Raw, baselineCandidate, outcome.Lyrics); if (offer == null) return; outcome.Offer = offer; outcome.Better = offer.Lyrics;
             }
         }
         await Collect(session, false, token, e => { lock (gate) outcome.Errors.Add(e); }, null, Consider, finished: () => { lock (gate) outcome.Finished++; });

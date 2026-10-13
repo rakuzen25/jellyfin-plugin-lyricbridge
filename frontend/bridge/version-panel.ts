@@ -5,7 +5,7 @@ import { rowLanguage, translationLanguageMatches, translationScript } from "./au
 import type { BridgeDocument, ServiceCapability, TrackScope } from "./contracts.ts";
 import { parseDocument } from "./responses.ts";
 import { versionRow, updateVersionRow } from "./version-rows.ts";
-import { button, disclosure, e, field, section, select } from "./controls.ts";
+import { button, disclosure, e, field, section, select, setGenerationPanelOpen } from "./controls.ts";
 import type { AuxiliaryKind, Preferences, Variant } from "./models.ts";
 interface Context {
     popup: HTMLElement | null;
@@ -15,6 +15,8 @@ interface Context {
     services: ServiceCapability[];
 }
 interface Dependencies {
+    mark: (clear: boolean) => Promise<void>;
+    reject: () => Promise<void>;
     context: Context;
     documentState: () => BridgeDocument;
     originalLanguages: () => Set<string | undefined>;
@@ -61,6 +63,8 @@ export function createVersionPanel(dependencies: Dependencies) {
         importLyrics,
         capabilities,
         generate,
+        mark,
+        reject,
     } = dependencies;
     function languageVersions(parent: HTMLElement, kind: AuxiliaryKind) {
         const p = documentState().preferences,
@@ -85,19 +89,43 @@ export function createVersionPanel(dependencies: Dependencies) {
                 description:
                     (languageChoices.find((l) => l[0] === v.language)?.[1] || v.language) +
                     " · " +
-                    (v.originType === "supplied" ? "Supplied" : v.originType === "local" ? "Local" : "Generated") +
-                    (v.model ? " · " + v.model : "") +
-                    (v.createdAt ? " · " + new Date(v.createdAt).toLocaleDateString() : ""),
+                    (v.originType === "supplied" ? "Supplied" : v.originType === "local" ? "Local" : "Generated"),
             })),
         ];
         const active = () => documentState().auxiliaryChoices?.[kind] || "auto";
         trackScope().versionBrowsing ??= {};
         const browsing = requireValue(trackScope().versionBrowsing);
         if (browsing[kind] === undefined || (browsing[kind] !== null && !all.some((v) => v.key === browsing[kind]))) browsing[kind] = active();
-        const updateActive = () =>
+        const updateActive = () => {
+            const used = new Set(
+                (documentState().lyrics?.lines || [])
+                    .flatMap((line) => (line.background ? [line, line.background] : [line]))
+                    .map((line) => auxiliary(line, kind, documentState().preferences)?.key)
+                    .filter(Boolean),
+            );
             (context.popup?.querySelector<HTMLElement>('[data-version-kind="' + kind + '"]') || area)
                 .querySelectorAll<HTMLElement>(".lb-version-row")
-                .forEach((row) => updateVersionRow(row, row.dataset.key === active(), row.dataset.key === browsing[kind]));
+                .forEach((row) => {
+                    const selected = row.dataset.key === active();
+                    const policyUse =
+                        !selected && !["auto", "provider"].includes(row.dataset.key || "") && used.has(row.dataset.key)
+                            ? "In use · Automatic"
+                            : undefined;
+                    updateVersionRow(row, selected, row.dataset.key === browsing[kind], policyUse);
+                    const remove = row.querySelector<HTMLButtonElement>(".lb-delete-version");
+                    const explanation = row.querySelector<HTMLElement>(".lb-delete-reason");
+                    const reason =
+                        row.dataset.deleteRestriction || (selected || !!policyUse ? "Switch to another version or policy before deleting." : "");
+                    if (remove) {
+                        remove.disabled = !!reason;
+                        remove.title = reason;
+                    }
+                    if (explanation) {
+                        explanation.textContent = reason;
+                        explanation.hidden = !reason;
+                    }
+                });
+        };
         const expand = (key: string) => {
             browsing[kind] = browsing[kind] === key ? null : key;
             updateActive();
@@ -118,17 +146,15 @@ export function createVersionPanel(dependencies: Dependencies) {
                       " · " +
                       (version.originType === "supplied" ? "Supplied" : version.originType === "local" ? "Local" : "Generated")
                     : "Selection policy",
-                details: [
+                details:
                     version.key === "auto" || version.key === "provider"
-                        ? version.description
+                        ? [version.description]
                         : [
-                              version.model,
-                              version.createdAt ? new Date(version.createdAt).toLocaleDateString() : null,
-                              version.reasoningEffort ? "Thinking: " + version.reasoningEffort : null,
-                          ]
-                              .filter(Boolean)
-                              .join(" · "),
-                ],
+                              version.origin?.providerId ? "Provider ID: " + version.origin.providerId : "",
+                              version.model ? "Model: " + version.model : "",
+                              version.reasoningEffort ? "Thinking: " + version.reasoningEffort : "",
+                              version.createdAt ? "Saved: " + new Date(version.createdAt).toLocaleDateString() : "",
+                          ],
                 toggle: () => expand(version.key),
             });
             row.dataset.versionSignature = signature;
@@ -197,6 +223,7 @@ export function createVersionPanel(dependencies: Dependencies) {
                 "",
                 { icon: "preview" },
             );
+            previewButton.classList.add("lb-preview-version");
             previewButton.setAttribute("aria-expanded", "false");
             const use = button(
                 "Use",
@@ -221,7 +248,12 @@ export function createVersionPanel(dependencies: Dependencies) {
                 { icon: "check" },
             );
             actions.append(previewButton, use);
-            if (documentState().canDeleteVariants && !["auto", "provider"].includes(version.key) && version.service !== "Kawazu") {
+            if (!["auto", "provider"].includes(version.key)) {
+                row.dataset.deleteRestriction = !documentState().canDeleteVariants
+                    ? "Only administrators can delete saved versions."
+                    : version.service === "Kawazu"
+                      ? "Managed locally by Kawazu. Change the pronunciation policy instead of deleting this version."
+                      : "";
                 const remove = button(
                     "Delete",
                     () =>
@@ -251,10 +283,12 @@ export function createVersionPanel(dependencies: Dependencies) {
                             "Delete version",
                             remove,
                         ),
-                    "lb-danger",
+                    "lb-danger lb-delete-version",
                     { icon: "trash" },
                 );
+                const reason = e("p", "lb-help lb-delete-reason");
                 actions.append(remove);
+                content.append(reason);
             }
             content.append(actions, feedback, preview);
             area.append(row);
@@ -387,11 +421,13 @@ export function createVersionPanel(dependencies: Dependencies) {
                 async () => {
                     if (!preview.hidden) {
                         preview.hidden = true;
+                        previewButton.classList.add("lb-preview-version");
                         previewButton.setAttribute("aria-expanded", "false");
                         return;
                     }
                     const popup = context.popup,
                         request = ++originalRequest;
+                    previewButton.dataset.loading = "true";
                     previewButton.disabled = true;
                     try {
                         const doc = version.currentOnly
@@ -433,12 +469,14 @@ export function createVersionPanel(dependencies: Dependencies) {
                         if (request === originalRequest && context.scope === target && !target?.controller.signal.aborted && row.isConnected)
                             showError(error, content);
                     } finally {
-                        previewButton.disabled = false;
+                        delete previewButton.dataset.loading;
+                        previewButton.disabled = row.dataset.active === "true";
                     }
                 },
                 "",
                 { icon: "preview" },
             );
+            previewButton.classList.add("lb-preview-version");
             previewButton.setAttribute("aria-expanded", "false");
             actions.append(previewButton);
             if (documentState().canSelect) actions.append(button("Use", () => mutate("select"), "lb-use-version", { icon: "check" }));
@@ -449,7 +487,7 @@ export function createVersionPanel(dependencies: Dependencies) {
                         () =>
                             confirmation(
                                 content,
-                                "Delete this song’s saved original? If this is current, another saved original is selected when available. Matching previous selections are cleared and affected work is cancelled. Dependent managed lyrics, translations, pronunciation, choices and timing are removed only when other songs or compositions do not require them. Job history is kept. Media and external lyric files are never deleted.",
+                                "Delete this saved original and its timing? Affected jobs are cancelled. If selected, the newest remaining original is used. Shared content and job history are kept. Media files are untouched.",
                                 () => mutate("delete"),
                                 "Delete saved original",
                             ),
@@ -474,7 +512,6 @@ export function createVersionPanel(dependencies: Dependencies) {
             context.current?.canDeleteVariants,
             context.current?.canSelect,
             context.current?.canGenerate,
-            context.current?.previousSelection,
             context.current?.savedOriginals,
             context.current?.canDeleteOriginals,
             context.current?.instrumental,
@@ -528,7 +565,43 @@ export function createVersionPanel(dependencies: Dependencies) {
                 button("Import lyrics", () => importLyrics(false), "", { icon: "import" }),
                 button("Use Jellyfin lyrics", () => importLyrics(true), "", { icon: "library" }),
             );
-        original.append(originalActions);
+        original.append(originalActions, e("div", "lb-original-feedback"));
+        if (documentState().canSelect) {
+            const classification = e("div", "lb-version-classification");
+            classification.append(e("p", "lb-help", "Classification · affects everyone"));
+            const actions = e("div", "lb-section-actions");
+            const rejectButton = button(
+                "Remove lyrics",
+                () =>
+                    confirmation(
+                        classification,
+                        "Remove the current lyric selection and pause automatic matching? Saved versions remain available. Resume with Search again or a manual selection.",
+                        reject,
+                        "Remove lyrics",
+                        rejectButton,
+                    ),
+                "",
+                { icon: "warning" },
+            );
+            rejectButton.disabled = !currentOriginal;
+            const markButton = button(
+                documentState().state === "instrumental" ? "Clear instrumental mark" : "Mark instrumental",
+                () =>
+                    confirmation(
+                        classification,
+                        "Change the instrumental classification for everyone?",
+                        () => mark(documentState().state === "instrumental"),
+                        "Confirm classification",
+                        markButton,
+                    ),
+                "",
+                { icon: "music" },
+            );
+            actions.append(rejectButton, markButton);
+            classification.append(actions);
+            original.append(classification);
+        }
+
         if (documentState().instrumental?.length)
             original.append(
                 e(
@@ -568,15 +641,20 @@ export function createVersionPanel(dependencies: Dependencies) {
             const generateAction = button(
                 "Generate " + kind,
                 () => {
-                    const prepare = group.querySelector<HTMLDetailsElement>(".lb-generation");
-                    if (prepare) {
-                        prepare.open = !prepare.open;
-                        if (prepare.open) prepare.scrollIntoView({ block: "nearest" });
+                    const prepare = group.querySelector<HTMLElement>(".lb-generation");
+                    if (!prepare) return;
+                    setGenerationPanelOpen(prepare, prepare.hidden);
+                    if (!prepare.hidden) {
+                        prepare.scrollIntoView({ block: "nearest" });
+                        prepare.querySelector<HTMLElement>("select, input, button")?.focus({ preventScroll: true });
                     }
                 },
-                "",
+                "lb-generation-trigger",
                 { icon: "generate" },
             );
+            generateAction.setAttribute("aria-controls", "lb-generation-" + kind);
+            generateAction.setAttribute("aria-expanded", "false");
+            sectionActions.append(generateAction);
             const generationSignature = JSON.stringify([
                 languages.size ? [...languages].sort() : [],
                 documentState().canGenerate,
@@ -584,15 +662,20 @@ export function createVersionPanel(dependencies: Dependencies) {
             ]);
             const oldGeneration = generationNodes.get(kind);
             if (oldGeneration?.dataset.signature === generationSignature) {
-                sectionActions.append(generateAction);
                 group.append(oldGeneration);
+                setGenerationPanelOpen(oldGeneration, !oldGeneration.hidden);
                 drawJobDetails(oldGeneration, kind);
                 continue;
             }
-            const { root: prepare, content: prepareBody } = disclosure("Generate " + kind, "lb-generation");
+            const prepare = e("div", "lb-generation");
+            prepare.id = "lb-generation-" + kind;
+            prepare.hidden = true;
+            prepare.setAttribute("role", "group");
+            prepare.setAttribute("aria-label", kind + " generation settings");
+            const prepareBody = e("div", "lb-disclosure-content");
+            prepare.append(prepareBody);
             prepare.dataset.kind = kind;
             prepare.dataset.signature = generationSignature;
-            sectionActions.append(generateAction);
             group.append(prepare);
             drawJobDetails(prepare, kind);
             capabilities()
@@ -651,9 +734,10 @@ export function createVersionPanel(dependencies: Dependencies) {
                     const method = select(prepareBody, "Generation method", requireValue(choices[0])[0], choices, showAdvanced);
                     showAdvanced(requireValue(choices[0])[0]);
                     prepareBody.append(advanced);
-                    prepareBody.append(
+                    const generationActions = e("div", "lb-section-actions");
+                    generationActions.append(
                         button(
-                            kind === "pronunciation" ? "Generate pronunciation" : "Generate translation",
+                            "Start generation",
                             async () => {
                                 if (method.value !== "Kawazu") return generate(kind, method.value, prepare, true);
                                 try {
@@ -680,6 +764,13 @@ export function createVersionPanel(dependencies: Dependencies) {
                             { icon: "generate" },
                         ),
                     );
+                    generationActions.append(
+                        button("Cancel", () => {
+                            setGenerationPanelOpen(prepare, false);
+                            prepare.parentElement?.querySelector<HTMLButtonElement>(`[aria-controls="${prepare.id}"]`)?.focus();
+                        }),
+                    );
+                    prepareBody.append(generationActions);
                     prepareBody.append(
                         e(
                             "small",

@@ -74,6 +74,7 @@ binary_licenses = {
         [
             "LICENSE",
             "LYRICMOTION-LICENSE",
+            "LUCIDE-LICENSE",
             "DYNAMIC-BACKGROUND-LICENSE",
             "KAWARP-LICENSE",
             "LYRICMOTION-THIRD-PARTY-NOTICES.md",

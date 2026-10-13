@@ -26,6 +26,8 @@ public sealed class SearchSession
     public int Total { get; set; }
     public List<Candidate> Candidates { get; set; } = [];
     public string? Recommended { get; set; }
+    public SearchImprovement? Improvement { get; set; }
+    [JsonIgnore] public VersionSnapshot? Baseline { get; set; }
     public MatchingMetrics? Metrics { get; set; }
     public List<SafeError> Errors { get; set; } = [];
     [JsonIgnore] public CancellationTokenSource Cancellation { get; } = new();
@@ -35,3 +37,5 @@ public sealed class SearchSession
 }
 public sealed record VersionSnapshot(RichLyrics? Lyrics, InstrumentalEvidence? Instrumental, MatchRejection? Rejected = null, SelectionAssessment? Assessment = null);
 
+
+public sealed record SearchImprovement(string Key, string Hash, string BaselineHash, string Reason, string Description);
