@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.2](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.1.1...v0.1.2) (2026-10-13)
+
+
+### Features
+
+* add save-original and optimizations ([6a732e2](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/6a732e22aa8b4ff5897c6b735e803356935f50c9))
+
+
+### Bug Fixes
+
+* fix ci ([c9f72ff](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/c9f72ff6f2ddb54ca6985647ea17e9b631244525))
+* improve web renderer status ([e538b0a](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/e538b0a34a1b916ff3e6d582dd1700759328f4dd))
+
 ## [0.1.1](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.1.0...v0.1.1) (2026-10-11)
 
 ### Features
