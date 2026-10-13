@@ -19,12 +19,12 @@ public sealed class DiscoveryResetTests
         {
             discovery.Start(item, track);
             discovery.Search(user, item, track, null);
-            await provider.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await provider.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5), Xunit.TestContext.Current.CancellationToken);
             Assert.True(store.BeginReset());
             var draining = discovery.StopAll();
             Assert.Equal("reset_in_progress", Assert.Throws<WorkflowException>(() => discovery.Start(item, track)).Code);
             Assert.Equal("reset_in_progress", Assert.Throws<WorkflowException>(() => discovery.Search(user, item, track, null)).Code);
-            provider.Release.TrySetResult(); await draining.WaitAsync(TimeSpan.FromSeconds(5));
+            provider.Release.TrySetResult(); await draining.WaitAsync(TimeSpan.FromSeconds(5), Xunit.TestContext.Current.CancellationToken);
             store.ResetManagedLibrary(); store.EndReset();
             Assert.Empty(store.All<RichLyrics>("selected"));
             Assert.Empty(store.All<RichLyrics>("document"));

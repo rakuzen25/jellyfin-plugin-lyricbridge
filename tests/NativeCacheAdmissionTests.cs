@@ -30,8 +30,8 @@ public sealed class NativeCacheAdmissionTests
             using var services = new ServiceCollection().AddSingleton(store).BuildServiceProvider(); var app = new ApplicationBuilder(services);
             new NativeCache().Configure(builder => builder.Run(async context => { entered.SetResult(); await release.Task; store.SaveDocument(doc); context.Response.StatusCode = 204; }))(app);
             var context = new DefaultHttpContext { RequestServices = services }; context.Request.Method = "GET"; context.Request.Path = "/Audio/" + item.ToString("N") + "/Lyrics";
-            var work = Task.Run(() => app.Build()(context)); await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            store.DeleteOriginal(item, doc.Hash); release.SetResult(); await work.WaitAsync(TimeSpan.FromSeconds(5));
+            var work = Task.Run(() => app.Build()(context), Xunit.TestContext.Current.CancellationToken); await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), Xunit.TestContext.Current.CancellationToken);
+            store.DeleteOriginal(item, doc.Hash); release.SetResult(); await work.WaitAsync(TimeSpan.FromSeconds(5), Xunit.TestContext.Current.CancellationToken);
             Assert.Null(store.GetDocument(doc.Hash)); Assert.Null(store.Selection(item).Lyrics); Assert.True(store.DiscoverySuppressed(item));
         }
         finally { release.TrySetResult(); SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }

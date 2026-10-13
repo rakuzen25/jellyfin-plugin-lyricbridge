@@ -153,6 +153,8 @@ jobs:
             browser-tests/results-run.*/
           if-no-files-found: warn
   backend:
+    env:
+      TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
     needs: [impact, frontend]
     if: needs.impact.outputs.backend == 'true'
     runs-on: ubuntu-26.04
@@ -175,7 +177,7 @@ jobs:
           path: dist
       - run: python3 scripts/ci.py web-verify
       - run: dotnet restore tests/StorageTests.csproj --locked-mode -m:1 -p:NuGetAudit=false
-      - run: dotnet test tests/StorageTests.csproj --no-restore -m:1 --logger "trx;LogFileName=backend.trx" --results-directory dist/evidence 2>&1 | tee dist/evidence/backend.log
+      - run: dotnet test --project tests/StorageTests.csproj --no-restore --results-directory dist/evidence --report-xunit-trx --report-xunit-trx-filename backend.trx --minimum-expected-tests 1 2>&1 | tee dist/evidence/backend.log
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:

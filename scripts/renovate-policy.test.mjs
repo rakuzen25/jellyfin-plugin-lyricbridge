@@ -14,7 +14,7 @@ function policy(name, update) {
     );
 }
 test("routine updates automate while major and coupled toolchain changes require review", () => {
-    for (const name of ["mypy", "prettier", "actions/checkout", "Microsoft.NET.Test.Sdk"]) {
+    for (const name of ["mypy", "prettier", "actions/checkout", "xunit.v3"]) {
         assert.equal(policy(name, "patch").automerge, true, name);
         assert.equal(policy(name, "major").automerge, false, name);
     }
@@ -23,7 +23,7 @@ test("routine updates automate while major and coupled toolchain changes require
         assert.equal(policy(name, "minor").groupName, null, name);
     }
     assert.equal(policy("typescript", "major").allowedVersions, "<7");
-    assert.equal(policy("Microsoft.NET.Test.Sdk", "minor").groupName, policy("xunit.runner.visualstudio", "minor").groupName);
+    assert.equal(policy("xunit.v3", "minor").groupName, policy("xunit.analyzers", "minor").groupName);
     assert.equal(policy("actions/upload-artifact", "major").groupName, policy("actions/download-artifact", "major").groupName);
 });
 test("Playwright and its extracted versioned image share a patch-only automerge group", () => {

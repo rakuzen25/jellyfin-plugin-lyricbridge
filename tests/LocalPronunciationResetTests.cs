@@ -17,17 +17,17 @@ public sealed class LocalPronunciationResetTests
         {
             await worker.StartAsync(CancellationToken.None);
             Assert.Equal("queued", worker.Ensure(lyrics, preferences).State);
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), Xunit.TestContext.Current.CancellationToken);
             var admittedEpoch = store.Epoch;
             Assert.True(store.BeginReset()); store.ResetManagedLibrary(); store.EndReset();
             // Deliberately finish after reset has ended, not merely while writes are blocked.
             release.TrySetResult();
-            await worker.StopAll().WaitAsync(TimeSpan.FromSeconds(5));
+            await worker.StopAll().WaitAsync(TimeSpan.FromSeconds(5), Xunit.TestContext.Current.CancellationToken);
             Assert.Empty(store.All<Variant>("variant"));
             Assert.False(store.SaveLocalVariant(new("late", lyrics.Hash, "pronunciation", "ja", "Kawazu", "fixture", new()), admittedEpoch));
             Assert.Equal("unavailable", worker.Status(lyrics, preferences).State);
             Assert.Equal("queued", worker.Ensure(lyrics, preferences).State);
-            for (var attempt = 0; attempt < 100 && worker.Status(lyrics, preferences).State != "complete"; attempt++) await Task.Delay(10);
+            for (var attempt = 0; attempt < 100 && worker.Status(lyrics, preferences).State != "complete"; attempt++) await Task.Delay(10, Xunit.TestContext.Current.CancellationToken);
             Assert.Equal("complete", worker.Status(lyrics, preferences).State);
         }
         finally

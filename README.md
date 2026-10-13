@@ -20,7 +20,7 @@ Use the pinned SDK in `global.json` and run `scripts/bootstrap-references.sh` be
 
 JavaScript tooling uses the exact pnpm version pinned in `package.json` and the Node.js version in `.node-version`. From the repository root, run `pnpm install --frozen-lockfile`; the frontend and browser tests share one workspace lockfile. `pnpm build`, `pnpm typecheck`, `pnpm test`, and `pnpm test:browser` provide the maintained entrypoints. Packaging and CI use the same frozen workspace installation.
 
-Run `dotnet test tests/StorageTests.csproj` for storage, approval/quota enforcement, multilingual normalization, provider formats, concurrent retrieval, cancellation, manual selections, and cache invalidation. `browser-tests` contains maintained isolated Playwright fixtures. Run `scripts/test-browser.sh` for desktop/mobile Chromium, Firefox and WebKit. `pnpm build` checks every application module before bundling; `pnpm test` runs workflow/lifecycle unit tests. See [test coverage](TEST_COVERAGE.md) and [risk-based CI/local commands](CI.md).
+Run `dotnet test --project tests/StorageTests.csproj` for storage, approval/quota enforcement, multilingual normalization, provider formats, concurrent retrieval, cancellation, manual selections, and cache invalidation. `browser-tests` contains maintained isolated Playwright fixtures. Run `scripts/test-browser.sh` for desktop/mobile Chromium, Firefox and WebKit. `pnpm build` checks every application module before bundling; `pnpm test` runs workflow/lifecycle unit tests. See [test coverage](TEST_COVERAGE.md) and [risk-based CI/local commands](CI.md).
 
 ## Using lyrics
 

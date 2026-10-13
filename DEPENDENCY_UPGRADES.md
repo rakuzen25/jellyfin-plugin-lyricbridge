@@ -7,9 +7,9 @@ plugin ABI, GUID, storage schema, version, production data or live deployment.
 
 Node 26.11.1, pnpm 12.11.2, Python 3.15.0 and Ubuntu 26.04 runners; Playwright 1.64.0
 with its official noble image digest; esbuild 0.28.2, typescript-eslint 8.71.2,
-Mypy 2.4.0, Test SDK 18.10.1 and xUnit adapter 4.0.1. TypeScript stays at 5.9.3;
+Mypy 2.4.0 and xUnit v3 4.0.2 using Microsoft Testing Platform exclusively. TypeScript stays at 5.9.3;
 Renovate may propose versions below 7, with compiler minor/major changes reviewed.
-.NET SDK and xUnit framework versions remain unchanged.
+.NET SDK remains at 10.0.401. VSTest and xUnit 2 are no longer supported.
 
 GitHub Actions remain SHA-pinned with release-line comments. Renovate can update
 their digests and propose release upgrades. Major updates require manual review.

@@ -118,3 +118,14 @@ Artwork lifecycle fixtures use track identities distinct from demo startup so
 cached startup artwork cannot bypass the tested image-admission barrier.
 
 Settings UI regressions cover shared original/auxiliary typography and controls, single-row accordion toggling, stable header geometry, browsing/focus restoration, current-only originals, permission gates, inline and playback previews, and desktop/mobile wrapping. Playback visual baselines are retained.
+
+## xUnit v3 / MTP migration verification
+
+Local verification on 2026-10-13 retained all 79 discovered test identities and
+expanded theory cases; the final MTP run passed 79 with no skips. The generated
+`dist/evidence/backend.trx` matched discovery and console outcomes. Disposable
+runner fixtures returned exit 0 for a passing test, 2 for a failing test, and 8
+for an empty selection with `--minimum-expected-tests 1`; all retained TRX reports.
+Locked NuGet restoration and dependency advisories passed. CI policy regressions
+verify that project, lockfile and runner configuration changes invalidate backend
+evidence. Hosted MTP execution and uploaded reports still require post-push checks.

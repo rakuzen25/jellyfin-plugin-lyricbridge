@@ -170,7 +170,9 @@ python3 tests/ReleaseAutomation.py
 python3 tests/LocalJellyfin.py
 
 dotnet restore tests/StorageTests.csproj --locked-mode
-dotnet test tests/StorageTests.csproj --no-restore
+TESTINGPLATFORM_TELEMETRY_OPTOUT=1 dotnet test --project tests/StorageTests.csproj --no-restore \
+  --results-directory dist/evidence --report-xunit-trx --report-xunit-trx-filename backend.trx \
+  --minimum-expected-tests 1
 
 CI_BROWSER_GROUP=workflow scripts/test-browser.sh --project workflow-chromium --workers=2
 CI_BROWSER_GROUP=rendering scripts/test-browser.sh --workers=2
@@ -216,3 +218,7 @@ Compare Actions critical-path durations on comparable changes after this workflo
 pushed. Targets are a few minutes for ordinary checks and parallel five-minute sessions
 for rendering changes, excluding queues/downloads. Do not claim measured CI speedups
 until the new jobs have executed on GitHub. Runner minutes may rise while wall time falls.
+
+Backend tests use xUnit v3 and Microsoft Testing Platform on the pinned .NET 10 SDK.
+VSTest and older SDK test runners are unsupported. Fixtures remain serial; CI retains TRX
+and console evidence even on failure and rejects runs that execute no tests.

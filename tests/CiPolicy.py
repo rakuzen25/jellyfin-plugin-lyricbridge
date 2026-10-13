@@ -899,6 +899,33 @@ class MetadataTests(IsolatedCiTestCase):
                     selected["classified_changes"][0]["rule"], "automation-metadata"
                 )
 
+    def test_backend_runner_inputs_invalidate_reused_evidence(self):
+        for path in (
+            "global.json",
+            "tests/StorageTests.csproj",
+            "tests/packages.lock.json",
+        ):
+            with self.subTest(path=path), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "Directory.Build.props").write_text(
+                    "<LyricBridgeVersion>0.1.1</LyricBridgeVersion>"
+                )
+                file = root / path
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text(
+                    '{"dependencies": {"net10.0": {}}}'
+                    if path.endswith(".json")
+                    else "first"
+                )
+                before = ci.fingerprints(root)
+                file.write_text(
+                    '{"dependencies": {"net10.0": {}}, "changed": true}'
+                    if path.endswith(".json")
+                    else "second"
+                )
+                after = ci.fingerprints(root)
+                self.assertNotEqual(before["backend"], after["backend"])
+
     def test_metadata_fingerprint_isolated_from_runtime(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

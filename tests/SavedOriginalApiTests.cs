@@ -57,9 +57,9 @@ public sealed class SavedOriginalApiTests : IDisposable
         var store = new Store(directory); var registry = ProviderRegistry.WithSources(); var retrieval = new Retrieval(store, registry, NullLogger<Retrieval>.Instance);
         using var discovery = new Discovery(store, registry, retrieval);
         var service = new SelectionService(store, retrieval, discovery, null!, null!); var item = new Audio { Id = Guid.NewGuid(), Name = "Fixture" };
-        await service.Import(item, new("[00:01.00]first", false), default); var first = store.Selection(item.Id).Lyrics!.Hash;
-        await service.Import(item, new("[00:02.00]second", false), default); var second = store.Selection(item.Id).Lyrics!.Hash;
-        await service.Import(item, new("[00:02.00]second", false), default);
+        await service.Import(item, new("[00:01.00]first", false), Xunit.TestContext.Current.CancellationToken); var first = store.Selection(item.Id).Lyrics!.Hash;
+        await service.Import(item, new("[00:02.00]second", false), Xunit.TestContext.Current.CancellationToken); var second = store.Selection(item.Id).Lyrics!.Hash;
+        await service.Import(item, new("[00:02.00]second", false), Xunit.TestContext.Current.CancellationToken);
         Assert.NotEqual(first, second); Assert.Equal(2, store.SavedOriginals(item.Id).Count);
         Assert.Equal("[00:01.00]first", store.Get<RawLyrics>("raw", first)!.Original);
         Assert.Equal("[00:02.00]second", store.Get<RawLyrics>("raw", second)!.Original);
