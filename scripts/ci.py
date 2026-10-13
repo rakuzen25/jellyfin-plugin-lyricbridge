@@ -34,6 +34,18 @@ CODE = GROUPS[:-1]
 RUNTIME = tuple(group for group in CODE if group != "metadata")
 SCHEMA = 3
 POLICY = ("scripts/ci.py", "scripts/source_inventory.py", "browser-tests/groups.json")
+GROUP_JOB_NAMES = {
+    group: {group} for group in CODE if group not in {"rendering", "performance"}
+} | {
+    "rendering": {
+        f"rendering ({engine})"
+        for engine in ("chromium", "mobile-chromium", "firefox", "webkit")
+    },
+    "performance": {
+        f"performance ({engine})"
+        for engine in ("stress-chromium", "stress-mobile-chromium")
+    },
+}
 
 
 def git(root: Path, *args: str) -> str:
@@ -140,14 +152,28 @@ def known_impacts(path: str, root: Path | None = None) -> set[str]:
         or path.startswith("tests/")
         and path.endswith((".py", ".sh"))
     ):
-        if path.endswith("test-browser.sh"):
+        if path.endswith(
+            (
+                "test-browser.sh",
+                "check-browser-image.mjs",
+                "check-browser-image.test.mjs",
+            )
+        ):
             return {"frontend", "workflow", "rendering", "performance"}
+        if path.endswith(
+            (
+                "check-toolchain.mjs",
+                "check-toolchain.test.mjs",
+                "renovate-policy.test.mjs",
+            )
+        ):
+            return {"metadata", "frontend", "tooling", "artifacts"}
         if path.endswith(
             ("bootstrap-references.sh", "reference-cache.py", "format-dotnet.sh")
         ):
             return {"backend", "tooling", "artifacts"}
         return {"tooling", "artifacts"}
-    if path in {"pyproject.toml", "requirements-check.txt"}:
+    if path in {"pyproject.toml", "requirements-check.txt", ".python-version"}:
         return {"tooling", "artifacts"}
     if path in {"global.json"}:
         return {"backend", "artifacts"}
@@ -278,6 +304,7 @@ def fingerprints(root: Path) -> dict[str, str]:
         Path(p)
         for p in (
             ".node-version",
+            ".python-version",
             "global.json",
             "pnpm-lock.yaml",
             "requirements-check.txt",
@@ -291,6 +318,7 @@ def fingerprints(root: Path) -> dict[str, str]:
         Path(p)
         for p in (
             ".node-version",
+            ".python-version",
             "pnpm-lock.yaml",
             "package.json",
             ".prettierrc.json",
@@ -396,11 +424,7 @@ def merged_pull_request(run: dict, repository: str) -> bool:
 
 def read_receipt(repository: str, run: dict) -> dict | None:
     # No cache, fork or caller-controlled URL is an evidence source.
-    if (
-        not trusted(run, repository)
-        or run.get("status") != "completed"
-        or not merged_pull_request(run, repository)
-    ):
+    if not trusted(run, repository) or not merged_pull_request(run, repository):
         return None
     artifacts = api(repository, f"/actions/runs/{run['id']}/artifacts?per_page=100")[
         "artifacts"
@@ -436,6 +460,8 @@ def read_receipt(repository: str, run: dict) -> dict | None:
     # head_sha is the orchestrating source; a receipt also records the checked tag.
     if receipt.get("run_head_sha", receipt.get("workflow_sha")) != run.get("head_sha"):
         return None
+    if receipt.get("run_attempt", 1) != run.get("run_attempt", 1):
+        return None
     return receipt
 
 
@@ -463,6 +489,7 @@ def validated_ancestor(root: Path, repository: str, branch: str, policy: str) ->
     for run in recent_runs(repository):
         if (
             run.get("head_branch") != branch
+            or run.get("status", "completed") != "completed"
             or run.get("conclusion") != "success"
             or run.get("path")
             not in {
@@ -505,11 +532,100 @@ def validated_ancestor(root: Path, repository: str, branch: str, policy: str) ->
     return {}
 
 
+def completed_group_origin(
+    repository: str,
+    run: dict,
+    receipt: dict,
+    group: str,
+    policy: str,
+    fingerprint: str,
+    cache: dict,
+    visited: frozenset = frozenset(),
+) -> str | None:
+    """Resolve reuse chains to authenticated successful jobs in the latest attempt."""
+    identifier = str(run["id"])
+    if identifier in visited or len(visited) >= 8:
+        return None
+    if (
+        receipt.get("policy") != policy
+        or receipt.get("inputs", {}).get(group) != fingerprint
+    ):
+        return None
+    if receipt.get("groups", {}).get(group) not in {None, "success"}:
+        return None
+    origin = receipt.get("reused", {}).get(group, {}).get("run_id")
+    baseline = receipt.get("full_baseline", {})
+    if not origin and receipt.get("groups", {}).get(group) is None:
+        if (
+            baseline.get("policy") == policy
+            and baseline.get("inputs", {}).get(group) == fingerprint
+        ):
+            origin = baseline.get("origins", {}).get(group)
+    if origin:
+        origin = str(origin)
+        if not re.fullmatch(r"[0-9]+", origin):
+            return None
+        key = ("receipt", origin)
+        if key not in cache:
+            source = api(repository, f"/actions/runs/{origin}")
+            if source.get("path") not in {
+                ".github/workflows/validate.yml",
+                ".github/workflows/release-please.yml",
+                ".github/workflows/release.yml",
+                ".github/workflows/safety.yml",
+            }:
+                return None
+            cache[key] = (source, read_receipt(repository, source))
+        source, proof = cache[key]
+        if not proof:
+            return None
+        return completed_group_origin(
+            repository,
+            source,
+            proof,
+            group,
+            policy,
+            fingerprint,
+            cache,
+            visited | {identifier},
+        )
+    if receipt.get("groups", {}).get(group) != "success":
+        return None
+    key = ("jobs", identifier)
+    if key not in cache:
+        response = api(
+            repository, f"/actions/runs/{identifier}/jobs?filter=latest&per_page=100"
+        )
+        cache[key] = (
+            response["jobs"]
+            if response.get("total_count", len(response["jobs"])) <= 100
+            else []
+        )
+    expected = GROUP_JOB_NAMES[group]
+    matches = [
+        job for job in cache[key] if job.get("name", "").split(" / ")[-1] in expected
+    ]
+    if (
+        len(matches) != len(expected)
+        or {job["name"].split(" / ")[-1] for job in matches} != expected
+    ):
+        return None
+    if not all(
+        job.get("status") == "completed"
+        and job.get("conclusion") == "success"
+        and job.get("run_attempt", 1) == run.get("run_attempt", 1)
+        for job in matches
+    ):
+        return None
+    return identifier
+
+
 def evidence(
     repository: str, inputs: dict[str, str], policy: str, full_only: bool = False
 ) -> dict[str, dict]:
     result = {}
     seen = set()
+    cache: dict = {}
     runs = recent_runs(repository)
     for run in runs:  # newest first: a matching failure must block older green reuse
         if run.get("path") not in {
@@ -556,14 +672,15 @@ def evidence(
                 continue
             seen.add(group)
             if status == "success" and (
-                run.get("conclusion") == "success"
-                or not full_only
-                and run.get("conclusion") == "failure"
+                not full_only or run.get("conclusion") == "success"
             ):
+                origin = completed_group_origin(
+                    repository, run, receipt, group, policy, inputs[group], cache
+                )
+                if not origin:
+                    continue
                 result[group] = {
-                    "run_id": baseline["origins"][group]
-                    if carried_full and group in RUNTIME
-                    else str(run["id"]),
+                    "run_id": origin,
                     "input": inputs[group],
                 }
         if all(group in seen for group in CODE):
@@ -682,6 +799,7 @@ def plan(
             os.environ.get("GITHUB_SHA", git(root, "rev-parse", "HEAD")),
         ),
         "run_id": os.environ.get("GITHUB_RUN_ID", "local"),
+        "run_attempt": int(os.environ.get("GITHUB_RUN_ATTEMPT", "1")),
         "policy": policy,
         "inputs": inputs,
         "changed": changed,
@@ -981,6 +1099,7 @@ def main() -> None:
                         "pnpm-lock.yaml",
                         "pnpm-workspace.yaml",
                         ".node-version",
+                        ".python-version",
                     }
                 ],
             ),

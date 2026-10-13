@@ -64,8 +64,14 @@ fallback reasons, and reused group origins. A successful full run establishes co
 a successful cumulative push extends it. Older narrow receipts cannot establish a
 baseline. Baseline and evidence searches examine at most three pages of 100 runs.
 Expired receipts, non-ancestor commits and unavailable APIs cannot establish coverage.
-Passed groups from failed runs can be reused; unfinished groups cannot, and a newer
-matching failure blocks older successful evidence.
+Group reuse does not depend on the parent run's outcome. Passed groups from cancelled,
+failed, timed-out or still-running workflows qualify only with an authenticated receipt,
+matching inputs/policy and completed successful jobs for every required matrix member.
+Receipts record the run attempt; prior-attempt evidence cannot attest a retry. Reuse
+chains resolve to the original successful jobs with cycle/depth protection. Missing
+receipts, unfinished groups and newer matching failures require rerunning the checks.
+Successful complete coverage is still required for a baseline, and all release artifact
+gates must still pass before upload. Scheduled full-baseline reuse remains success-only.
 Older receipts cannot attest the new metadata group. Changing this selection policy
 requires broad validation once; subsequent metadata-only changes receive narrow checks.
 

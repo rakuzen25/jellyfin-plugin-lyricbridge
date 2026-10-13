@@ -284,9 +284,32 @@ class PolicyTests(IsolatedCiTestCase):
             "groups": {},
             "full_baseline": baseline,
         }
+        origin_receipt = dict(
+            receipt, groups={g: "success" for g in ci.RUNTIME}, full_baseline={}
+        )
+
+        def response(repository, endpoint):
+            if endpoint.startswith("/actions/runs?"):
+                return {"workflow_runs": [run]}
+            if endpoint == "/actions/runs/100":
+                return self.trusted_run()
+            return {
+                "jobs": [
+                    {"name": name, "status": "completed", "conclusion": "success"}
+                    for names in ci.GROUP_JOB_NAMES.values()
+                    for name in names
+                ]
+            }
+
         with (
-            patch.object(ci, "api", return_value={"workflow_runs": [run]}),
-            patch.object(ci, "read_receipt", return_value=receipt),
+            patch.object(ci, "api", side_effect=response),
+            patch.object(
+                ci,
+                "read_receipt",
+                side_effect=lambda repo, source: (
+                    receipt if source["id"] == 200 else origin_receipt
+                ),
+            ),
         ):
             proofs = ci.evidence("owner/repo", inputs, "policy", full_only=True)
         self.assertEqual(set(proofs), set(ci.RUNTIME))
@@ -813,6 +836,17 @@ class CumulativeCoverageTests(IsolatedCiTestCase):
         with (
             patch.object(ci, "recent_runs", return_value=runs),
             patch.object(ci, "read_receipt", side_effect=receipt),
+            patch.object(
+                ci,
+                "api",
+                return_value={
+                    "jobs": [
+                        {"name": name, "status": "completed", "conclusion": "success"}
+                        for names in ci.GROUP_JOB_NAMES.values()
+                        for name in names
+                    ]
+                },
+            ),
         ):
             proofs = ci.evidence("owner/repo", inputs, "policy")
         self.assertNotIn("backend", proofs)
@@ -937,6 +971,199 @@ class MetadataTests(IsolatedCiTestCase):
             selection = ci.plan(ROOT, "base", False, False, False, False)
         self.assertIn("metadata", selection["required"])
         self.assertIn("performance", selection["required"])
+
+
+class GroupReuseTests(IsolatedCiTestCase):
+    def fixture(self, conclusion="cancelled", status="completed"):
+        run = dict(
+            PolicyTests().trusted_run(),
+            conclusion=conclusion,
+            status=status,
+            run_attempt=1,
+        )
+        receipt = {
+            "policy": "policy",
+            "inputs": {g: g for g in ci.CODE},
+            "groups": {g: "success" for g in ci.CODE},
+        }
+        jobs = [
+            {
+                "name": "validate / " + name,
+                "status": "completed",
+                "conclusion": "success",
+                "run_attempt": 1,
+            }
+            for names in ci.GROUP_JOB_NAMES.values()
+            for name in names
+        ]
+        return run, receipt, jobs
+
+    def test_completed_groups_reuse_independent_of_parent_outcome(self):
+        for conclusion, status in (
+            ("success", "completed"),
+            ("failure", "completed"),
+            ("cancelled", "completed"),
+            ("timed_out", "completed"),
+            ("neutral", "completed"),
+            (None, "in_progress"),
+        ):
+            run, receipt, jobs = self.fixture(conclusion, status)
+            with (
+                self.subTest(conclusion=conclusion),
+                patch.object(ci, "recent_runs", return_value=[run]),
+                patch.object(ci, "read_receipt", return_value=receipt),
+                patch.object(ci, "api", return_value={"jobs": jobs}),
+            ):
+                proofs = ci.evidence("owner/repo", receipt["inputs"], "policy")
+                self.assertEqual(set(proofs), set(ci.CODE))
+
+    def test_unfinished_failed_and_wrong_attempt_jobs_are_not_reused(self):
+        for state, conclusion, attempt in (
+            ("in_progress", None, 1),
+            ("completed", "cancelled", 1),
+            ("completed", "failure", 1),
+            ("completed", "skipped", 1),
+            ("completed", "success", 2),
+        ):
+            run, receipt, jobs = self.fixture()
+            backend = next(job for job in jobs if job["name"] == "validate / backend")
+            backend.update(status=state, conclusion=conclusion, run_attempt=attempt)
+            with (
+                self.subTest(conclusion=conclusion, attempt=attempt),
+                patch.object(ci, "recent_runs", return_value=[run]),
+                patch.object(ci, "read_receipt", return_value=receipt),
+                patch.object(ci, "api", return_value={"jobs": jobs}),
+            ):
+                proofs = ci.evidence("owner/repo", receipt["inputs"], "policy")
+                self.assertNotIn("backend", proofs)
+                self.assertIn("frontend", proofs)
+
+    def test_matrix_group_requires_every_expected_job(self):
+        run, receipt, jobs = self.fixture()
+        jobs = [job for job in jobs if job["name"] != "validate / rendering (webkit)"]
+        with patch.object(ci, "api", return_value={"jobs": jobs}):
+            self.assertIsNone(
+                ci.completed_group_origin(
+                    "owner/repo", run, receipt, "rendering", "policy", "rendering", {}
+                )
+            )
+
+    def test_reuse_chain_resolves_to_original_job_and_rejects_cycles(self):
+        run, receipt, jobs = self.fixture()
+        origin = dict(run, id=99)
+        receipt["reused"] = {"backend": {"run_id": "99"}}
+        original = dict(receipt, reused={})
+        with (
+            patch.object(
+                ci,
+                "api",
+                side_effect=lambda repo, endpoint: (
+                    origin if endpoint == "/actions/runs/99" else {"jobs": jobs}
+                ),
+            ),
+            patch.object(ci, "read_receipt", return_value=original),
+        ):
+            self.assertEqual(
+                ci.completed_group_origin(
+                    "owner/repo", run, receipt, "backend", "policy", "backend", {}
+                ),
+                "99",
+            )
+            original["reused"] = {"backend": {"run_id": "99"}}
+            self.assertIsNone(
+                ci.completed_group_origin(
+                    "owner/repo", run, receipt, "backend", "policy", "backend", {}
+                )
+            )
+
+    def test_expired_missing_or_mismatched_origin_proof_cannot_reuse(self):
+        run, receipt, jobs = self.fixture()
+        receipt["reused"] = {"backend": {"run_id": "99"}}
+        for proof in (
+            None,
+            dict(receipt, policy="changed"),
+            dict(receipt, inputs={"backend": "different"}),
+            dict(receipt, groups={"backend": "failure"}),
+        ):
+            with (
+                self.subTest(proof=proof),
+                patch.object(ci, "api", return_value=dict(run, id=99)),
+                patch.object(ci, "read_receipt", return_value=proof),
+            ):
+                self.assertIsNone(
+                    ci.completed_group_origin(
+                        "owner/repo", run, receipt, "backend", "policy", "backend", {}
+                    )
+                )
+
+    def test_rerun_cannot_use_previous_attempt_receipt(self):
+        import io
+        import zipfile
+
+        run, receipt, jobs = self.fixture()
+        run["run_attempt"] = 2
+        receipt.update(
+            schema=ci.SCHEMA,
+            run_id="100",
+            repository="owner/repo",
+            run_head_sha="workflow",
+            required=list(ci.CODE),
+            run_attempt=1,
+        )
+        data = io.BytesIO()
+        with zipfile.ZipFile(data, "w") as archive:
+            archive.writestr("validation.json", json.dumps(receipt))
+        with patch.object(
+            ci,
+            "api",
+            side_effect=[
+                {
+                    "artifacts": [
+                        {
+                            "name": "lyricbridge-validation-receipt",
+                            "expired": False,
+                            "id": 1,
+                        }
+                    ]
+                },
+                data.getvalue(),
+            ],
+        ):
+            self.assertIsNone(ci.read_receipt("owner/repo", run))
+
+    def test_in_progress_parent_can_supply_an_authenticated_receipt(self):
+        import io
+        import zipfile
+
+        run, receipt, jobs = self.fixture(None, "in_progress")
+        receipt.update(
+            schema=ci.SCHEMA,
+            run_id="100",
+            repository="owner/repo",
+            run_head_sha="workflow",
+            required=list(ci.CODE),
+            run_attempt=1,
+        )
+        data = io.BytesIO()
+        with zipfile.ZipFile(data, "w") as archive:
+            archive.writestr("validation.json", json.dumps(receipt))
+        with patch.object(
+            ci,
+            "api",
+            side_effect=[
+                {
+                    "artifacts": [
+                        {
+                            "name": "lyricbridge-validation-receipt",
+                            "expired": False,
+                            "id": 1,
+                        }
+                    ]
+                },
+                data.getvalue(),
+            ],
+        ):
+            self.assertIsNotNone(ci.read_receipt("owner/repo", run))
 
 
 if __name__ == "__main__":
