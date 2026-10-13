@@ -1,7 +1,7 @@
 using LyricBridge;
 
 // Fixtures own process-wide SQLite pools and the Jellyfin plugin singleton.
-[assembly: Xunit.CollectionBehavior(DisableTestParallelization = true)]
+[assembly: Xunit.v3.Parallelization(Mode = Xunit.Sdk.ParallelMode.None)]
 public static class TestConfiguration
 {
     public static GenerationPolicy Policy()

@@ -1,4 +1,5 @@
 """Deterministic shared-catalog validation and preservation regressions."""
+
 import copy
 from pathlib import Path
 import sys
@@ -10,10 +11,21 @@ from release_metadata import load_release
 
 
 def entry(guid: str, version: str = "0.1.0.0") -> dict:
-    return {"guid": guid, "name": "Fixture", "custom": {"preserve": True}, "versions": [{
-        "version": version, "targetAbi": "12.2.0.0", "sourceUrl": "https://example.invalid/plugin.zip",
-        "checksum": "a" * 32, "timestamp": "2026-10-11T00:00:00Z", "unknown": [1, 2],
-    }]}
+    return {
+        "guid": guid,
+        "name": "Fixture",
+        "custom": {"preserve": True},
+        "versions": [
+            {
+                "version": version,
+                "targetAbi": "12.2.0.0",
+                "sourceUrl": "https://example.invalid/plugin.zip",
+                "checksum": "a" * 32,
+                "timestamp": "2026-10-11T00:00:00Z",
+                "unknown": [1, 2],
+            }
+        ],
+    }
 
 
 class CatalogTests(unittest.TestCase):
@@ -54,7 +66,13 @@ class CatalogTests(unittest.TestCase):
         duplicate = copy.deepcopy(plugin)
         duplicate["versions"].append(copy.deepcopy(duplicate["versions"][0]))
         invalid.append([duplicate])
-        for key, value in (("targetAbi", "12.2"), ("checksum", "broken"), ("sourceUrl", "http://example.invalid"), ("sourceUrl", "https://user:secret@example.invalid"), ("timestamp", "2026-10-11")):
+        for key, value in (
+            ("targetAbi", "12.2"),
+            ("checksum", "broken"),
+            ("sourceUrl", "http://example.invalid"),
+            ("sourceUrl", "https://user:secret@example.invalid"),
+            ("timestamp", "2026-10-11"),
+        ):
             candidate = copy.deepcopy(plugin)
             candidate["versions"][0][key] = value
             invalid.append([candidate])

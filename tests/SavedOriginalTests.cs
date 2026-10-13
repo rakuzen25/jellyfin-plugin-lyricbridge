@@ -155,7 +155,7 @@ public sealed class SavedOriginalTests : IDisposable
             await ready.Task; if (completeFirst) await committed.Task;
             try { return store.DeleteOriginal(song, original.Hash); } finally { if (!completeFirst) committed.TrySetResult(); }
         });
-        await Task.WhenAll(completion, deletion).WaitAsync(TimeSpan.FromSeconds(10));
+        await Task.WhenAll(completion, deletion).WaitAsync(TimeSpan.FromSeconds(10), Xunit.TestContext.Current.CancellationToken);
         Assert.Equal(completeFirst, await completion); Assert.Null(store.GetVariant(variant.Key)); Assert.Null(store.GetDocument(original.Hash));
         var history = store.GetJob(job.Id)!;
         Assert.True(history.OutputDeleted); Assert.NotNull(history.OutputDeletedAt); Assert.Equal(completeFirst ? "complete" : "cancelled", history.State);
@@ -212,12 +212,12 @@ public sealed class SavedOriginalTests : IDisposable
         using var worker = new LocalPronunciation(store, async (_, _) => { entered.TrySetResult(); await release.Task; return "nihongo"; });
         try
         {
-            await worker.StartAsync(default); Assert.Equal("queued", worker.Ensure(original, new()).State);
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5)); store.DeleteOriginal(item, original.Hash); worker.InvalidateDeleted(original.Hash);
-            release.SetResult(); await worker.StopAll().WaitAsync(TimeSpan.FromSeconds(5));
+            await worker.StartAsync(Xunit.TestContext.Current.CancellationToken); Assert.Equal("queued", worker.Ensure(original, new()).State);
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), Xunit.TestContext.Current.CancellationToken); store.DeleteOriginal(item, original.Hash); worker.InvalidateDeleted(original.Hash);
+            release.SetResult(); await worker.StopAll().WaitAsync(TimeSpan.FromSeconds(5), Xunit.TestContext.Current.CancellationToken);
             Assert.Null(store.GetDocument(original.Hash)); Assert.Empty(store.Variants(original.Hash));
         }
-        finally { release.TrySetResult(); await worker.StopAsync(default); }
+        finally { release.TrySetResult(); await worker.StopAsync(CancellationToken.None); }
     }
     [Fact]
     public void DeletingAnOlderOriginalPreservesTheCurrentOriginalAndItsActiveJob()
@@ -235,8 +235,8 @@ public sealed class SavedOriginalTests : IDisposable
         var store = new Store(directory); var song = Guid.NewGuid(); var original = Lyrics("original"); store.ApplySelection(song, new(original, null));
         var provider = new OriginalBarrierSource(); using var registry = ProviderRegistry.WithSources(provider);
         var retrieval = new Retrieval(store, registry, NullLogger<Retrieval>.Instance);
-        var selecting = retrieval.Select(song, new("fixture", "provider", "title", "artist", "", null, 100), default);
-        await provider.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var selecting = retrieval.Select(song, new("fixture", "provider", "title", "artist", "", null, 100), Xunit.TestContext.Current.CancellationToken);
+        await provider.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5), Xunit.TestContext.Current.CancellationToken);
         store.DeleteOriginal(song, original.Hash); provider.Release.SetResult();
         Assert.Equal("original_deleted", (await Assert.ThrowsAsync<WorkflowException>(() => selecting)).Code);
         Assert.Empty(store.SavedOriginals(song)); Assert.Null(store.Selection(song).Lyrics); Assert.Empty(store.All<RichLyrics>("document"));
@@ -250,10 +250,10 @@ public sealed class SavedOriginalTests : IDisposable
         var track = new Lyricify.Lyrics.Models.TrackMultiArtistMetadata { Title = "title", Artists = ["artist"] };
         var user = Guid.NewGuid(); var old = discovery.Search(user, song, track, null);
         // Search is blocked in Fetch, after its provider candidate has been admitted.
-        await provider.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5)); var result = store.DeleteOriginal(song, original.Hash);
+        await provider.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5), Xunit.TestContext.Current.CancellationToken); var result = store.DeleteOriginal(song, original.Hash);
         var fresh = discovery.Search(Guid.NewGuid(), song, track, null);
         discovery.InvalidateDeleted(song, result.Revision); provider.Release.TrySetResult();
-        await provider.FreshEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await provider.FreshEntered.Task.WaitAsync(TimeSpan.FromSeconds(5), Xunit.TestContext.Current.CancellationToken);
         Assert.True(provider.OldToken.IsCancellationRequested); Assert.False(provider.FreshToken.IsCancellationRequested);
         await discovery.StopAll();
         Assert.Null(store.Selection(song).Lyrics); Assert.True(store.DiscoverySuppressed(song));

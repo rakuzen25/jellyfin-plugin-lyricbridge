@@ -4,6 +4,7 @@ import copy
 from datetime import datetime, timedelta, timezone
 import json
 import os
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -19,12 +20,29 @@ from source_inventory import source_files
 ROOT = Path(__file__).resolve().parent.parent
 
 
-class PolicyTests(unittest.TestCase):
+class IsolatedCiTestCase(unittest.TestCase):
+    def setUp(self):
+        # Runner context must never select a different policy path or enable real
+        # GitHub calls. Individual scenarios opt into push/release context below.
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith("GITHUB_")
+            and key not in {"GH_TOKEN", "CI_RUN_HEAD_SHA", "CI_JOB_RESULTS"}
+        }
+        environment["GITHUB_EVENT_NAME"] = "pull_request"
+        context = patch.dict(os.environ, environment, clear=True)
+        context.start()
+        self.addCleanup(context.stop)
+
+
+class PolicyTests(IsolatedCiTestCase):
     def test_representative_impacts(self):
         cases = {
             "README.md": set(),
             "version.txt": {"artifacts"},
-            ".editorconfig": {"frontend"},
+            ".editorconfig": {"frontend", "backend"},
+            "scripts/format-dotnet.sh": {"backend", "tooling", "artifacts"},
             ".dockerignore": {"tooling", "artifacts"},
             "frontend/bridge/search-session.ts": {"frontend", "workflow", "artifacts"},
             "frontend/bridge/contracts.ts": {
@@ -50,7 +68,7 @@ class PolicyTests(unittest.TestCase):
             "src/WebRendererIntegration.cs": {"backend", "tooling", "artifacts"},
             "scripts/package.sh": {"tooling", "artifacts"},
             ".github/workflows/validate.yml": set(ci.GROUPS),
-            "unclassified.config": set(ci.GROUPS),
+            "renovate.json": {"metadata"},
         }
         for path, expected in cases.items():
             with self.subTest(path=path):
@@ -255,8 +273,8 @@ class PolicyTests(unittest.TestCase):
         inputs = {g: g for g in ci.GROUPS}
         baseline = {
             "policy": "policy",
-            "inputs": {g: inputs[g] for g in ci.CODE},
-            "origins": {g: "100" for g in ci.CODE},
+            "inputs": {g: inputs[g] for g in ci.RUNTIME},
+            "origins": {g: "100" for g in ci.RUNTIME},
         }
         run = dict(self.trusted_run(), id=200, path=".github/workflows/safety.yml")
         receipt = {
@@ -266,12 +284,35 @@ class PolicyTests(unittest.TestCase):
             "groups": {},
             "full_baseline": baseline,
         }
+        origin_receipt = dict(
+            receipt, groups={g: "success" for g in ci.RUNTIME}, full_baseline={}
+        )
+
+        def response(repository, endpoint):
+            if endpoint.startswith("/actions/runs?"):
+                return {"workflow_runs": [run]}
+            if endpoint == "/actions/runs/100":
+                return self.trusted_run()
+            return {
+                "jobs": [
+                    {"name": name, "status": "completed", "conclusion": "success"}
+                    for names in ci.GROUP_JOB_NAMES.values()
+                    for name in names
+                ]
+            }
+
         with (
-            patch.object(ci, "api", return_value={"workflow_runs": [run]}),
-            patch.object(ci, "read_receipt", return_value=receipt),
+            patch.object(ci, "api", side_effect=response),
+            patch.object(
+                ci,
+                "read_receipt",
+                side_effect=lambda repo, source: (
+                    receipt if source["id"] == 200 else origin_receipt
+                ),
+            ),
         ):
             proofs = ci.evidence("owner/repo", inputs, "policy", full_only=True)
-        self.assertEqual(set(proofs), set(ci.CODE))
+        self.assertEqual(set(proofs), set(ci.RUNTIME))
         self.assertTrue(all(proof["run_id"] == "100" for proof in proofs.values()))
         self.assertNotIn("artifacts", proofs)
         receipt["full_baseline"] = dict(baseline, policy="changed")
@@ -374,7 +415,7 @@ class PolicyTests(unittest.TestCase):
             )
             remote.assert_not_called()
 
-    def test_unknown_external_inputs_force_full_without_reuse(self):
+    def test_unknown_external_inputs_fail_before_evidence_lookup(self):
         with (
             patch.object(
                 ci,
@@ -383,15 +424,14 @@ class PolicyTests(unittest.TestCase):
                     "unknown.config" if args[0] == "diff" else "commit"
                 ),
             ),
-            patch.object(ci, "evidence", return_value={g: {} for g in ci.CODE}),
+            patch.object(ci, "evidence") as remote,
             patch.dict(
                 os.environ, {"GITHUB_REPOSITORY": "owner/repo", "GH_TOKEN": "synthetic"}
             ),
         ):
-            self.assertEqual(
-                set(ci.plan(ROOT, "base", False, False, True, False)["execute"]),
-                set(ci.GROUPS),
-            )
+            with self.assertRaisesRegex(ValueError, "unknown.config"):
+                ci.plan(ROOT, "base", False, False, True, False)
+            remote.assert_not_called()
 
     def test_own_version_ranges_normalize_but_external_versions_do_not(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -472,6 +512,685 @@ class PolicyTests(unittest.TestCase):
             self.assertRaisesRegex(ValueError, "24 hours"),
         ):
             ci.verify_run("owner/repo", "100", receipt)
+
+
+class CumulativeCoverageTests(IsolatedCiTestCase):
+    def test_real_git_ancestry_rejects_divergent_force_push_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def command(*args):
+                return ci.git(root, "-c", "commit.gpgsign=false", *args)
+
+            command("init", "--quiet")
+            command(
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "base",
+            )
+            ancestor = command("rev-parse", "HEAD")
+            command(
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "old tip",
+            )
+            old_tip = command("rev-parse", "HEAD")
+            command("checkout", "--quiet", "-b", "replacement", ancestor)
+            command(
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "new tip",
+            )
+            receipt = self.receipt_fixture()
+            receipt["commit"] = old_tip
+            with (
+                patch.object(ci, "recent_runs", return_value=[self.run_fixture()]),
+                patch.object(ci, "read_receipt", return_value=receipt),
+            ):
+                self.assertEqual(
+                    ci.validated_ancestor(root, "owner/repo", "main", "policy"), {}
+                )
+                receipt["commit"] = ancestor
+                self.assertEqual(
+                    ci.validated_ancestor(root, "owner/repo", "main", "policy")[
+                        "commit"
+                    ],
+                    ancestor,
+                )
+
+    def test_expired_artifact_is_not_downloaded(self):
+        run = PolicyTests().trusted_run()
+        with patch.object(
+            ci,
+            "api",
+            return_value={
+                "artifacts": [
+                    {"name": "lyricbridge-validation-receipt", "expired": True}
+                ]
+            },
+        ) as api:
+            self.assertIsNone(ci.read_receipt("owner/repo", run))
+            self.assertEqual(api.call_count, 1)
+
+    def test_unknown_failed_run_without_receipt_blocks_older_reuse(self):
+        run = PolicyTests().trusted_run()
+        run["conclusion"] = "failure"
+        with (
+            patch.object(ci, "recent_runs", return_value=[run]),
+            patch.object(ci, "read_receipt", return_value=None),
+        ):
+            self.assertEqual(
+                ci.evidence("owner/repo", {g: g for g in ci.GROUPS}, "policy"), {}
+            )
+
+    def run_fixture(self, identifier=100, conclusion="success", branch="main"):
+        return {
+            "id": identifier,
+            "head_branch": branch,
+            "conclusion": conclusion,
+            "path": ".github/workflows/release-please.yml",
+        }
+
+    def receipt_fixture(self, schema=ci.SCHEMA, full=True):
+        receipt = {
+            "schema": schema,
+            "commit": "a" * 40,
+            "tree": "tree",
+            "policy": "policy",
+            "inputs": {g: g for g in ci.GROUPS},
+            "full": full,
+            "required": list(ci.GROUPS) if full else [],
+            "groups": {g: "success" for g in ci.GROUPS} if full else {},
+        }
+        return receipt
+
+    def test_only_successful_same_branch_ancestors_supply_baselines(self):
+        runs = [
+            self.run_fixture(104, "cancelled"),
+            self.run_fixture(103, "failure"),
+            self.run_fixture(102, branch="other"),
+            self.run_fixture(101),
+            self.run_fixture(),
+        ]
+
+        def ancestry(root, *args):
+            if args[2] == "b" * 40:
+                raise subprocess.CalledProcessError(1, "git")
+            return ""
+
+        def receipt(repo, run):
+            value = self.receipt_fixture()
+            if run["id"] == 101:
+                value["commit"] = "b" * 40
+            return value
+
+        with (
+            patch.object(ci, "recent_runs", return_value=runs),
+            patch.object(ci, "read_receipt", side_effect=receipt) as read,
+            patch.object(ci, "git", side_effect=ancestry),
+        ):
+            self.assertEqual(
+                ci.validated_ancestor(ROOT, "owner/repo", "main", "policy")["run_id"],
+                "100",
+            )
+            self.assertEqual(read.call_count, 2)
+
+    def test_legacy_full_accepted_but_legacy_narrow_rejected(self):
+        for full in (False, True):
+            with (
+                self.subTest(full=full),
+                patch.object(ci, "recent_runs", return_value=[self.run_fixture()]),
+                patch.object(
+                    ci, "read_receipt", return_value=self.receipt_fixture(1, full)
+                ),
+                patch.object(ci, "git", return_value=""),
+            ):
+                self.assertEqual(
+                    bool(ci.validated_ancestor(ROOT, "owner/repo", "main", "policy")),
+                    full,
+                )
+
+    def test_cumulative_identity_and_policy_must_match(self):
+        receipt = self.receipt_fixture(full=False)
+        receipt["coverage"] = {
+            "complete": True,
+            "identity": ci.coverage_identity(receipt),
+        }
+        for invalid in (None, "identity", "policy", "failed"):
+            value = copy.deepcopy(receipt)
+            if invalid == "identity":
+                value["coverage"]["identity"] = "invalid"
+            if invalid == "policy":
+                value["policy"] = "old"
+            if invalid == "failed":
+                value["required"] = ["backend"]
+                value["groups"] = {"backend": "failure"}
+            with (
+                self.subTest(invalid=invalid),
+                patch.object(ci, "recent_runs", return_value=[self.run_fixture()]),
+                patch.object(ci, "read_receipt", return_value=value),
+                patch.object(ci, "git", return_value=""),
+            ):
+                self.assertEqual(
+                    bool(ci.validated_ancestor(ROOT, "owner/repo", "main", "policy")),
+                    invalid is None,
+                )
+
+    def test_missing_or_expired_receipt_cannot_establish_baseline(self):
+        with (
+            patch.object(ci, "recent_runs", return_value=[self.run_fixture()]),
+            patch.object(ci, "read_receipt", return_value=None),
+        ):
+            self.assertEqual(
+                ci.validated_ancestor(ROOT, "owner/repo", "main", "policy"), {}
+            )
+
+    def test_lookup_is_bounded_to_three_pages(self):
+        with patch.object(
+            ci, "api", return_value={"workflow_runs": [self.run_fixture()] * 100}
+        ) as api:
+            self.assertEqual(len(list(ci.recent_runs("owner/repo"))), 300)
+            self.assertEqual(api.call_count, 3)
+
+    def selected(
+        self, changes, baseline=True, proofs=None, unavailable=False, event="push"
+    ):
+        inputs = {g: g for g in ci.GROUPS}
+        ancestor = (
+            {
+                "commit": "a" * 40,
+                "run_id": "100",
+                "identity": "coverage",
+                "inputs": inputs,
+            }
+            if baseline
+            else {}
+        )
+
+        def git(root, *args):
+            if args[0] == "diff":
+                self.assertEqual(
+                    args[-2], "a" * 40 if event == "push" and baseline else "previous"
+                )
+                return "\n".join(changes)
+            return "commit"
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "GITHUB_EVENT_NAME": event,
+                    "GITHUB_REF_NAME": "main",
+                    "GITHUB_REPOSITORY": "owner/repo",
+                    "GH_TOKEN": "synthetic",
+                },
+            ),
+            patch.object(
+                ci,
+                "validated_ancestor",
+                side_effect=urllib.error.URLError("offline") if unavailable else None,
+                return_value=ancestor,
+            ),
+            patch.object(ci, "fingerprints", return_value=inputs),
+            patch.object(ci, "evidence", return_value=proofs or {}),
+            patch.object(ci, "git", side_effect=git),
+        ):
+            return ci.plan(ROOT, "previous", False, False, True, False)
+
+    def test_cancelled_renderer_changes_survive_later_config_or_docs_pushes(self):
+        for last in (".editorconfig", "README.md", "frontend/bridge/search-session.ts"):
+            result = self.selected(["frontend/renderer/timeline.ts", last])
+            self.assertIn("performance", result["execute"])
+            self.assertIn("rendering", result["execute"])
+            self.assertEqual(result["comparison"]["baseline"]["run_id"], "100")
+
+    def test_failed_backend_and_multiple_cancelled_changes_are_cumulative(self):
+        result = self.selected(
+            [
+                "src/Core/Models.cs",
+                "frontend/renderer/timeline.ts",
+                "frontend/bridge/search-session.ts",
+            ]
+        )
+        self.assertTrue(
+            {"backend", "workflow", "performance"} <= set(result["execute"])
+        )
+
+    def test_documentation_after_successful_baseline_skips_checks(self):
+        self.assertEqual(self.selected(["README.md"])["execute"], [])
+
+    def test_missing_baseline_or_api_requires_all_but_reuses_passed_groups(self):
+        for unavailable in (False, True):
+            result = self.selected(
+                [],
+                baseline=False,
+                unavailable=unavailable,
+                proofs={g: {"run_id": "100", "input": g} for g in ci.CODE},
+            )
+            self.assertEqual(set(result["required"]), set(ci.GROUPS))
+            self.assertEqual(result["execute"], ["artifacts"])
+            self.assertTrue(result["comparison"]["fallback_reason"])
+
+    def test_pr_still_uses_cumulative_merge_base(self):
+        result = self.selected(["frontend/renderer/timeline.ts"], event="pull_request")
+        self.assertEqual(result["comparison"]["base"], "previous")
+        self.assertIn("performance", result["execute"])
+
+    def test_shared_fingerprint_change_requires_group_even_without_path_selection(self):
+        original = ci.fingerprints(ROOT)
+        baseline = {"commit": "a" * 40, "inputs": dict(original, backend="older")}
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "GITHUB_EVENT_NAME": "push",
+                    "GITHUB_REF_NAME": "main",
+                    "GITHUB_REPOSITORY": "owner/repo",
+                    "GH_TOKEN": "synthetic",
+                },
+            ),
+            patch.object(ci, "validated_ancestor", return_value=baseline),
+            patch.object(ci, "evidence", return_value={}),
+            patch.object(
+                ci,
+                "git",
+                side_effect=lambda root, *args: (
+                    "README.md" if args[0] == "diff" else "commit"
+                ),
+            ),
+        ):
+            self.assertIn(
+                "backend",
+                ci.plan(ROOT, "previous", False, False, True, False)["execute"],
+            )
+
+    def test_failed_run_passed_groups_reused_but_matching_failures_block(self):
+        inputs = {g: g for g in ci.GROUPS}
+        runs = [self.run_fixture(101, "failure"), self.run_fixture()]
+
+        def receipt(repo, run):
+            return {
+                "policy": "policy",
+                "inputs": inputs,
+                "groups": {
+                    g: "failure" if run["id"] == 101 and g == "backend" else "success"
+                    for g in ci.CODE
+                },
+            }
+
+        with (
+            patch.object(ci, "recent_runs", return_value=runs),
+            patch.object(ci, "read_receipt", side_effect=receipt),
+            patch.object(
+                ci,
+                "api",
+                return_value={
+                    "jobs": [
+                        {"name": name, "status": "completed", "conclusion": "success"}
+                        for names in ci.GROUP_JOB_NAMES.values()
+                        for name in names
+                    ]
+                },
+            ),
+        ):
+            proofs = ci.evidence("owner/repo", inputs, "policy")
+        self.assertNotIn("backend", proofs)
+        self.assertEqual(proofs["frontend"]["run_id"], "101")
+
+    def test_success_extends_coverage_failure_does_not(self):
+        selection = self.selected(["README.md"])
+        self.assertTrue(ci.finish(ROOT, selection, {})["coverage"]["complete"])
+        selection = self.selected(["src/Core/Models.cs"])
+        self.assertFalse(ci.finish(ROOT, selection, {})["coverage"]["complete"])
+
+
+class MetadataTests(IsolatedCiTestCase):
+    def test_metadata_only_schedule_does_not_launch_full_runtime_suite(self):
+        with (
+            patch.object(
+                ci, "evidence", return_value={g: {"run_id": "100"} for g in ci.RUNTIME}
+            ),
+            patch.dict(
+                os.environ, {"GITHUB_REPOSITORY": "owner/repo", "GH_TOKEN": "synthetic"}
+            ),
+        ):
+            selection = ci.plan(ROOT, "", False, False, True, True)
+        self.assertEqual(selection["execute"], ["metadata"])
+        self.assertFalse(selection["full"])
+
+    def test_all_tracked_inputs_are_classified(self):
+        ci.check_classification(ROOT, [])
+
+    def test_metadata_selection_does_not_build_web_or_artifacts(self):
+        for path in (
+            "renovate.json",
+            ".github/CODEOWNERS",
+            ".github/ISSUE_TEMPLATE/bug.yml",
+            ".github/PULL_REQUEST_TEMPLATE.md",
+        ):
+            with (
+                self.subTest(path=path),
+                patch.object(
+                    ci,
+                    "git",
+                    side_effect=lambda root, *args: (
+                        path if args[0] == "diff" else "commit"
+                    ),
+                ),
+            ):
+                selected = ci.plan(ROOT, "base", False, False, False, False)
+                self.assertEqual(selected["execute"], ["metadata"])
+                self.assertEqual(
+                    selected["classified_changes"][0]["rule"], "automation-metadata"
+                )
+
+    def test_backend_runner_inputs_invalidate_reused_evidence(self):
+        for path in (
+            "global.json",
+            "tests/StorageTests.csproj",
+            "tests/packages.lock.json",
+        ):
+            with self.subTest(path=path), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "Directory.Build.props").write_text(
+                    "<LyricBridgeVersion>0.1.1</LyricBridgeVersion>"
+                )
+                file = root / path
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text(
+                    '{"dependencies": {"net10.0": {}}}'
+                    if path.endswith(".json")
+                    else "first"
+                )
+                before = ci.fingerprints(root)
+                file.write_text(
+                    '{"dependencies": {"net10.0": {}}, "changed": true}'
+                    if path.endswith(".json")
+                    else "second"
+                )
+                after = ci.fingerprints(root)
+                self.assertNotEqual(before["backend"], after["backend"])
+
+    def test_metadata_fingerprint_isolated_from_runtime(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for path in (
+                "renovate.json",
+                ".github/CODEOWNERS",
+                ".github/ISSUE_TEMPLATE/bug.yml",
+            ):
+                file = root / path
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text("first")
+                before = ci.fingerprints(root)
+                file.write_text("second")
+                after = ci.fingerprints(root)
+                self.assertNotEqual(before["metadata"], after["metadata"])
+                self.assertNotEqual(before["artifacts"], after["artifacts"])
+                for group in set(ci.CODE) - {"metadata"}:
+                    self.assertEqual(before[group], after[group], (path, group))
+
+    def test_unknown_deleted_and_renamed_paths_cannot_evade_check(self):
+        for changed in (
+            ["deleted.config"],
+            ["old.config", "frontend/renderer/new.ts"],
+            ["README.md", "new.config"],
+        ):
+            with (
+                self.subTest(changed=changed),
+                self.assertRaisesRegex(ValueError, "config"),
+            ):
+                ci.check_classification(ROOT, changed)
+
+    def test_unknown_tracked_file_fails_even_with_no_changes(self):
+        with (
+            patch.object(ci, "tracked_files", return_value=["unknown.config"]),
+            self.assertRaisesRegex(ValueError, "unknown.config"),
+        ):
+            ci.check_classification(ROOT, [])
+
+    def test_new_renderer_and_policy_keep_broad_coverage(self):
+        self.assertIn("performance", ci.impacts("frontend/renderer/new.ts"))
+        self.assertEqual(ci.impacts("scripts/ci.py"), set(ci.GROUPS))
+        self.assertEqual(ci.impacts(".github/actions/setup/action.yml"), set(ci.GROUPS))
+
+    def test_metadata_checks_reject_bad_json_and_codeowners(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "renovate.json").write_text("{broken")
+            with self.assertRaises(json.JSONDecodeError):
+                ci.metadata_check(root)
+            (root / "renovate.json").unlink()
+            (root / ".github").mkdir()
+            ownerfile = root / ".github/CODEOWNERS"
+            ownerfile.write_text("missing/path @owner\n")
+            with self.assertRaisesRegex(ValueError, "matches no tracked"):
+                ci.metadata_check(root)
+            ownerfile.write_text("* invalid-owner\n")
+            with self.assertRaisesRegex(ValueError, "invalid pattern or owner"):
+                ci.metadata_check(root)
+
+    def test_metadata_and_unfinished_renderer_are_both_required(self):
+        with patch.object(
+            ci,
+            "git",
+            side_effect=lambda root, *args: (
+                "renovate.json\nfrontend/renderer/runtime.ts"
+                if args[0] == "diff"
+                else "commit"
+            ),
+        ):
+            selection = ci.plan(ROOT, "base", False, False, False, False)
+        self.assertIn("metadata", selection["required"])
+        self.assertIn("performance", selection["required"])
+
+
+class GroupReuseTests(IsolatedCiTestCase):
+    def fixture(self, conclusion="cancelled", status="completed"):
+        run = dict(
+            PolicyTests().trusted_run(),
+            conclusion=conclusion,
+            status=status,
+            run_attempt=1,
+        )
+        receipt = {
+            "policy": "policy",
+            "inputs": {g: g for g in ci.CODE},
+            "groups": {g: "success" for g in ci.CODE},
+        }
+        jobs = [
+            {
+                "name": "validate / " + name,
+                "status": "completed",
+                "conclusion": "success",
+                "run_attempt": 1,
+            }
+            for names in ci.GROUP_JOB_NAMES.values()
+            for name in names
+        ]
+        return run, receipt, jobs
+
+    def test_completed_groups_reuse_independent_of_parent_outcome(self):
+        for conclusion, status in (
+            ("success", "completed"),
+            ("failure", "completed"),
+            ("cancelled", "completed"),
+            ("timed_out", "completed"),
+            ("neutral", "completed"),
+            (None, "in_progress"),
+        ):
+            run, receipt, jobs = self.fixture(conclusion, status)
+            with (
+                self.subTest(conclusion=conclusion),
+                patch.object(ci, "recent_runs", return_value=[run]),
+                patch.object(ci, "read_receipt", return_value=receipt),
+                patch.object(ci, "api", return_value={"jobs": jobs}),
+            ):
+                proofs = ci.evidence("owner/repo", receipt["inputs"], "policy")
+                self.assertEqual(set(proofs), set(ci.CODE))
+
+    def test_unfinished_failed_and_wrong_attempt_jobs_are_not_reused(self):
+        for state, conclusion, attempt in (
+            ("in_progress", None, 1),
+            ("completed", "cancelled", 1),
+            ("completed", "failure", 1),
+            ("completed", "skipped", 1),
+            ("completed", "success", 2),
+        ):
+            run, receipt, jobs = self.fixture()
+            backend = next(job for job in jobs if job["name"] == "validate / backend")
+            backend.update(status=state, conclusion=conclusion, run_attempt=attempt)
+            with (
+                self.subTest(conclusion=conclusion, attempt=attempt),
+                patch.object(ci, "recent_runs", return_value=[run]),
+                patch.object(ci, "read_receipt", return_value=receipt),
+                patch.object(ci, "api", return_value={"jobs": jobs}),
+            ):
+                proofs = ci.evidence("owner/repo", receipt["inputs"], "policy")
+                self.assertNotIn("backend", proofs)
+                self.assertIn("frontend", proofs)
+
+    def test_matrix_group_requires_every_expected_job(self):
+        run, receipt, jobs = self.fixture()
+        jobs = [job for job in jobs if job["name"] != "validate / rendering (webkit)"]
+        with patch.object(ci, "api", return_value={"jobs": jobs}):
+            self.assertIsNone(
+                ci.completed_group_origin(
+                    "owner/repo", run, receipt, "rendering", "policy", "rendering", {}
+                )
+            )
+
+    def test_reuse_chain_resolves_to_original_job_and_rejects_cycles(self):
+        run, receipt, jobs = self.fixture()
+        origin = dict(run, id=99)
+        receipt["reused"] = {"backend": {"run_id": "99"}}
+        original = dict(receipt, reused={})
+        with (
+            patch.object(
+                ci,
+                "api",
+                side_effect=lambda repo, endpoint: (
+                    origin if endpoint == "/actions/runs/99" else {"jobs": jobs}
+                ),
+            ),
+            patch.object(ci, "read_receipt", return_value=original),
+        ):
+            self.assertEqual(
+                ci.completed_group_origin(
+                    "owner/repo", run, receipt, "backend", "policy", "backend", {}
+                ),
+                "99",
+            )
+            original["reused"] = {"backend": {"run_id": "99"}}
+            self.assertIsNone(
+                ci.completed_group_origin(
+                    "owner/repo", run, receipt, "backend", "policy", "backend", {}
+                )
+            )
+
+    def test_expired_missing_or_mismatched_origin_proof_cannot_reuse(self):
+        run, receipt, jobs = self.fixture()
+        receipt["reused"] = {"backend": {"run_id": "99"}}
+        for proof in (
+            None,
+            dict(receipt, policy="changed"),
+            dict(receipt, inputs={"backend": "different"}),
+            dict(receipt, groups={"backend": "failure"}),
+        ):
+            with (
+                self.subTest(proof=proof),
+                patch.object(ci, "api", return_value=dict(run, id=99)),
+                patch.object(ci, "read_receipt", return_value=proof),
+            ):
+                self.assertIsNone(
+                    ci.completed_group_origin(
+                        "owner/repo", run, receipt, "backend", "policy", "backend", {}
+                    )
+                )
+
+    def test_rerun_cannot_use_previous_attempt_receipt(self):
+        import io
+        import zipfile
+
+        run, receipt, jobs = self.fixture()
+        run["run_attempt"] = 2
+        receipt.update(
+            schema=ci.SCHEMA,
+            run_id="100",
+            repository="owner/repo",
+            run_head_sha="workflow",
+            required=list(ci.CODE),
+            run_attempt=1,
+        )
+        data = io.BytesIO()
+        with zipfile.ZipFile(data, "w") as archive:
+            archive.writestr("validation.json", json.dumps(receipt))
+        with patch.object(
+            ci,
+            "api",
+            side_effect=[
+                {
+                    "artifacts": [
+                        {
+                            "name": "lyricbridge-validation-receipt",
+                            "expired": False,
+                            "id": 1,
+                        }
+                    ]
+                },
+                data.getvalue(),
+            ],
+        ):
+            self.assertIsNone(ci.read_receipt("owner/repo", run))
+
+    def test_in_progress_parent_can_supply_an_authenticated_receipt(self):
+        import io
+        import zipfile
+
+        run, receipt, jobs = self.fixture(None, "in_progress")
+        receipt.update(
+            schema=ci.SCHEMA,
+            run_id="100",
+            repository="owner/repo",
+            run_head_sha="workflow",
+            required=list(ci.CODE),
+            run_attempt=1,
+        )
+        data = io.BytesIO()
+        with zipfile.ZipFile(data, "w") as archive:
+            archive.writestr("validation.json", json.dumps(receipt))
+        with patch.object(
+            ci,
+            "api",
+            side_effect=[
+                {
+                    "artifacts": [
+                        {
+                            "name": "lyricbridge-validation-receipt",
+                            "expired": False,
+                            "id": 1,
+                        }
+                    ]
+                },
+                data.getvalue(),
+            ],
+        ):
+            self.assertIsNotNone(ci.read_receipt("owner/repo", run))
 
 
 if __name__ == "__main__":

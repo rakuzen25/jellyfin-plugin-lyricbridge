@@ -31,8 +31,8 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: validation-${{ github.repository }}-${{ inputs.release_tag || github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ inputs.release_tag == '' && !inputs.scheduled }}
+  group: validation-${{ github.repository }}-${{ (inputs.scheduled || github.workflow == 'Changed-input full safety check') && 'scheduled' || inputs.release_tag || github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ inputs.release_tag == '' && !inputs.scheduled && github.workflow != 'Changed-input full safety check' }}
 defaults:
   run:
     shell: bash
@@ -43,8 +43,9 @@ env:
   CI_RUN_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 jobs:
   impact:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
+      metadata: ${{ steps.plan.outputs.metadata }}
       frontend: ${{ steps.plan.outputs.frontend }}
       backend: ${{ steps.plan.outputs.backend }}
       tooling: ${{ steps.plan.outputs.tooling }}
@@ -54,11 +55,12 @@ jobs:
       artifacts: ${{ steps.plan.outputs.artifacts }}
       web: ${{ steps.plan.outputs.web }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - uses: ./.github/actions/setup
       - run: python3 scripts/release.py prepare --repository "$REPOSITORY" --tag "$RELEASE_TAG" --environment "$GITHUB_ENV"
       - id: plan
         env:
@@ -73,7 +75,6 @@ jobs:
             else
               echo "Comparison history unavailable; selecting full validation."
               BASE=""
-              FULL=true
             fi
           fi
           args=(--reuse --base "$BASE")
@@ -81,18 +82,46 @@ jobs:
           if [ "$SCHEDULED" = true ]; then args+=(--scheduled); fi
           if [ "$RELEASE_MODE" = true ]; then args+=(--release); fi
           python3 scripts/ci.py plan "${args[@]}"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: validation-plan
           path: dist/plan.json
           if-no-files-found: error
+  metadata:
+    needs: impact
+    if: needs.impact.outputs.metadata == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          node: "true"
+      - run: mkdir -p dist/evidence
+      - run: python3 scripts/ci.py metadata-check 2>&1 | tee dist/evidence/metadata.log
+      - run: pnpm test:tooling 2>&1 | tee -a dist/evidence/metadata.log
+      - name: Validate Renovate configuration with the upstream validator
+        run: >-
+          docker run --rm --network none --entrypoint renovate-config-validator
+          -v "$PWD/renovate.json:/tmp/renovate.json:ro"
+          ghcr.io/renovatebot/renovate:44.134.1@sha256:79138db6b794ea9e00b52f3012e3d3912653214f3166bea537689196e5e91e21
+          --strict /tmp/renovate.json 2>&1 | tee -a dist/evidence/metadata.log
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: evidence-metadata
+          path: dist/evidence/
+          if-no-files-found: warn
   frontend:
     needs: impact
     if: needs.impact.outputs.web == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
@@ -102,17 +131,17 @@ jobs:
       - run: mkdir -p dist/evidence
       - name: Check affected frontend inputs
         if: needs.impact.outputs.frontend == 'true'
-        run: (pnpm lint && pnpm format:check && pnpm knip && pnpm test) 2>&1 | tee dist/evidence/frontend-checks.log
+        run: (pnpm lint && pnpm format:check && pnpm knip && pnpm test:tooling && pnpm test) 2>&1 | tee dist/evidence/frontend-checks.log
       - run: (pnpm build && python3 scripts/ci.py web-record) 2>&1 | tee dist/evidence/frontend-build.log
       - run: python3 tests/WebInstallation.py && sh tests/WebAssetVersions.sh
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: browser-assets
           path: |
             dist/web/
             dist/web-build.json
           if-no-files-found: error
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: evidence-frontend
@@ -124,12 +153,14 @@ jobs:
             browser-tests/results-run.*/
           if-no-files-found: warn
   backend:
+    env:
+      TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
     needs: [impact, frontend]
     if: needs.impact.outputs.backend == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
@@ -138,14 +169,16 @@ jobs:
           dotnet: "true"
           references: "true"
       - run: mkdir -p dist/evidence
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - name: Check .NET formatting
+        run: bash scripts/format-dotnet.sh 2>&1 | tee dist/evidence/dotnet-format.log
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: browser-assets
           path: dist
       - run: python3 scripts/ci.py web-verify
       - run: dotnet restore tests/StorageTests.csproj --locked-mode -m:1 -p:NuGetAudit=false
-      - run: dotnet test tests/StorageTests.csproj --no-restore -m:1 --logger "trx;LogFileName=backend.trx" --results-directory dist/evidence 2>&1 | tee dist/evidence/backend.log
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - run: dotnet test --project tests/StorageTests.csproj --no-restore --results-directory dist/evidence --report-xunit-trx --report-xunit-trx-filename backend.trx --minimum-expected-tests 1 2>&1 | tee dist/evidence/backend.log
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: evidence-backend
@@ -159,10 +192,10 @@ jobs:
   tooling:
     needs: impact
     if: needs.impact.outputs.tooling == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
@@ -172,7 +205,7 @@ jobs:
       - run: mkdir -p dist/evidence
       - run: LYRICBRIDGE_PYTHON=python sh scripts/check-python.sh 2>&1 | tee dist/evidence/tooling.log
       - run: (python3 tests/CiPolicy.py && python3 tests/ReleaseBoundaries.py && python3 tests/Catalog.py && python3 tests/ReleaseAutomation.py && python3 tests/LocalJellyfin.py) 2>&1 | tee -a dist/evidence/tooling.log
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: evidence-tooling
@@ -186,10 +219,10 @@ jobs:
   workflow:
     needs: [impact, frontend]
     if: needs.impact.outputs.workflow == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
@@ -197,13 +230,13 @@ jobs:
         with:
           node: "true"
       - run: mkdir -p dist/evidence
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: browser-assets
           path: dist
       - run: python3 scripts/ci.py web-verify
       - run: CI_BROWSER_GROUP=workflow scripts/test-browser.sh --project workflow-chromium --workers=2 2>&1 | tee dist/evidence/browser.log
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: evidence-workflow
@@ -217,14 +250,14 @@ jobs:
   rendering:
     needs: [impact, frontend]
     if: needs.impact.outputs.rendering == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         project: [chromium, mobile-chromium, firefox, webkit]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
@@ -232,13 +265,13 @@ jobs:
         with:
           node: "true"
       - run: mkdir -p dist/evidence
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: browser-assets
           path: dist
       - run: python3 scripts/ci.py web-verify
       - run: CI_BROWSER_GROUP=rendering scripts/test-browser.sh --project "${{ matrix.project }}" --workers=2 2>&1 | tee dist/evidence/browser.log
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: evidence-rendering${{ matrix.project }}
@@ -252,14 +285,14 @@ jobs:
   performance:
     needs: [impact, frontend]
     if: needs.impact.outputs.performance == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         project: [stress-chromium, stress-mobile-chromium]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
@@ -267,13 +300,13 @@ jobs:
         with:
           node: "true"
       - run: mkdir -p dist/evidence
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: browser-assets
           path: dist
       - run: python3 scripts/ci.py web-verify
       - run: CI_BROWSER_GROUP=performance scripts/test-browser.sh --project "${{ matrix.project }}" --workers=1 2>&1 | tee dist/evidence/browser.log
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: evidence-performance${{ matrix.project }}
@@ -287,10 +320,10 @@ jobs:
   package:
     needs: [impact, frontend]
     if: needs.impact.outputs.artifacts == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
@@ -300,7 +333,7 @@ jobs:
           dotnet: "true"
           references: "true"
       - run: mkdir -p dist/evidence
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: browser-assets
           path: dist
@@ -312,7 +345,7 @@ jobs:
           if [ "$RELEASE_MODE" = true ]; then args+=(--release); fi
           python3 scripts/clean-package.py "${args[@]}" 2>&1 | tee dist/evidence/package.log
       - run: python3 tests/PackageArtifacts.py
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: candidate-unverified
           path: |
@@ -321,7 +354,7 @@ jobs:
             dist/SHA256SUMS
             dist/clean-build.json
           if-no-files-found: error
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: evidence-package
@@ -335,10 +368,10 @@ jobs:
   installation:
     needs: [impact, package]
     if: needs.impact.outputs.artifacts == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
@@ -346,12 +379,12 @@ jobs:
         with:
           python: "true"
       - run: mkdir -p dist/evidence
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: candidate-unverified
           path: dist
       - run: python3 tests/PackageInstallation.py 2>&1 | tee dist/evidence/installation.log
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: evidence-installation
@@ -365,10 +398,10 @@ jobs:
   reproducibility:
     needs: [impact, package]
     if: needs.impact.outputs.artifacts == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
@@ -378,13 +411,13 @@ jobs:
           dotnet: "true"
           references: "true"
       - run: mkdir -p dist/evidence
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: candidate-unverified
           path: dist
       - run: python3 scripts/release.py prepare --repository "$REPOSITORY" --tag "$RELEASE_TAG" --environment "$GITHUB_ENV"
       - run: python3 tests/ReproducibleBuild.py 2>&1 | tee dist/evidence/reproducibility.log
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: evidence-reproducibility
@@ -398,10 +431,10 @@ jobs:
   advisories:
     needs: impact
     if: needs.impact.outputs.artifacts == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
@@ -413,7 +446,7 @@ jobs:
       - run: mkdir -p dist/evidence
       - run: pnpm audit 2>&1 | tee dist/evidence/pnpm-audit.log
       - run: dotnet restore tests/StorageTests.csproj --locked-mode -m:1 --force-evaluate -p:NuGetAuditMode=all -p:WarningsAsErrors=NU1900%3BNU1901%3BNU1902%3BNU1903%3BNU1904%3BNU1905 2>&1 | tee dist/evidence/nuget-audit.log
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: evidence-advisories
@@ -425,32 +458,25 @@ jobs:
             browser-tests/results-run.*/
           if-no-files-found: warn
   validate:
-    needs:
-      [
-        impact,
-        frontend,
-        backend,
-        tooling,
-        workflow,
-        rendering,
-        performance,
-        package,
-        installation,
-        reproducibility,
-        advisories,
-      ]
+    needs: [impact, metadata, frontend, backend, tooling, workflow, rendering, performance, package, installation, reproducibility, advisories]
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Report selection failure
+        if: needs.impact.result != 'success'
+        run: |
+          echo "Validation selection failed; inspect the impact job for classification or comparison errors."
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: validation-plan
           path: dist
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         if: needs.package.result == 'success'
         with:
           name: candidate-unverified
@@ -459,13 +485,13 @@ jobs:
         env:
           CI_JOB_RESULTS: ${{ toJSON(needs) }}
         run: python3 scripts/ci.py finish
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: lyricbridge-validation-receipt
           path: dist/validation.json
           if-no-files-found: warn
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: success() && needs.package.result == 'success'
         with:
           name: lyricbridge-candidate

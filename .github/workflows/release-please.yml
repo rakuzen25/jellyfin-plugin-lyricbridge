@@ -8,7 +8,7 @@ permissions:
   actions: read
 jobs:
   release-please:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     concurrency:
       group: release-please-${{ github.repository }}
       cancel-in-progress: false
@@ -17,9 +17,10 @@ jobs:
       tag: ${{ steps.release.outputs.tag_name || steps.resume.outputs.tag }}
       sha: ${{ steps.release.outputs.sha || steps.resume.outputs.sha }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - uses: ./.github/actions/setup
       - name: Check release token setup
         env:
           RELEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
@@ -28,7 +29,7 @@ jobs:
             echo "Configure RELEASE_PLEASE_TOKEN as documented in RELEASING.md."
             exit 1
           fi
-      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         id: release
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}

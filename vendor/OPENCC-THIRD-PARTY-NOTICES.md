@@ -11,6 +11,7 @@ This project is licensed under **MIT**. It bundles or depends on third-party com
 **License:** **Apache License 2.0**  
 **Files in this distribution:** `dicts/` (and any derived packs generated from these dictionaries)  
 **License files included:**  
+
 - `dicts/LICENSE` (Apache-2.0, copied from upstream)  
 - `dicts/NOTICE` (if provided by upstream; included here)  
 
@@ -18,11 +19,13 @@ This project is licensed under **MIT**. It bundles or depends on third-party com
 Copyright © OpenCC contributors
 
 **Modifications (if any):**  
+
 - We may repackage, filter, merge, or precompile dictionary content (e.g., CBOR/Zstd/“dict packs”) for performance.  
 - We do **not** change the license on these files; they remain **Apache-2.0**.  
 - A summary of our changes (if applicable) is recorded in `dicts/CHANGES.md`.
 
 **Notes on usage:**  
+
 - The OpenCC lexicon is treated as the canonical linguistic source.  
 - Any artifacts derived directly from the OpenCC lexicon (e.g., compiled packs) are considered derivative and are distributed together with the Apache-2.0 license and notices.
 

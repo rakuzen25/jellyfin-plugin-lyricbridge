@@ -4,6 +4,7 @@ All application tests use synthetic responses or an owned disposable Jellyfin in
 
 | Behavior | Maintained checks |
 | --- | --- |
+| Exact Node/pnpm identity, browser package/image agreement, Renovate automerge exceptions and image extraction | `pnpm test:tooling`, pre-restore toolchain guard and browser executable guard |
 | Authentication, libraries, native lyrics, admin/user isolation, reset, base URL, restart and uninstall | `tests/PackageInstallation.py`, backend reset/admission/workflow regressions |
 | Provider precedence, ranking, retrieval/cancellation, generation identity/snapshots/partial output, selections and transactional retention | Discoverable scenario groups in `tests/StorageTests.csproj` |
 | Saved originals, auxiliary restoration, shared/donor references, deletion rollback, stale admission/confirmation and generation/local completion races | `SavedOriginalTests.cs`, `SavedOriginalApiTests.cs`, `saved-originals.spec.cjs` |
@@ -24,6 +25,9 @@ The retired scripts listed below duplicated these workflows or relied on credent
 ## Execution groups and consolidation
 
 See [CI.md](CI.md) for selection, scheduling, evidence reuse and local commands.
+`tests/CiPolicy.py` also covers complete tracked-file classification, unknown deletes/renames,
+metadata-only selection and scheduling, runtime-fingerprint isolation, malformed metadata,
+and preservation of outstanding renderer coverage. No runtime test was removed for these checks.
 `browser-tests/groups.json` is the enforced file inventory. Workflow decisions run in
 desktop Chromium; tagged banner/saved-version layout cases additionally runs across
 viewports/engines. Rendering integration runs across all four supported projects;
@@ -114,3 +118,14 @@ Artwork lifecycle fixtures use track identities distinct from demo startup so
 cached startup artwork cannot bypass the tested image-admission barrier.
 
 Settings UI regressions cover shared original/auxiliary typography and controls, single-row accordion toggling, stable header geometry, browsing/focus restoration, current-only originals, permission gates, inline and playback previews, and desktop/mobile wrapping. Playback visual baselines are retained.
+
+## xUnit v3 / MTP migration verification
+
+Local verification on 2026-10-13 retained all 79 discovered test identities and
+expanded theory cases; the final MTP run passed 79 with no skips. The generated
+`dist/evidence/backend.trx` matched discovery and console outcomes. Disposable
+runner fixtures returned exit 0 for a passing test, 2 for a failing test, and 8
+for an empty selection with `--minimum-expected-tests 1`; all retained TRX reports.
+Locked NuGet restoration and dependency advisories passed. CI policy regressions
+verify that project, lockfile and runner configuration changes invalidate backend
+evidence. Hosted MTP execution and uploaded reports still require post-push checks.

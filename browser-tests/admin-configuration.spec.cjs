@@ -114,7 +114,15 @@ test("@workflow typed configuration preserves unsaved edits and paginates histor
         return storage.getBoundingClientRect().top - renderer.getBoundingClientRect().bottom;
     });
     expect(Math.round(sectionSpacing)).toBeGreaterThanOrEqual(24);
-    expect(await page.locator("#lb-web-status").evaluate((element) => getComputedStyle(element).whiteSpace)).toBe("pre-line");
+    const statusLines = page.locator("#lb-web-status > div");
+    await expect(statusLines).toHaveCount(3);
+    await expect(statusLines.nth(1)).toHaveText("Mechanism: direct");
+    await expect(statusLines.nth(2)).toHaveText("Web root: /fixture/web");
+    expect(
+        await statusLines.evaluateAll((lines) =>
+            lines.slice(1).every((line, index) => line.getBoundingClientRect().top >= lines[index].getBoundingClientRect().bottom),
+        ),
+    ).toBe(true);
     await page.locator("#lb-web-repair").click();
     await expect.poll(() => page.evaluate(() => window.calls.includes("/base/LyricBridge/admin/web-renderer/repair"))).toBe(true);
     await page.locator("#lb-web-enabled").uncheck();

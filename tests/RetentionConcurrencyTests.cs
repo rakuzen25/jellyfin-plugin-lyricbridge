@@ -68,8 +68,8 @@ public sealed class RetentionConcurrencyTests
                 if (!cleanupFirst) await firstDone.Task;
                 try { store.ExpireTransientData(now); }
                 finally { if (cleanupFirst) firstDone.TrySetResult(); }
-            });
-            await Task.WhenAll(referenceTask, cleanupTask).WaitAsync(TimeSpan.FromSeconds(15));
+            }, Xunit.TestContext.Current.CancellationToken);
+            await Task.WhenAll(referenceTask, cleanupTask).WaitAsync(TimeSpan.FromSeconds(15), Xunit.TestContext.Current.CancellationToken);
             if (await referenceTask)
             {
                 Assert.NotNull(store.GetDocument(original.Hash));

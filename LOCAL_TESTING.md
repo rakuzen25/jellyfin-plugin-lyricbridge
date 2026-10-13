@@ -8,7 +8,7 @@ Install Docker, the SDK pinned in `global.json`, Node/pnpm pinned by the reposit
 python3 scripts/local-jellyfin.py start
 ```
 
-Open **http://localhost:18096/web/**, finish Jellyfin setup and add `/media` as a music library. Copy sample songs and sidecar lyrics into `.build/local-jellyfin/media/`. That directory is mounted read-only in Jellyfin. All server configuration, plugin credentials and managed data stay in the ignored `.build/local-jellyfin/` directory. Use test accounts and leave credentialed providers unconfigured unless you intend to make external calls.
+Open **<http://localhost:18096/web/>**, finish Jellyfin setup and add `/media` as a music library. Copy sample songs and sidecar lyrics into `.build/local-jellyfin/media/`. That directory is mounted read-only in Jellyfin. All server configuration, plugin credentials and managed data stay in the ignored `.build/local-jellyfin/` directory. Use test accounts and leave credentialed providers unconfigured unless you intend to make external calls.
 
 For symlinks pointing outside the test media folder, also mount each target directory at its original absolute host path:
 

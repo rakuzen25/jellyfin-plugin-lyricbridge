@@ -9,6 +9,7 @@ run_dotnet() {
         "$dotnet_executable" "$@"
     fi
 }
+node scripts/check-toolchain.mjs
 "${LYRICBRIDGE_PNPM:-pnpm}" install --frozen-lockfile
 if [ "${LYRICBRIDGE_PREPARED_WEB:-false}" = true ]; then
     python3 scripts/ci.py web-verify

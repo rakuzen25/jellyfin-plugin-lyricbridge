@@ -3,6 +3,9 @@ const path = require("node:path");
 const { demo } = require("./demo-fixture.cjs");
 // Baselines were captured from the pre-extraction web ZIP using the same
 // synthetic, seekable media fixture. Override is used only to recapture them.
+// WebKit images were individually reviewed/refreshed for Playwright 1.64's
+// font rasterization and native media/checkbox controls; other engines retain
+// their earlier baselines. See DEPENDENCY_UPGRADES.md.
 test("paused multilingual playback and settings preserve the visual baseline", async ({ page, browserName }) => {
     // Keep the pre-extraction capture's artwork grace period independent of host load.
     const start = new Date("2026-01-01T00:00:00Z");

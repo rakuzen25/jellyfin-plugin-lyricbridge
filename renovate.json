@@ -1,4 +1,85 @@
 {
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-    "extends": ["config:base", ":automergeMinor", "group:allNonMajor"]
+    "extends": ["config:recommended"],
+    "automergeType": "pr",
+    "platformAutomerge": true,
+    "automergeStrategy": "squash",
+    "rebaseWhen": "behind-base-branch",
+    "ignoreTests": false,
+    "packageRules": [
+        {
+            "description": "Routine updates automerge only after required checks.",
+            "matchUpdateTypes": ["patch", "minor", "pin", "digest", "pinDigest"],
+            "automerge": true,
+            "groupName": "Routine dependency updates"
+        },
+        {
+            "description": "Major upgrades require review.",
+            "matchUpdateTypes": ["major"],
+            "automerge": false,
+            "groupName": null
+        },
+        {
+            "description": "Compiler and package-manager releases need migration review.",
+            "matchPackageNames": ["typescript", "typescript-eslint", "pnpm"],
+            "matchUpdateTypes": ["minor", "major"],
+            "automerge": false,
+            "groupName": null
+        },
+        {
+            "description": "Interpreter releases and runner OS changes need review.",
+            "matchPackageNames": ["node", "python", "ubuntu"],
+            "matchUpdateTypes": ["minor", "major"],
+            "automerge": false,
+            "groupName": null
+        },
+        {
+            "description": "Pre-1.0 esbuild minor versions can break build behavior.",
+            "matchPackageNames": ["esbuild"],
+            "matchUpdateTypes": ["minor", "major"],
+            "automerge": false,
+            "groupName": null
+        },
+        {
+            "description": "Provider/converter behavior is only partly covered by mocked tests.",
+            "matchPackageNames": ["Kawazu", "OpenccNetLib", "Lyricify.Lyrics.Helper"],
+            "matchUpdateTypes": ["minor", "major"],
+            "automerge": false,
+            "groupName": null
+        },
+        {
+            "matchPackageNames": ["xunit.v3", "xunit.analyzers"],
+            "groupName": "Backend test infrastructure"
+        },
+        {
+            "matchPackageNames": ["actions/upload-artifact", "actions/download-artifact"],
+            "groupName": "GitHub artifact actions"
+        },
+        {
+            "matchPackageNames": ["playwright", "mcr.microsoft.com/playwright"],
+            "groupName": "Playwright package and image",
+            "separateMajorMinor": true
+        },
+        {
+            "matchPackageNames": ["playwright", "mcr.microsoft.com/playwright"],
+            "matchUpdateTypes": ["minor", "major"],
+            "automerge": false
+        },
+        {
+            "description": "TypeScript 7 remains deferred.",
+            "matchPackageNames": ["typescript"],
+            "allowedVersions": "<7"
+        }
+    ],
+    "customManagers": [
+        {
+            "customType": "regex",
+            "managerFilePatterns": ["/^scripts\\/test-browser\\.sh$/"],
+            "matchStrings": [
+                "image=(?<depName>mcr\\.microsoft\\.com/playwright):(?<currentValue>v\\d+\\.\\d+\\.\\d+-noble)@(?<currentDigest>sha256:[a-f0-9]{64})"
+            ],
+            "datasourceTemplate": "docker",
+            "versioningTemplate": "docker"
+        }
+    ]
 }

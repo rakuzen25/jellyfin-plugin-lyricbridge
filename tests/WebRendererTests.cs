@@ -62,13 +62,13 @@ public sealed class WebRendererTests
             if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(index, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead);
             var enabled = true;
             using var integration = new WebRendererIntegration(root, () => enabled, NullLogger<WebRendererIntegration>.Instance, Revision, () => false);
-            Assert.Equal("direct", (await integration.Repair(default)).Mechanism);
-            Assert.Equal("direct", (await integration.Repair(default)).Mechanism);
+            Assert.Equal("direct", (await integration.Repair(Xunit.TestContext.Current.CancellationToken)).Mechanism);
+            Assert.Equal("direct", (await integration.Repair(Xunit.TestContext.Current.CancellationToken)).Mechanism);
             Assert.Equal(original, File.ReadAllText(index + ".lyricbridge-backup"));
             if (!OperatingSystem.IsWindows()) Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead, File.GetUnixFileMode(index));
             File.AppendAllText(index, "<!-- another plugin -->");
             enabled = false;
-            Assert.False((await integration.Repair(default)).Enabled);
+            Assert.False((await integration.Repair(Xunit.TestContext.Current.CancellationToken)).Enabled);
             Assert.Equal(original + "<!-- another plugin -->", File.ReadAllText(index));
             Assert.Equal(original, File.ReadAllText(index + ".lyricbridge-backup"));
         }
@@ -87,15 +87,15 @@ public sealed class WebRendererTests
             var enabled = true;
             var detected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             using var integration = new WebRendererIntegration(root, () => enabled, NullLogger<WebRendererIntegration>.Instance, Revision, () => { detected.TrySetResult(); return available; });
-            await integration.StartAsync(default);
-            await detected.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await integration.StartAsync(Xunit.TestContext.Current.CancellationToken);
+            await detected.Task.WaitAsync(TimeSpan.FromSeconds(5), Xunit.TestContext.Current.CancellationToken);
             available = true;
-            Assert.Equal("file-transformation", (await integration.Repair(default)).Mechanism);
+            Assert.Equal("file-transformation", (await integration.Repair(Xunit.TestContext.Current.CancellationToken)).Mechanism);
             Assert.Equal("<head></head>", File.ReadAllText(index));
             Assert.Contains(WebRendererIntegration.StartMarker, WebRendererIntegration.TransformIndexHtml(new() { Contents = "<head></head>" }));
             enabled = false;
             Assert.Equal("<head></head>", WebRendererIntegration.TransformIndexHtml(new() { Contents = "<head></head>" }));
-            await integration.StopAsync(default);
+            await integration.StopAsync(CancellationToken.None);
             Assert.Equal("<head></head>", WebRendererIntegration.TransformIndexHtml(new() { Contents = "<head></head>" }));
         }
         finally { Directory.Delete(root, true); }
@@ -105,8 +105,8 @@ public sealed class WebRendererTests
     {
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var integration = new WebRendererIntegration("/nonexistent-lyricbridge-disposal-fixture", () => true, NullLogger<WebRendererIntegration>.Instance, Revision, () => { entered.TrySetResult(); return true; });
-        await integration.StartAsync(default);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await integration.StartAsync(Xunit.TestContext.Current.CancellationToken);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), Xunit.TestContext.Current.CancellationToken);
         Assert.Contains(WebRendererIntegration.StartMarker, WebRendererIntegration.TransformIndexHtml(new() { Contents = "<head></head>" }));
         integration.Dispose();
         Assert.Equal("<head></head>", WebRendererIntegration.TransformIndexHtml(new() { Contents = "<head></head>" }));
@@ -132,7 +132,7 @@ public sealed class WebRendererTests
         try
         {
             using var integration = new WebRendererIntegration(root, () => true, NullLogger<WebRendererIntegration>.Instance, Revision, () => false);
-            Assert.Equal("none", (await integration.Repair(default)).Mechanism);
+            Assert.Equal("none", (await integration.Repair(Xunit.TestContext.Current.CancellationToken)).Mechanism);
             Assert.Equal("<head></head>", File.ReadAllText(index));
         }
         finally
@@ -145,7 +145,7 @@ public sealed class WebRendererTests
     public async Task MissingIndexAndFailedRegistrationDoNotFailServer()
     {
         using var integration = new WebRendererIntegration("/nonexistent-lyricbridge-fixture", () => true, NullLogger<WebRendererIntegration>.Instance, Revision, () => throw new InvalidOperationException());
-        Assert.Equal("none", (await integration.Repair(default)).Mechanism);
+        Assert.Equal("none", (await integration.Repair(Xunit.TestContext.Current.CancellationToken)).Mechanism);
         Assert.False(WebRendererIntegration.RegisterWith(typeof(string).Assembly));
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();

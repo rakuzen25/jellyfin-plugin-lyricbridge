@@ -36,7 +36,7 @@ public sealed class WorkflowConcurrencyTests : IDisposable
         Assert.Equal(3, results.Count(result => result is not null)); Assert.Equal(3, store.CountActiveJobs(user));
         var interrupted = results.First(result => result is not null)!; interrupted.State = "running"; store.SaveJob(interrupted);
         await worker.StartAsync(CancellationToken.None);
-        for (var count = 0; count < 100 && store.GetJob(interrupted.Id)?.State != "failed"; count++) await Task.Delay(10);
+        for (var count = 0; count < 100 && store.GetJob(interrupted.Id)?.State != "failed"; count++) await Task.Delay(10, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal("failed", store.GetJob(interrupted.Id)!.State);
         Assert.Equal(3, store.CountAdmissions(user, DateTime.UtcNow.AddDays(-1)));
         await worker.StopAsync(CancellationToken.None);

@@ -22,7 +22,11 @@ for line in (root / "SHA256SUMS").read_text().splitlines():
     assert hashlib.sha256((root / name).read_bytes()).hexdigest() == digest, name
 with zipfile.ZipFile(root / f"lyricbridge-{version}.zip") as archive:
     metadata = json.loads(archive.read("meta.json"))
-    assert (metadata["guid"], metadata["version"], metadata["targetAbi"]) == (release.guid, release.jellyfin_version, release.abi)
+    assert (metadata["guid"], metadata["version"], metadata["targetAbi"]) == (
+        release.guid,
+        release.jellyfin_version,
+        release.abi,
+    )
     manifest = json.loads((root / "manifest.json").read_text())
     assert manifest[0]["guid"] == release.guid
     assert manifest[0]["versions"][0]["version"] == release.jellyfin_version
@@ -65,10 +69,28 @@ with zipfile.ZipFile(root / f"lyricbridge-{version}.zip") as archive:
     )
 with zipfile.ZipFile(root / f"lyricbridge-source-{version}.zip") as archive:
     for name in ("demo.html", "demo.wav"):
-        assert archive.read("frontend/assets/" + name), "Development demo missing from editable source"
+        assert archive.read("frontend/assets/" + name), (
+            "Development demo missing from editable source"
+        )
     assert archive.getinfo("scripts/package.sh").external_attr >> 16 & 0o111
     assert ".github/workflows/validate.yml" in archive.namelist()
-    for name in ("package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", "pyproject.toml", "requirements-check.txt", "eslint.config.mjs", ".prettierrc.json", ".prettierignore", "knip.json", "release-please-config.json", ".release-please-manifest.json", "version.txt", "RELEASING.md", "scripts/release.py"):
+    for name in (
+        "package.json",
+        "pnpm-workspace.yaml",
+        "pnpm-lock.yaml",
+        "pyproject.toml",
+        "requirements-check.txt",
+        "eslint.config.mjs",
+        ".prettierrc.json",
+        ".prettierignore",
+        "knip.json",
+        "release-please-config.json",
+        ".release-please-manifest.json",
+        "version.txt",
+        ".python-version",
+        "RELEASING.md",
+        "scripts/release.py",
+    ):
         assert archive.read(name) == (repository / name).read_bytes(), (
             f"Missing or stale validation/workspace input: {name}"
         )
@@ -118,7 +140,9 @@ with zipfile.ZipFile(root / f"lyricbridge-source-{version}.zip") as archive:
         "PASS: executable source scripts, typed modules and CI included; build caches excluded."
     )
 with zipfile.ZipFile(root / f"lyricbridge-web-{version}.zip") as archive:
-    assert not {"demo.html", "demo.wav"}.intersection(archive.namelist()), "Development demos shipped in web release"
+    assert not {"demo.html", "demo.wav"}.intersection(archive.namelist()), (
+        "Development demos shipped in web release"
+    )
     assert len(archive.namelist()) == len(set(archive.namelist())), (
         "Duplicate web archive paths"
     )
