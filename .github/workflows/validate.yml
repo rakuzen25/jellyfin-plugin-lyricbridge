@@ -63,12 +63,18 @@ jobs:
       - id: plan
         env:
           GH_TOKEN: ${{ github.token }}
-          BASE: ${{ inputs.base || github.event.before || github.event.pull_request.base.sha }}
+          BASE: ${{ inputs.base || github.event.pull_request.base.sha || github.event.before }}
           FULL: ${{ inputs.full || false }}
           SCHEDULED: ${{ inputs.scheduled || false }}
         run: |
           if [ "${{ github.event_name }}" = pull_request ]; then
-            BASE=$(git merge-base "$BASE" HEAD)
+            if comparison_base=$(git merge-base "$BASE" HEAD); then
+              BASE="$comparison_base"
+            else
+              echo "Comparison history unavailable; selecting full validation."
+              BASE=""
+              FULL=true
+            fi
           fi
           args=(--reuse --base "$BASE")
           if [ "$FULL" = true ]; then args+=(--full); fi
@@ -419,7 +425,20 @@ jobs:
             browser-tests/results-run.*/
           if-no-files-found: warn
   validate:
-    needs: [impact, frontend, backend, tooling, workflow, rendering, performance, package, installation, reproducibility, advisories]
+    needs:
+      [
+        impact,
+        frontend,
+        backend,
+        tooling,
+        workflow,
+        rendering,
+        performance,
+        package,
+        installation,
+        reproducibility,
+        advisories,
+      ]
     if: always()
     runs-on: ubuntu-24.04
     steps:
