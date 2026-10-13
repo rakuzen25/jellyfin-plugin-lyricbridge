@@ -31,7 +31,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: validation-${{ github.repository }}-${{ inputs.release_tag || github.event.pull_request.number || github.ref }}
+  group: validation-${{ github.repository }}-${{ inputs.scheduled && 'scheduled' || inputs.release_tag || github.head_ref || github.ref_name }}
   cancel-in-progress: ${{ inputs.release_tag == '' && !inputs.scheduled }}
 defaults:
   run:
