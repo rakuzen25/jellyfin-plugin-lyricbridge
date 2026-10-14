@@ -67,9 +67,9 @@ class PolicyTests(IsolatedCiTestCase):
             },
             "src/WebRendererIntegration.cs": {"backend", "tooling", "artifacts"},
             "scripts/package.sh": {"tooling", "artifacts"},
-            ".github/workflows/validate.yml": set(ci.GROUPS),
+            # Deletions can remain in the cumulative diff against a validated ancestor.
             "catalog-repository/plugins.json": {"tooling", "artifacts"},
-            "scripts/catalog_sync.py": {"tooling", "artifacts"},
+            ".github/workflows/validate.yml": set(ci.GROUPS),
             "renovate.json": {"metadata"},
         }
         for path, expected in cases.items():

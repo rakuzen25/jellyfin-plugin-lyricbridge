@@ -44,7 +44,7 @@ If artifact validation/upload fails, leave the release as a draft. After resolvi
 
 ## Shared Jellyfin catalog
 
-After stable publication, **Notify shared plugin catalog** triggers a verified catalog PR. The catalog checks the approved source, attested receipt, aggregate/artifact gates and public archive hashes, then enables auto-merge behind its required check. It also reconciles daily and supports manual retry. Explicit withdrawals remain manually reviewed. See [CATALOG.md](CATALOG.md) for setup and operating instructions.
+After stable publication, **Notify shared plugin catalog** triggers a verified catalog PR. The catalog checks the approved source, attested receipt, aggregate/artifact gates and public archive hashes, then enables auto-merge behind its required check. It also reconciles daily and supports manual retry. Explicit withdrawals and restorations are requested through the manifest repository’s maintenance Action and merge after its required checks. See [CATALOG.md](CATALOG.md) for setup and operating instructions.
 
 For an upload-only manual retry, set `validated_run_id` to a previous successful release
 validation run (the number in its Actions URL), including one whose later attach failed. The downloaded candidate must carry a

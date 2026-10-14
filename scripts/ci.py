@@ -78,6 +78,7 @@ def impacts(path: str, root: Path | None = None) -> set[str]:
 
 def known_impacts(path: str, root: Path | None = None) -> set[str]:
     all_groups = set(GROUPS)
+    # Classify retired paths while cumulative comparisons still include their deletion.
     if path.startswith("catalog-repository/"):
         return set() if path.endswith(".md") else {"tooling", "artifacts"}
     if path.endswith(".md") or path in {

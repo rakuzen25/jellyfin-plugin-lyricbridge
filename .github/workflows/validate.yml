@@ -204,7 +204,7 @@ jobs:
           python: "true"
       - run: mkdir -p dist/evidence
       - run: LYRICBRIDGE_PYTHON=python sh scripts/check-python.sh 2>&1 | tee dist/evidence/tooling.log
-      - run: (python3 tests/CiPolicy.py && python3 tests/ReleaseBoundaries.py && python3 tests/Catalog.py && python3 tests/CatalogPublication.py && python3 tests/CatalogMaintenance.py && python3 tests/CatalogPreparation.py && python3 tests/ReleaseAutomation.py && python3 tests/LocalJellyfin.py) 2>&1 | tee -a dist/evidence/tooling.log
+      - run: (python3 tests/CiPolicy.py && python3 tests/ReleaseBoundaries.py && python3 tests/ReleaseAutomation.py && python3 tests/LocalJellyfin.py) 2>&1 | tee -a dist/evidence/tooling.log
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:

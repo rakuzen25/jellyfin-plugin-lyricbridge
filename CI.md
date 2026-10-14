@@ -12,7 +12,7 @@ single impact/evidence policy; `tests/CiPolicy.py` exercises its failure paths.
 | Metadata | Renovate JSON, CODEOWNERS, issue/PR templates | Independent syntax and targeted formatting checks; no frontend bundle |
 | Frontend | Maintained TS, checked tooling, lint/format/unused-code rules, unit decisions | One Linux job; strict build produces browser assets once |
 | Backend | C# application, SQLite transactions, host adaptation and locked dependencies | All discoverable backend tests; isolated roots and mocked providers |
-| Tooling | Python checks, architecture boundaries, release/catalog/local fixture logic | One independent job |
+| Tooling | Python checks, architecture boundaries, release/local fixture logic | One independent job |
 | Workflow | API state, preferences, search, generation, failed saves and stale responses | Desktop Chromium, two functional workers |
 | Rendering | Playback, layout, native transport, artwork, preview, accessibility and disposal | Separate Chromium desktop/mobile, Firefox and WebKit jobs |
 | Performance | Sustained playback, generation/navigation and resource/heap bounds | Separate desktop/mobile Chromium jobs, one worker each |
@@ -165,7 +165,6 @@ pnpm format:dotnet
 pnpm build && pnpm test
 python3 tests/CiPolicy.py
 python3 tests/ReleaseBoundaries.py
-python3 tests/Catalog.py
 python3 tests/ReleaseAutomation.py
 python3 tests/LocalJellyfin.py
 
@@ -226,3 +225,5 @@ and console evidence even on failure and rejects runs that execute no tests.
 Prettier checks maintained TypeScript, JavaScript tooling, JSON, YAML, frontend CSS
 and administrator HTML. Generated output and vendored sources are excluded; the
 demo HTML fixture is excluded because browser tests use exact inline-script hooks.
+
+Catalog reconciliation, maintenance and merge tests run in [jellyfin-plugin-manifest](https://github.com/rakuzen25/jellyfin-plugin-manifest). LyricBridge retains release-manifest validation, receipt/attestation checks and publication notification.
