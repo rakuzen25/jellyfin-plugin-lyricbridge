@@ -21,18 +21,19 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
-      - name: Check release token setup
-        env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-        run: |
-          if [ -z "$RELEASE_TOKEN" ]; then
-            echo "Configure RELEASE_PLEASE_TOKEN as documented in RELEASING.md."
-            exit 1
-          fi
+      - name: Create repository-scoped release token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app
+        with:
+          client-id: ${{ vars.PLUGIN_APP_CLIENT_ID }}
+          private-key: ${{ secrets.PLUGIN_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         id: release
         with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          token: ${{ steps.app.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
       - name: Resume an existing matching unpublished draft
@@ -55,6 +56,8 @@ jobs:
     permissions:
       contents: write
       actions: read
+      id-token: write
+      attestations: write
     uses: ./.github/workflows/release.yml
     with:
       tag: ${{ needs.release-please.outputs.tag }}

@@ -2,15 +2,13 @@
 
 LyricBridge uses release-please for one repository-wide version and changelog. It updates `version.txt`, the authoritative version in `Directory.Build.props`, and only the LyricBridge project-reference versions in .NET lockfiles. Third-party dependency versions and hashes are preserved. Packaging reads the matching changelog section and its committed release date for the catalog; notes and URLs are not left at the initial release defaults.
 
-The flow is: Conventional Commits on `main` → release PR → passing PR checks and your merge → draft release and tag → risk-based code validation plus mandatory final artifact/reproducibility/installed-plugin checks → tested assets attached → your final Publish click. The workflow never installs on a live server or changes a shared catalog. A draft without a green artifact workflow is not ready to publish.
+The flow is: Conventional Commits on `main` → release PR → passing PR checks and your merge → draft release and tag → risk-based code validation plus mandatory final artifact/reproducibility/installed-plugin checks → tested assets attached → your final Publish click. The draft workflow never installs on a live server; catalog updates begin only after stable publication. A draft without a green artifact workflow is not ready to publish.
 
 ## One-time GitHub setup
 
-1. Create a fine-grained personal access token with resource owner `rakuzen25` and repository access limited to **only** `jellyfin-plugin-lyricbridge`. Give it repository permissions **Contents: Read and write**, **Pull requests: Read and write**, and **Issues: Read and write** (release labels). Metadata read access is included automatically; no other repository or account permissions are needed.
-2. In this repository's **Settings → Secrets and variables → Actions**, create the repository secret `RELEASE_PLEASE_TOKEN` with that token. Never commit it. Choose an expiration and renew the secret before the token expires.
-3. Require the `validate` check on release PRs using a rule for `main`. Merge a release PR only after its CI is green. Keep release tags immutable once published.
+Use the shared GitHub App documented in [CATALOG.md](CATALOG.md): install it on this repository, configure `PLUGIN_APP_CLIENT_ID` and `PLUGIN_APP_PRIVATE_KEY`, and retain the required `validate` check on `main`. The App creates Release Please PRs that trigger ordinary CI. No long-lived release PAT is required; remove the obsolete `RELEASE_PLEASE_TOKEN` after confirming the migration.
 
-The personal access token lets release PRs trigger normal PR CI; PRs created with the default workflow token do not trigger it. Artifact upload uses the repository's ordinary workflow token with write access limited to the attaching job. The personal access token is supplied only to release-please, and external actions are pinned to commit SHAs.
+Artifact upload still uses the ordinary workflow token. The attaching job also has narrowly scoped OIDC and attestation permissions to sign the verified public receipt. External actions remain pinned to reviewed commits.
 
 `Prepare release` owns validation for pushes to `main`: ordinary pushes call candidate validation, while newly created releases call artifact validation once against the release commit. PRs and manual validation remain independently available; there is no second standalone push-validation run.
 
@@ -22,18 +20,19 @@ footer only when deliberately selecting a different version. Do not manually bum
 metadata or project lockfile references: the generated release PR updates them together.
 
 Review and merge that PR after its required checks pass. The workflow creates a draft
-and tag, verifies the exact candidate and attaches five assets:
+and tag, verifies the exact candidate and attaches six assets:
 
 - `lyricbridge-VERSION.zip` — plugin, embedded renderer, dependencies, dictionaries and notices.
 - `lyricbridge-web-VERSION.zip` — optional separately installed web enhancement.
 - `lyricbridge-source-VERSION.zip` — matching editable/licensed source and build inputs.
 - `manifest.json` — this plugin's catalog entry.
 - `SHA256SUMS` — all three ZIPs and the manifest.
+- `validation.json` — the authenticated validation receipt, separately attested and excluded from its own artifact hashes.
 
 A matching unpublished draft at the exact current commit can be resumed if release-please
 already created it. Duplicate or mismatched tags fail rather than being recreated.
 
-Keep the plugin/web/source archives together for corresponding-source availability. After the artifact workflow is green, download all five assets, verify `sha256sum -c SHA256SUMS`, review the manifest's version/GUID/ABI/URLs and publish the draft. Confirm unauthenticated downloads after publishing. Do not publish an empty draft while validation is running. Publication, shared-catalog changes and live installation are performed by the repository owner.
+Keep the plugin/web/source archives together for corresponding-source availability. After the artifact workflow is green, download all six assets, verify `sha256sum -c SHA256SUMS`, review the manifest's version/GUID/ABI/URLs and publish the draft. Confirm unauthenticated downloads after publishing. Do not publish an empty draft while validation is running. Publication and live installation remain owner actions. Publication automatically proposes a verified shared-catalog addition after the catalog/App setup is complete.
 
 ## Future releases and retries
 
@@ -45,14 +44,7 @@ If artifact validation/upload fails, leave the release as a draft. After resolvi
 
 ## Shared Jellyfin catalog
 
-After publication, download this release's `manifest.json` and verify its public asset URLs and checksums. Merge it into the separate shared catalog using:
-
-```sh
-python3 scripts/catalog.py --catalog-input /path/to/shared-manifest.json \
-  --entry dist/manifest.json --catalog-output /path/to/candidate-manifest.json
-```
-
-Use the manifest downloaded from the public release as the entry (copy it to `dist/manifest.json` or supply its actual path). Review and publish the catalog change separately. Each plugin retains its own repository, GUID and version; unrelated plugin releases are preserved. Cross-repository catalog PR automation can be added once the catalog repository and its authorization are configured.
+After stable publication, **Notify shared plugin catalog** triggers a verified catalog PR. The catalog checks the approved source, attested receipt, aggregate/artifact gates and public archive hashes, then enables auto-merge behind its required check. It also reconciles daily and supports manual retry. Explicit withdrawals remain manually reviewed. See [CATALOG.md](CATALOG.md) for setup and operating instructions.
 
 For an upload-only manual retry, set `validated_run_id` to a previous successful release
 validation run (the number in its Actions URL), including one whose later attach failed. The downloaded candidate must carry a
@@ -62,3 +54,5 @@ fail safely. Evidence older than 24 hours requires fresh advisory validation. Le
 matching trusted evidence, but artifact installation, reproducibility, inventory and
 fresh advisories always execute. See [CI.md](CI.md) for execution groups and manual full
 validation. Upload-only retry does not bypass release acceptance.
+
+Once a draft contains `validation.json`, use an upload-only retry with the original validated run ID to retain identical receipt bytes. Fresh validation creates a different receipt even when archives reproduce; existing receipt assets are never overwritten. Keep the original candidate/evidence available until publication.

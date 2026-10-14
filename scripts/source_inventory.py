@@ -3,7 +3,16 @@
 import os
 from pathlib import Path
 
-ROOTS = ("src", "frontend", "vendor", "scripts", "tests", "browser-tests", ".github")
+ROOTS = (
+    "src",
+    "frontend",
+    "vendor",
+    "scripts",
+    "tests",
+    "browser-tests",
+    ".github",
+    "catalog-repository",
+)
 EXCLUDED = {"bin", "obj", ".git", "node_modules", "results", "__pycache__"}
 CONFIGS = {
     "renovate.json",

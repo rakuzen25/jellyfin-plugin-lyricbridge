@@ -127,14 +127,14 @@ LYRICBRIDGE_DOWNLOAD_BASE_URL=https://github.com/OWNER/lyricbridge/releases/down
 
 Replace OWNER/repository paths with your real repository. The validation workflow uploads candidate artifacts; it does not publish a release or change the shared catalog. Upload all three archives, notices contained in them, and SHA256SUMS to the corresponding release. Consumers install using the shared catalog URL, not a source-code ZIP. Web enhancement remains a separate install.
 
-Prepare the shared catalog update locally, preserving all other plugins and previous versions:
+The shared catalog is now prepared with authenticated release evidence and automatic App-owned update PRs; see [CATALOG.md](CATALOG.md) for setup, recovery and explicit withdrawals. For an offline merge candidate only, preserving other plugins and previous versions:
 
 ```sh
 python3 scripts/catalog.py --catalog-input /path/to/shared-manifest.json \
   --entry dist/manifest.json --catalog-output /path/to/candidate-manifest.json
 ```
 
-For a new catalog, create an input file containing `[]`. Review the candidate diff, confirm public downloads are reachable and match the checksums, then publish the catalog separately. An identical version is idempotent; a conflicting same-version release is rejected. Never overwrite unrelated entries with this repository's single-plugin manifest. Other plugin repositories use the same catalog format; releases remain independent.
+For a new catalog, create an input file containing `[]`. Review the candidate diff, confirm public downloads are reachable and match the checksums, then submit a reviewed catalog change. The automated catalog additionally requires authenticated release evidence; an offline merge alone does not satisfy that gate. An identical version is idempotent; a conflicting same-version release is rejected. Never overwrite unrelated entries with this repository's single-plugin manifest. Other plugin repositories use the same catalog format; releases remain independent.
 
 ## Fresh baseline after removing a preview installation
 

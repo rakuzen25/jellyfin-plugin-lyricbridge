@@ -42,6 +42,8 @@ jobs:
     permissions:
       contents: write
       actions: read
+      id-token: write
+      attestations: write
     env:
       GH_TOKEN: ${{ github.token }}
       REPOSITORY: ${{ github.repository }}
@@ -77,6 +79,10 @@ jobs:
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python3 .release-tools/scripts/ci.py verify --root . --run-id "${VALIDATED_RUN_ID:-${{ github.run_id }}}"
+      - name: Attest the verified validation receipt
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/validation.json
       - name: Verify and attach the tested artifacts
         run: |
           cp .release-tools/scripts/release.py scripts/release.py
@@ -84,4 +90,4 @@ jobs:
       - name: Write handoff
         run: |
           echo "Draft artifacts verified. Review the green validation jobs, then publish the draft in GitHub Releases." >> "$GITHUB_STEP_SUMMARY"
-          echo "After publishing, update the shared Jellyfin catalog separately; see RELEASING.md." >> "$GITHUB_STEP_SUMMARY"
+          echo "Publishing triggers a verified catalog update; see CATALOG.md." >> "$GITHUB_STEP_SUMMARY"

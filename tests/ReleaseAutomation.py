@@ -69,6 +69,16 @@ class ReleaseTests(unittest.TestCase):
             )
             + "\n"
         )
+        (directory / "validation.json").write_text(
+            json.dumps(
+                {
+                    "repository": REPOSITORY,
+                    "artifacts": release.artifact_hashes(
+                        root, directory, REPOSITORY, tag
+                    ),
+                }
+            )
+        )
         return directory, tag
 
     def test_packaging_rejects_unsafe_urls_without_printing_credentials(self):
@@ -208,7 +218,7 @@ class ReleaseTests(unittest.TestCase):
             draft = {
                 "draft": True,
                 "tag_name": tag,
-                "assets": [{"name": name} for name in hashes],
+                "assets": [{"name": name} for name in [*hashes, "validation.json"]],
             }
 
             def download(command, **kwargs):
@@ -261,6 +271,21 @@ class ReleaseTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "Conflicting"):
                     release.upload(root, directory, REPOSITORY, tag)
 
+    def test_public_receipt_mismatch_stops_before_remote_upload(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.fixture(root)
+            directory, tag = self.artifacts(root)
+            receipt = json.loads((directory / "validation.json").read_text())
+            receipt["artifacts"]["SHA256SUMS"] = "0" * 64
+            (directory / "validation.json").write_text(json.dumps(receipt))
+            with (
+                patch.object(release, "github_json") as remote,
+                self.assertRaisesRegex(ValueError, "receipt"),
+            ):
+                release.upload(root, directory, REPOSITORY, tag)
+            remote.assert_not_called()
+
     def test_initial_upload_attaches_only_required_assets(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -285,7 +310,7 @@ class ReleaseTests(unittest.TestCase):
                 self.assertEqual(command[:4], ["gh", "release", "upload", tag])
                 self.assertNotIn("--clobber", command)
                 self.assertNotIn("--draft=false", command)
-                self.assertEqual(len(command[4:-2]), 5)
+                self.assertEqual(len(command[4:-2]), 6)
 
     def test_missing_release_date_fails_before_packaging(self):
         with tempfile.TemporaryDirectory() as temporary:
