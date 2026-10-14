@@ -9,6 +9,7 @@
     "scripts": {
         "build": "pnpm --dir frontend run build",
         "typecheck": "pnpm --dir frontend run typecheck",
+        "typecheck:legacy": "pnpm --dir frontend run typecheck:legacy",
         "test": "pnpm --dir frontend test",
         "test:browser": "sh scripts/test-browser.sh",
         "check:python": "sh scripts/check-python.sh",
@@ -25,12 +26,13 @@
     },
     "devDependencies": {
         "@eslint/js": "10.0.1",
+        "@typescript/native": "npm:typescript@7.0.2",
         "eslint": "10.12.0",
         "eslint-config-prettier": "10.1.8",
         "globals": "17.13.0",
         "knip": "6.41.0",
         "prettier": "3.9.10",
-        "typescript": "5.9.3",
+        "typescript": "npm:@typescript/typescript6@6.0.2",
         "typescript-eslint": "8.71.2"
     }
 }

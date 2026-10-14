@@ -673,7 +673,7 @@ export function createVersionPanel(dependencies: Dependencies) {
                 () => {
                     const prepare = group.querySelector<HTMLElement>(".lb-generation");
                     if (!prepare) return;
-                    setGenerationPanelOpen(prepare, prepare.hidden);
+                    setGenerationPanelOpen(prepare, Boolean(prepare.hidden));
                     if (!prepare.hidden) {
                         prepare.scrollIntoView({ block: "nearest" });
                         prepare.querySelector<HTMLElement>("select, input, button")?.focus({ preventScroll: true });

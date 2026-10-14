@@ -3,12 +3,13 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const config = JSON.parse(readFileSync(new URL("../renovate.json", import.meta.url), "utf8"));
-function policy(name, update) {
+function policy(name, update, dependency = name) {
     return Object.assign(
         {},
         ...config.packageRules.filter(
             (rule) =>
                 (!rule.matchPackageNames || rule.matchPackageNames.includes(name)) &&
+                (!rule.matchDepNames || rule.matchDepNames.includes(dependency)) &&
                 (!rule.matchUpdateTypes || rule.matchUpdateTypes.includes(update)),
         ),
     );
@@ -18,11 +19,35 @@ test("routine updates automate while major and coupled toolchain changes require
         assert.equal(policy(name, "patch").automerge, true, name);
         assert.equal(policy(name, "major").automerge, false, name);
     }
-    for (const name of ["typescript", "typescript-eslint", "pnpm", "node", "python", "ubuntu", "esbuild", "Kawazu", "OpenccNetLib"]) {
+    for (const name of [
+        "typescript",
+        "@typescript/typescript6",
+        "typescript-eslint",
+        "pnpm",
+        "node",
+        "python",
+        "ubuntu",
+        "esbuild",
+        "Kawazu",
+        "OpenccNetLib",
+    ]) {
         assert.equal(policy(name, "minor").automerge, false, name);
         assert.equal(policy(name, "minor").groupName, null, name);
     }
-    assert.equal(policy("typescript", "major").allowedVersions, "<7");
+    for (const [name, allowedVersions] of [
+        ["typescript", ">=7 <8"],
+        ["@typescript/typescript6", ">=6 <7"],
+    ]) {
+        for (const update of ["patch", "minor", "major"]) {
+            assert.equal(policy(name, update).allowedVersions, allowedVersions);
+            assert.equal(policy(name, update).automerge, update === "patch");
+        }
+    }
+    for (const update of ["patch", "minor", "major"]) {
+        assert.equal(policy("typescript", update, "@typescript/old").allowedVersions, ">=6 <7");
+        assert.equal(policy("typescript", update, "@typescript/old").automerge, update === "patch");
+        assert.equal(policy("typescript", update, "@typescript/native").allowedVersions, ">=7 <8");
+    }
     assert.equal(policy("xunit.v3", "minor").groupName, policy("xunit.analyzers", "minor").groupName);
     assert.equal(policy("actions/upload-artifact", "major").groupName, policy("actions/download-artifact", "major").groupName);
 });

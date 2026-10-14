@@ -7,8 +7,10 @@ plugin ABI, GUID, storage schema, version, production data or live deployment.
 
 Node 26.11.1, pnpm 12.11.2, Python 3.15.0 and Ubuntu 26.04 runners; Playwright 1.64.0
 with its official noble image digest; esbuild 0.28.2, typescript-eslint 8.71.2,
-Mypy 2.4.0 and xUnit v3 4.0.2 using Microsoft Testing Platform exclusively. TypeScript stays at 5.9.3;
-Renovate may propose versions below 7, with compiler minor/major changes reviewed.
+Mypy 2.4.0 and xUnit v3 4.0.2 using Microsoft Testing Platform exclusively.
+TypeScript 7.0.2 handles typechecking alongside the TypeScript 6.0.2 compatibility API.
+Renovate keeps the native compiler on stable 7.x and the compatibility API on stable 6.x;
+compiler minor/major changes require review, while checked patches may automerge.
 .NET SDK remains at 10.0.401. VSTest and xUnit 2 are no longer supported.
 
 GitHub Actions remain SHA-pinned with release-line comments. Renovate can update
@@ -59,6 +61,34 @@ pnpm test:tooling
 pnpm build && pnpm test
 ```
 
+## TypeScript compilers
+
+Both root and frontend development dependencies follow Microsoft's
+[side-by-side setup](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-60)
+with exact pins:
+
+```json
+{
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2"
+}
+```
+
+The compatibility wrapper has a floating `@typescript/old` dependency; the workspace
+override pins that internal compiler to 6.0.2 as well. Renovate keeps this override
+on stable 6.x with the same compiler review policy.
+
+The native package supplies `tsc`, so `pnpm typecheck`, `pnpm build` and routine CI
+check with TypeScript 7. Imports from `typescript` supply the TypeScript 6 JavaScript
+compiler API used by ESLint and the boundary checker. `tsc6` remains available through
+`pnpm typecheck:legacy` for manual compatibility diagnosis with stable type ordering;
+it is not an additional routine CI gate. Both compilers use the existing strict
+frontend configuration. Esbuild continues to generate the web bundles.
+
+Editor use of TypeScript 7's language server is optional. Consult the editor's
+TypeScript 7/LSP setup instructions; VS Code offers Microsoft's TypeScript 7 extension.
+Installing the dependency aliases does not change editor settings.
+
 The browser script verifies the tagged image/digest and all required executables.
 Keep the Playwright package, lockfile and image reference together in future upgrades.
 Review screenshot changes caused by browser rasterization before updating baselines;
@@ -98,7 +128,7 @@ had no branch protection/ruleset when inspected.
 | #19, #20, #23, #26 | Test SDK, Mypy, adapter and pnpm migrations are incorporated. |
 | #22 | Ubuntu 26.04 labels are incorporated; first hosted run still needs verification. |
 | #12 | Grouped upgrades are incorporated with the matching browser image; let Renovate refresh or close superseded proposals. |
-| #21 | TypeScript 7 is deferred; the `<7` rule prevents a replacement proposal. |
+| #21 | Native TypeScript 7 and the TypeScript 6 compatibility API are incorporated; let Renovate refresh or close the superseded direct-upgrade proposal. |
 | #7 | Let Release Please refresh 0.1.2 from current main; do not manually edit release metadata. Merge only after current checks pass. |
 
 PR state is a snapshot; refresh it before closing or merging anything. No PRs were

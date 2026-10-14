@@ -80,6 +80,15 @@ Python tooling requires Python 3.15 or newer; CI uses the exact version in `.pyt
 
 JavaScript/TypeScript quality checks use pinned workspace tools. `pnpm lint` runs ESLint recommended JavaScript and TypeScript rules on application code and maintained build/browser tooling; `pnpm lint:fix` applies safe automatic fixes. `pnpm format` applies Prettier with the repository's 150-column/four-space settings (two spaces for YAML), and `pnpm format:check` verifies them. Formatting excludes generated output, third-party source, static visual assets and the configuration HTML template. `pnpm knip` checks unused files, dependencies, exports and types using explicit application/test entrypoints; browser globals remain public through their typed adapters. `pnpm check` runs ESLint, Prettier, Knip, strict TypeScript, Ruff formatting/linting, Mypy and .NET whitespace formatting, and CI enforces the same gates. Run `pnpm test:tooling` for version guards and Renovate policy regressions. See [dependency migration and automerge setup](DEPENDENCY_UPGRADES.md).
 
+TypeScript 7.0.2 supplies `tsc` through the `@typescript/native` npm alias for normal
+typechecking, builds and CI. The `typescript` alias points to `@typescript/typescript6@6.0.2`,
+preserving the JavaScript compiler API for ESLint and the boundary checker. Run
+`pnpm typecheck:legacy` to check manually with `tsc6 --stableTypeOrdering`; routine CI
+uses TypeScript 7 only. Both aliases are pinned in the root and frontend packages.
+Editor use of TypeScript 7's language server is optional; follow the editor's LSP
+instructions or use Microsoft's TypeScript 7 extension in VS Code. This setup follows
+Microsoft's [side-by-side guidance](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-60).
+
 ## Release automation
 
 [Release setup and publication](RELEASING.md) explains the release-please PR workflow, verified draft assets and the separate shared Jellyfin catalog update.
