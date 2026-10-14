@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.3](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.1.2...v0.1.3) (2026-10-14)
+
+
+### Features
+
+* add import validation and UI changes ([b0bd09e](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/b0bd09ecc1f562fc64a748cf7e73c2a1ee8e9d7e))
+* UI and ranking changes ([979ad16](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/979ad162cf951ded78f3537c5e7087dddfb4d948))
+
+
+### Bug Fixes
+
+* **deps:** update routine dependency updates ([#28](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/issues/28)) ([35d15b9](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/35d15b983fdd4a9cfc9625e727e9c5b1b23c941a))
+
 ## [0.1.2](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.1.1...v0.1.2) (2026-10-13)
 
 
