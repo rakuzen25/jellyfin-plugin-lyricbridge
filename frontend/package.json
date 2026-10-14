@@ -13,6 +13,6 @@
         "typescript": "5.9.3"
     },
     "dependencies": {
-        "lucide": "1.55.0"
+        "lucide": "1.56.0"
     }
 }
