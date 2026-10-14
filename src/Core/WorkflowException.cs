@@ -5,4 +5,6 @@ public sealed class WorkflowException(int status, string code, string message, b
     public int Status { get; } = status;
     public string Code { get; } = code;
     public bool Retryable { get; } = retryable;
+    public IReadOnlyList<ImportIssue>? Issues { get; init; }
+    public int? IssueCount { get; init; }
 }

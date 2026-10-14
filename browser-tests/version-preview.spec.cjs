@@ -31,8 +31,8 @@ test("preview cancel restores playback and focus; apply saves the selected versi
     await expect(page.locator(".ak-enhanced-line")).toHaveCount(6);
     await search();
     await page.getByRole("button", { name: "Use this version", exact: true }).click();
-    await expect(page.locator(".lb-status")).toHaveText("Lyric version saved");
-    await expect(page.locator(".lb-status")).toBeHidden({ timeout: 6000 });
+    await expect(page.locator('[data-operation="action:status"]')).toHaveText("Lyric version saved");
+    await expect(page.locator('[data-operation="action:status"]')).toBeHidden({ timeout: 6000 });
 });
 
 test("settings remain inside the viewport with keyboard tab navigation and reduced motion", async ({ page }) => {

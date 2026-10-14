@@ -33,7 +33,7 @@ export function updateVersionRow(row: HTMLElement, active: boolean, expanded: bo
     requireValue(row.querySelector<HTMLElement>(".lb-version-toggle")).setAttribute("aria-expanded", String(expanded));
     requireValue(row.querySelector<HTMLElement>(".lb-version-content")).hidden = !expanded;
     const use = row.querySelector<HTMLButtonElement>(".lb-use-version");
-    if (use) use.disabled = active;
+    if (use) use.disabled = active && row.dataset.autoSaved !== "true";
     const preview = row.querySelector<HTMLButtonElement>(".lb-preview-version");
     if (preview) preview.disabled = active || !!effectiveUsage || preview.dataset.loading === "true";
 }

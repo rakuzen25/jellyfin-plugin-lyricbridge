@@ -6,6 +6,10 @@
     "automergeStrategy": "squash",
     "rebaseWhen": "behind-base-branch",
     "ignoreTests": false,
+    "minimumReleaseAge": "1 day",
+    "minimumReleaseAgeBuffer": "30 minutes",
+    "minimumReleaseAgeBehaviour": "timestamp-optional",
+    "internalChecksFilter": "strict",
     "packageRules": [
         {
             "description": "Routine updates automerge only after required checks.",

@@ -1,10 +1,33 @@
 import type { TransportScope } from "./transport.ts";
+import { isRecord } from "../shared/invariants.ts";
+export interface RequestIssue {
+    code: string;
+    message: string;
+    location?: string | null;
+}
+export function parseRequestIssues(value: unknown): RequestIssue[] | null {
+    if (!Array.isArray(value)) return null;
+    const result: RequestIssue[] = [];
+    for (const issue of value) {
+        if (
+            !isRecord(issue) ||
+            typeof issue.code !== "string" ||
+            typeof issue.message !== "string" ||
+            (issue.location != null && typeof issue.location !== "string")
+        )
+            return null;
+        result.push({ code: issue.code, message: issue.message, location: issue.location as string | null | undefined });
+    }
+    return result;
+}
 export interface RequestFailure {
     code: string;
     message: string;
     retryable?: boolean;
     diagnosticId?: string | null;
     retryAt?: string | null;
+    issues?: RequestIssue[];
+    issueCount?: number;
 }
 export class BridgeRequestError<TScope> extends Error {
     readonly details: RequestFailure;
@@ -40,6 +63,11 @@ function failure(value: unknown): RequestFailure | null {
         retryable: "retryable" in error && typeof error.retryable === "boolean" ? error.retryable : undefined,
         diagnosticId: "diagnosticId" in error && typeof error.diagnosticId === "string" ? error.diagnosticId : undefined,
         retryAt: "retryAt" in error && typeof error.retryAt === "string" ? error.retryAt : undefined,
+        issues: "issues" in error ? (parseRequestIssues(error.issues) ?? undefined) : undefined,
+        issueCount:
+            "issueCount" in error && typeof error.issueCount === "number" && Number.isSafeInteger(error.issueCount) && error.issueCount >= 0
+                ? error.issueCount
+                : undefined,
     };
 }
 /** Captures authentication and cancellation at admission; preserves Jellyfin base URLs. */

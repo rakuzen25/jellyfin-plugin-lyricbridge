@@ -21,6 +21,10 @@ function visit(directory) {
         if (!checked.has(file)) throw new Error("Application source excluded from typechecking: " + file);
         const source = fs.readFileSync(file, "utf8");
         if (/@ts-(nocheck|ignore)/.test(source)) throw new Error("Suppressed application checking: " + file);
+        if (file !== path.join(root, "bridge/feedback.ts") && /e\("div",\s*"lb-(feedback|confirmation)"/.test(source))
+            throw new Error("Feature-specific feedback markup: use the shared feedback adapter: " + file);
+        if (file.startsWith(path.join(root, "bridge") + path.sep) && /progress\.textContent\s*[+]?=/.test(source))
+            throw new Error("Direct progress text bypasses shared feedback: " + file);
         const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
         function inspect(node) {
             if (

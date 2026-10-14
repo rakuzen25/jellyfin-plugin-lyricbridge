@@ -26,6 +26,23 @@ pnpm 12 uses `allowBuilds` (only esbuild approved), `strictDepBuilds: true` and
 The lockfile and exact-version release-age exclusions represent reviewed upgrades;
 never add wildcard exclusions or authorize other dependency scripts to fix a failure.
 
+## Minimum release age
+
+Renovate, pnpm and pip share a 24-hour minimum release age. Renovate waits before
+creating update branches and adds a 30-minute buffer for companion packages
+published later. Sources without release timestamps remain updateable through
+Renovate. NuGet updates use this Renovate gate; restores still use locked mode
+without a custom age check.
+
+pnpm explicitly enforces 1440 minutes in strict mode, including transitive
+resolution. Existing reviewed exact-version exclusions remain exceptions; they
+must not be broadened. pip installs use `--uploaded-prior-to=P1D` for the same
+24-hour cutoff. pip 26.2 or newer is required for relative cutoffs and Python 3.15
+support; `scripts/check-pip.py` fails with upgrade instructions on older versions.
+The pip cutoff requires index upload-time metadata (provided by PyPI); missing
+metadata causes installation to fail. Local files and VCS installs are outside
+pip's index age filter. The tooling policy tests guard these settings against drift.
+
 ## Local setup
 
 Install Node from `.node-version`, pnpm from `package.json`, Python from `.python-version`
@@ -34,7 +51,7 @@ interpreter:
 
 ```sh
 python3.15 -m venv .venv
-.venv/bin/python -m pip install -r requirements-check.txt
+.venv/bin/python scripts/check-pip.py && .venv/bin/python -m pip install --uploaded-prior-to=P1D -r requirements-check.txt
 node scripts/check-toolchain.mjs
 pnpm install --frozen-lockfile
 pnpm check

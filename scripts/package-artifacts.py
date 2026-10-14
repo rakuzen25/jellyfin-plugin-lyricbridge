@@ -75,6 +75,7 @@ binary_licenses = {
             "LICENSE",
             "LYRICMOTION-LICENSE",
             "LUCIDE-LICENSE",
+            "QMC-LICENSE",
             "DYNAMIC-BACKGROUND-LICENSE",
             "KAWARP-LICENSE",
             "LYRICMOTION-THIRD-PARTY-NOTICES.md",
@@ -212,6 +213,7 @@ web = archive(
         ),
         (Path("vendor/LYRICMOTION-LICENSE"), Path("LICENSE")),
         (Path("vendor/KAWARP-LICENSE"), Path("KAWARP-LICENSE.txt")),
+        (Path("vendor/QMC-LICENSE"), Path("QMC-LICENSE.txt")),
     ],
 )
 sources = [(path, path) for path in source_files(Path("."))]

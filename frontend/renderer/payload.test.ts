@@ -66,10 +66,10 @@ test("plain, line-timed and real advancing word cues stay distinct", () => {
     assert.equal(lyricTimingMode([{ Text: "held", Cues: [{ Position: 0, EndPosition: 4, Start: 0, End: 100 }] }]), "enhanced");
 });
 
-test("obsolete preview sentinels are plain source text; current background prefixes remain supported", () => {
-    const old = "\u2063\u2060hello";
-    const profile = lyricTextProfile({ Text: old });
-    assert.equal(profile.text, old);
+test("Unicode control characters remain literal unless an explicit background prefix is present", () => {
+    const text = "\u2063\u2060hello";
+    const profile = lyricTextProfile({ Text: text });
+    assert.equal(profile.text, text);
     assert.equal(profile.isBackgroundVocal, false);
     assert.equal(lyricTextProfile({ Text: "[ak:bg]hello" }).isBackgroundVocal, true);
 });

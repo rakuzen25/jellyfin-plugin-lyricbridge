@@ -85,7 +85,34 @@ public sealed partial class Store
     {
         var id = item.ToString("N") + ":" + lyrics.Hash;
         var existing = ReadRecord<SavedOriginal>(c, tx, "saved-original", id);
-        WriteRecord(c, tx, "saved-original", id, existing ?? new(item, lyrics.Hash, lyrics.Source, lyrics.ProviderId, lyrics.Title, lyrics.Artist, lyrics.WordTimed, DateTimeOffset.UtcNow, assessment, ReadRevision(c, tx)));
+        WriteRecord(c, tx, "saved-original", id, existing is not null ? existing with { AutoSaved = false } : new(item, lyrics.Hash, lyrics.Source, lyrics.ProviderId, lyrics.Title, lyrics.Artist, lyrics.WordTimed, DateTimeOffset.UtcNow, assessment, ReadRevision(c, tx)));
+    }
+    public void SaveAutomaticOriginal(Guid item, RichLyrics lyrics, StoreAdmission ticket)
+    {
+        lock (writeGate)
+        {
+            using var c = Open(); using var tx = c.BeginTransaction();
+            lyrics.Hash = Codec.ContentHash(lyrics);
+            if (!ValidAdmission(c, tx, ticket, [lyrics.Hash])) return;
+            RequireAdmission(c, tx, [lyrics.Hash]);
+            var id = item.ToString("N") + ":" + lyrics.Hash;
+            var existing = ReadRecord<SavedOriginal>(c, tx, "saved-original", id);
+            // Automatic copies use transient retention; explicit copies remain permanently retained.
+            WriteRecord(c, tx, "document", lyrics.Hash, ReadRecord<RichLyrics>(c, tx, "document", lyrics.Hash) ?? lyrics);
+            TouchTransient(c, tx, "document", lyrics.Hash, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            WriteRecord(c, tx, "saved-original", id, existing ?? new(item, lyrics.Hash, lyrics.Source, lyrics.ProviderId, lyrics.Title, lyrics.Artist, lyrics.WordTimed, DateTimeOffset.UtcNow, null, ReadRevision(c, tx), true));
+            var obsolete = new List<string>();
+            using (var originals = c.CreateCommand())
+            {
+                originals.Transaction = tx;
+                originals.CommandText = "SELECT id FROM records WHERE kind='saved-original' AND json_extract(payload,'$.itemId')=$item AND json_extract(payload,'$.autoSaved')=1 AND json_extract(payload,'$.hash')<>$hash";
+                originals.Parameters.AddWithValue("$item", item.ToString()); originals.Parameters.AddWithValue("$hash", lyrics.Hash);
+                using var reader = originals.ExecuteReader();
+                while (reader.Read()) obsolete.Add(reader.GetString(0));
+            }
+            foreach (var key in obsolete) WriteRecord<object>(c, tx, "saved-original", key, null);
+            tx.Commit();
+        }
     }
     public IReadOnlyList<SavedOriginal> SavedOriginals(Guid item)
     {

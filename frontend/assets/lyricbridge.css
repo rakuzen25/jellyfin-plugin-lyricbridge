@@ -62,7 +62,6 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
 
 /* Playback chrome: one static glass material and a shared spacing system. */
 .lb-popup,
-.lb-tools,
 .lyricPage .ak-lyrics-tools .ak-timing-popover {
     color: var(--lb-glass-text);
     background: var(--lb-glass-panel);
@@ -324,21 +323,6 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
 .lb-version-status:empty {
     display: none;
 }
-.lb-confirmation {
-    padding: 16px;
-    margin-top: 16px;
-    border: 1px solid var(--lb-frame-edge, var(--lb-glass-border));
-    border-radius: var(--lb-control-radius);
-    background: var(--lb-frame-tint, rgba(255, 255, 255, 0.045));
-    box-sizing: border-box;
-}
-.lb-popup .lb-confirmation > p {
-    margin: 0;
-    font: 400 14px/1.5 system-ui;
-}
-.lb-confirmation > .lb-song-actions {
-    margin: 12px 0 0;
-}
 /* Search uses the same chrome but reserves space for a comparison workspace. */
 .lb-search {
     top: 80px;
@@ -472,19 +456,6 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
     margin-top: 8px;
 }
 /* Quiet feedback does not intercept the remaining page or playback controls. */
-.lb-tools {
-    position: fixed;
-    top: 132px;
-    left: 16px;
-    z-index: 1100;
-    max-width: min(520px, calc(100vw - 32px));
-    border-radius: 16px;
-    padding: 12px 16px;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 12px;
-}
 .lb-tools:not(:has(> :not([hidden]))) {
     display: none;
 }
@@ -494,29 +465,6 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
 .lb-local-status,
 .lb-source-note {
     font-size: 12px;
-}
-.lb-feedback {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    padding: 12px;
-    border: 1px solid #ffa8b142;
-    border-radius: var(--lb-control-radius);
-    background: linear-gradient(180deg, #78353f9e, #56252f8f);
-    color: #fff;
-    flex-basis: 100%;
-    overflow-wrap: anywhere;
-}
-.lb-feedback > strong,
-.lb-feedback > details {
-    flex-basis: 100%;
-}
-.lb-feedback p {
-    margin: 8px 0;
-}
-.lb-error {
-    color: #ffc6c6;
 }
 .lb-error-details,
 .lb-provider-details {
@@ -825,12 +773,6 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
 .lb-version-content .lb-song-actions {
     margin: 0;
 }
-.lb-feedback > strong {
-    flex: 1 1 160px;
-}
-.lb-feedback > .lb-icon-button {
-    margin-inline-start: auto;
-}
 .lb-search-toolbar .lb-button,
 .lb-search-query .lb-button {
     font-weight: 500;
@@ -843,22 +785,6 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-}
-
-.lb-feedback > .lb-icon {
-    order: 0;
-}
-.lb-feedback > strong {
-    order: 1;
-}
-.lb-feedback > .lb-icon-button {
-    order: 2;
-}
-.lb-feedback > details {
-    order: 3;
-}
-.lb-feedback > .lb-button:not(.lb-icon-button) {
-    order: 4;
 }
 .lb-popup-header .lb-icon-button:is(:hover, :focus-visible)::after {
     bottom: auto;
@@ -970,15 +896,6 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
     color: var(--lb-muted-text);
     overflow-wrap: anywhere;
 }
-.lb-popup .lb-version-content .lb-feedback,
-:is(.lb-popup, .ak-timing-popover) .lb-disclosure-content .lb-feedback {
-    background: none;
-    border: 0;
-    border-inline-start: 3px solid #ffa8b1;
-    border-radius: 0;
-    padding: 8px 12px;
-    margin-top: 12px;
-}
 .lb-popup .lb-task-surface {
     padding: 12px 0;
     background: none;
@@ -1035,19 +952,8 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
     grid-column: 1;
     grid-row: 2;
 }
-.lb-job-dismiss {
-    grid-column: 2;
-    grid-row: 2;
-}
-.lb-job-banner > .lb-feedback {
-    grid-column: 1 / -1;
-}
 
 /* Persistent progress chrome must not continuously blur the animated lyric backdrop. */
-.lb-tools {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-}
 
 .lb-generation-trigger[aria-expanded="true"] {
     background: rgba(255, 255, 255, 0.12);
@@ -1076,20 +982,6 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
 }
 .lb-settings-artist:empty {
     display: none;
-}
-
-.lb-upgrade-offer {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 12px;
-}
-.lb-upgrade-description {
-    font: 500 14px/1.5 system-ui;
-}
-.lb-upgrade-actions {
-    display: flex;
-    gap: 8px;
 }
 
 .lb-version-classification {
@@ -1125,73 +1017,6 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
     margin: 0;
     font: 400 12px/1.5 system-ui;
 }
-
-/* Notification messages and actions occupy separate rows. */
-.lb-feedback {
-    display: grid;
-    grid-template-columns: 24px minmax(0, 1fr);
-    align-items: start;
-}
-.lb-feedback > .lb-icon {
-    grid-column: 1;
-    grid-row: 1;
-}
-.lb-feedback > strong {
-    grid-column: 2;
-    grid-row: 1;
-    font: 500 14px/1.5 system-ui;
-}
-.lb-notice-actions {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-}
-.lb-notice-actions > .lb-icon-button {
-    margin-inline-start: auto;
-}
-.lb-notice-actions details {
-    min-width: 0;
-}
-.lb-notice-actions summary {
-    display: flex;
-    align-items: center;
-    min-height: 44px;
-    cursor: pointer;
-}
-.lb-notice-actions summary::before {
-    content: "▸";
-    margin-inline-end: 6px;
-}
-.lb-notice-actions details[open] {
-    flex-basis: 100%;
-    order: 1;
-}
-.lb-notice-actions details[open] summary::before {
-    content: "▾";
-}
-.lb-tools > .lb-feedback {
-    padding: 0;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
-}
-.lb-upgrade-offer {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-}
-.lb-upgrade-description {
-    font: 500 14px/1.5 system-ui;
-}
-.lb-upgrade-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
 .lb-tools > .lb-status {
     flex-basis: 100%;
 }
@@ -1205,17 +1030,6 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
 .lb-search-form > .lb-advanced {
     grid-column: 1 / -1;
     margin: 0;
-}
-
-.lb-notice-actions summary::-webkit-details-marker {
-    display: none;
-}
-
-.lb-feedback.lb-notice {
-    background: var(--lb-frame-tint, rgba(255, 255, 255, 0.045));
-    border: 1px solid var(--lb-frame-edge, var(--lb-glass-border));
-    padding: 12px;
-    color: var(--lb-glass-text);
 }
 .lb-preview-playback-bar > span {
     flex-basis: 100%;
@@ -1249,16 +1063,208 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
     }
 }
 
-/* Informational notices use the same surface and spacing as inline setup cards. */
-.lb-popup .lb-feedback.lb-notice {
+/* Upload preview follows the settings/search panel control and spacing system. */
+.lb-import-panel > .lb-song-actions {
+    flex: 0 0 auto;
+    margin: 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--lb-glass-border);
+}
+.lb-import-preview {
+    overflow-wrap: anywhere;
+}
+
+/* Glass feedback presentation. Material administrator feedback has its own styles. */
+.lb-feedback-element {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 12px 8px;
+    align-items: start;
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+.lb-feedback-element[hidden],
+.lb-feedback-element [hidden] {
+    display: none;
+}
+.lb-feedback,
+.lb-confirmation {
+    flex-basis: 100%;
     margin-top: 12px;
     padding: 16px;
-    gap: 12px 8px;
+    box-sizing: border-box;
+    border: 1px solid var(--lb-frame-edge, var(--lb-glass-border));
     border-radius: var(--lb-control-radius);
+    background: var(--lb-frame-tint, rgba(255, 255, 255, 0.045));
+    color: var(--lb-glass-text);
 }
-.lb-feedback.lb-notice > strong {
-    font-weight: 400;
+.lb-feedback-icon {
+    grid-column: 1;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 21px; /* Match the message's first line, including wrapped notices. */
+}
+.lb-feedback-message {
+    grid-column: 2;
+    grid-row: 1;
+    font: 400 14px/1.5 system-ui;
+}
+.lb-feedback-element[data-severity="error"] > .lb-feedback-icon,
+.lb-feedback-element[data-severity="warning"] > .lb-feedback-icon {
+    color: #ffcf9c;
+}
+.lb-feedback-element[data-severity="success"] > .lb-feedback-icon {
+    color: #b8e2bd;
+}
+.lb-notice-actions,
+.lb-feedback-diagnostics {
+    grid-column: 1 / -1;
+    min-width: 0;
 }
 .lb-notice-actions {
+    display: flex;
+    flex-wrap: wrap;
     justify-content: flex-start;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+.lb-feedback-diagnostics {
+    font: 400 12px/1.5 system-ui;
+}
+.lb-feedback-diagnostics summary {
+    cursor: pointer;
+    min-height: 32px;
+    display: list-item;
+}
+.lb-feedback-diagnostics p {
+    margin: 8px 0;
+}
+.lb-status.lb-feedback-element,
+.lb-version-status.lb-feedback-element,
+.lb-job-status.lb-feedback-element,
+.lb-save-status.lb-feedback-element,
+.lb-song-save-status.lb-feedback-element {
+    gap: 4px 8px;
+}
+
+.lb-upgrade-offer.lb-feedback-element {
+    flex-basis: 100%;
+}
+.lb-upgrade-description {
+    font: 400 14px/1.5 system-ui;
+}
+.lb-job-banner .lb-job-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+}
+
+.lb-feedback-element > .lb-feedback,
+.lb-job-banner > .lb-feedback {
+    grid-column: 1 / -1;
+}
+.lb-job-banner > .lb-feedback {
+    grid-row: 3;
+}
+
+/* Animate the shared loader without involving playback frame scheduling. */
+.lb-icon-loading {
+    animation: lb-loader-spin 1s linear infinite;
+    transform-origin: center;
+}
+@keyframes lb-loader-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lb-icon-loading {
+        animation: none;
+    }
+}
+
+/* Playback notifications are independent glass surfaces, never nested panels. */
+.lb-notification-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    max-height: var(--lb-notification-height);
+}
+.lb-notification-card.lb-feedback {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    flex: 0 0 auto;
+    width: 100%;
+    margin: 0;
+    padding: 14px 16px;
+    background: var(--lb-glass-panel);
+    border: 1px solid var(--lb-glass-border);
+    border-radius: var(--lb-control-radius);
+    box-shadow: var(--lb-glass-shadow);
+}
+.lb-feedback-secondary {
+    grid-column: 2;
+    font: 400 12px/1.5 system-ui;
+    color: var(--lb-muted-text);
+}
+.lb-notification-card .lb-job-progress {
+    grid-column: 2;
+    grid-row: 2;
+}
+.lb-notification-card .lb-job-actions {
+    grid-column: 1 / -1;
+    grid-row: auto;
+}
+.lb-notification-summary {
+    flex: 0 0 auto;
+    width: 100%;
+    min-height: min(44px, var(--lb-notification-height));
+    background: var(--lb-glass-panel);
+    border: 1px solid var(--lb-glass-border);
+}
+.lb-notification-card[hidden],
+.lb-notification-summary[hidden] {
+    display: none;
+}
+
+.lb-tools {
+    position: fixed;
+    z-index: 1100;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    overflow: hidden;
+    color: var(--lb-glass-text);
+    font: var(--lb-control-font);
+    --lb-notification-safe-top: env(safe-area-inset-top, 0px);
+    --lb-notification-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --lb-notification-safe-left: env(safe-area-inset-left, 0px);
+    --lb-notification-safe-right: env(safe-area-inset-right, 0px);
+}
+.lb-tools[hidden] {
+    display: none !important;
+}
+
+/* Preview controls remain independent of notification priority/counts. */
+.lb-tools > .lb-preview-playback-bar {
+    padding: 14px 16px;
+    box-sizing: border-box;
+    border: 1px solid var(--lb-glass-border);
+    border-radius: var(--lb-control-radius);
+    background: var(--lb-glass-panel);
+    max-height: var(--lb-notification-height);
+    min-height: 0;
+    overflow: auto;
 }

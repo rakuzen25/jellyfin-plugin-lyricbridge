@@ -33,6 +33,7 @@ export interface Configuration {
     StoragePath: string;
     MinimumMatch: number;
     ScheduledRetrieval: boolean;
+    AutoGeneratePronunciation: boolean;
     AllowUserRequests: boolean;
     AutoApproveUserRequests: boolean;
     UserRequestDailyQuota: number;

@@ -9,7 +9,7 @@ for token in ("Plugin.Instance", "Microsoft.Data.Sqlite", "MediaBrowser.", "Jell
     assert token not in core, "Core boundary violation: " + token
 assert "Plugin.Instance" not in infra, "Infrastructure configuration must be injected"
 controller = (root / "src/Api.cs").read_text()
-for token in ("store.Get<", "store.Set(", '"selected"', '"previous"', '"variants"'):
+for token in ("store.Get<", "store.Set(", '"selected"', '"variants"'):
     assert token not in controller, (
         "Controller contains generic persistence workflow: " + token
     )

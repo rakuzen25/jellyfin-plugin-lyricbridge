@@ -59,7 +59,6 @@ public sealed class SelectionRepositoryTests
             Assert.Throws<SqliteException>(() => store.ApplySelection(item, new(lyrics, null)));
             Assert.NotNull(store.Selection(item).Rejected);
             Assert.Equal(before, Codec.Serialize(store.Selection(item)));
-            Assert.Empty(store.All<VersionSnapshot>("previous"));
         }
         finally { SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }

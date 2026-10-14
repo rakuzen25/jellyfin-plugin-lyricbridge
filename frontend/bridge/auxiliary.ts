@@ -1,4 +1,4 @@
-import type { LyricLine } from "../shared/lyrics.ts";
+import type { LyricLine, RichLyrics } from "../shared/lyrics.ts";
 import type { AuxiliaryDocument, AuxiliaryKind, Preferences, Variant } from "./models.ts";
 function variantLabel(v: Variant) {
     return (
@@ -33,16 +33,38 @@ export function rowLanguage(language: string | undefined, script: string, text: 
     if (primary === "zh") return script === "Traditional" ? "zh-Hant" : "zh-Hans";
     return tag;
 }
-export function auxiliary(line: LyricLine, kind: AuxiliaryKind, p: Preferences, doc: AuxiliaryDocument | null) {
-    if (!doc?.lyrics) return null;
-    const selected = doc.auxiliaryChoices?.[kind] || "auto";
-    let supplied = kind === "pronunciation" ? line.pronunciation : line.translations?.[p.translationLanguage];
+function embeddedText(line: LyricLine, kind: AuxiliaryKind, language: string) {
+    let supplied = kind === "pronunciation" ? line.pronunciation : line.translations?.[language];
     if (!hasAuxiliaryText(supplied) && kind === "translation") {
         const key = Object.keys(line.translations || {}).find(
-            (k) => k.split("-")[0] === p.translationLanguage.split("-")[0] && hasAuxiliaryText(line.translations?.[k]),
+            (k) => k.split("-")[0] === language.split("-")[0] && hasAuxiliaryText(line.translations?.[k]),
         );
         supplied = key ? line.translations?.[key] : undefined;
     }
+    return hasAuxiliaryText(supplied) ? supplied : null;
+}
+export function hasEmbeddedVersion(lyrics: RichLyrics | null | undefined, kind: AuxiliaryKind, language: string) {
+    return !!lyrics?.lines.some((line) => embeddedText(line, kind, language) || (line.background && embeddedText(line.background, kind, language)));
+}
+// Responses replace lyric objects; cache availability so rendering each row remains linear overall.
+const embeddedAvailability = new WeakMap<RichLyrics, { lines: LyricLine[]; choices: Map<string, boolean> }>();
+export function effectiveAuxiliaryChoice(doc: AuxiliaryDocument, kind: AuxiliaryKind, p: Preferences) {
+    const selected = doc.auxiliaryChoices?.[kind] || "auto";
+    if (selected !== "provider") return selected;
+    if (!doc.lyrics) return "auto";
+    let cached = embeddedAvailability.get(doc.lyrics);
+    if (!cached || cached.lines !== doc.lyrics.lines) {
+        cached = { lines: doc.lyrics.lines, choices: new Map() };
+        embeddedAvailability.set(doc.lyrics, cached);
+    }
+    const key = kind + ":" + (kind === "translation" ? p.translationLanguage : "");
+    if (!cached.choices.has(key)) cached.choices.set(key, hasEmbeddedVersion(doc.lyrics, kind, p.translationLanguage));
+    return cached.choices.get(key) ? selected : "auto";
+}
+export function auxiliary(line: LyricLine, kind: AuxiliaryKind, p: Preferences, doc: AuxiliaryDocument | null) {
+    if (!doc?.lyrics) return null;
+    const selected = effectiveAuxiliaryChoice(doc, kind, p);
+    const supplied = embeddedText(line, kind, p.translationLanguage);
     const provided = hasAuxiliaryText(supplied) ? { text: supplied, provenance: "Provided by " + doc.lyrics.source, key: "provider" } : null;
     if (selected === "provider") return provided;
     const matches = (doc.variants || []).filter(

@@ -1,7 +1,7 @@
 import { requireValue } from "../shared/invariants.ts";
 import type { LyricLine, RichLyrics } from "../shared/lyrics.ts";
 import type {} from "../shared/runtime.ts";
-import { rowLanguage, translationLanguageMatches, translationScript } from "./auxiliary.ts";
+import { effectiveAuxiliaryChoice, hasEmbeddedVersion, rowLanguage, translationLanguageMatches, translationScript } from "./auxiliary.ts";
 import type { BridgeDocument, ServiceCapability, TrackScope } from "./contracts.ts";
 import { parseDocument } from "./responses.ts";
 import { versionRow, updateVersionRow } from "./version-rows.ts";
@@ -35,7 +35,7 @@ interface Dependencies {
     refreshSong: (force?: boolean) => Promise<void>;
     showError: (cause: unknown, parent?: HTMLElement | null | undefined, retryAction?: () => unknown) => void;
     confirmation: (parent: HTMLElement, message: string, action: () => unknown, label?: string, trigger?: HTMLElement | undefined) => void;
-    status: (message: string, error?: boolean, ttl?: number) => void;
+    status: (message: string, error?: boolean, ttl?: number, operation?: string) => void;
     closeSearch: (restore?: boolean) => void;
     openVersions: (better?: RichLyrics | null | undefined, mixKind?: AuxiliaryKind | undefined) => Promise<void>;
     importLyrics: (existing: boolean) => Promise<void>;
@@ -82,7 +82,19 @@ export function createVersionPanel(dependencies: Dependencies) {
                     "Provider rows first" +
                     (kind === "pronunciation" && originalLanguages().has("ja") ? ", then missing Japanese romaji locally." : "."),
             },
-            { key: "provider", title: "Provider supplied only", description: "Use rows included with the original lyrics." },
+            ...(hasEmbeddedVersion(documentState().lyrics, kind, p.translationLanguage)
+                ? [
+                      {
+                          key: "provider",
+                          hash: documentState().lyrics?.hash,
+                          title: documentState().lyrics?.source || "Original lyrics",
+                          description:
+                              !documentState().lyrics?.source || ["Local", "Imported"].includes(documentState().lyrics?.source || "")
+                                  ? "Supplied"
+                                  : "Provider supplied",
+                      },
+                  ]
+                : []),
             ...versions.map((v) => ({
                 ...v,
                 title: v.service,
@@ -92,7 +104,7 @@ export function createVersionPanel(dependencies: Dependencies) {
                     (v.originType === "supplied" ? "Supplied" : v.originType === "local" ? "Local" : "Generated"),
             })),
         ];
-        const active = () => documentState().auxiliaryChoices?.[kind] || "auto";
+        const active = () => effectiveAuxiliaryChoice(documentState(), kind, p);
         trackScope().versionBrowsing ??= {};
         const browsing = requireValue(trackScope().versionBrowsing);
         if (browsing[kind] === undefined || (browsing[kind] !== null && !all.some((v) => v.key === browsing[kind]))) browsing[kind] = active();
@@ -107,10 +119,7 @@ export function createVersionPanel(dependencies: Dependencies) {
                 .querySelectorAll<HTMLElement>(".lb-version-row")
                 .forEach((row) => {
                     const selected = row.dataset.key === active();
-                    const policyUse =
-                        !selected && !["auto", "provider"].includes(row.dataset.key || "") && used.has(row.dataset.key)
-                            ? "In use · Automatic"
-                            : undefined;
+                    const policyUse = !selected && row.dataset.key !== "auto" && used.has(row.dataset.key) ? "In use · Automatic" : undefined;
                     updateVersionRow(row, selected, row.dataset.key === browsing[kind], policyUse);
                     const remove = row.querySelector<HTMLButtonElement>(".lb-delete-version");
                     const explanation = row.querySelector<HTMLElement>(".lb-delete-reason");
@@ -145,16 +154,25 @@ export function createVersionPanel(dependencies: Dependencies) {
                     ? (languageChoices.find((l) => l[0] === version.language)?.[1] || version.language) +
                       " · " +
                       (version.originType === "supplied" ? "Supplied" : version.originType === "local" ? "Local" : "Generated")
-                    : "Selection policy",
+                    : version.key === "provider"
+                      ? version.description
+                      : "Selection policy",
                 details:
-                    version.key === "auto" || version.key === "provider"
+                    version.key === "auto"
                         ? [version.description]
-                        : [
-                              version.origin?.providerId ? "Provider ID: " + version.origin.providerId : "",
-                              version.model ? "Model: " + version.model : "",
-                              version.reasoningEffort ? "Thinking: " + version.reasoningEffort : "",
-                              version.createdAt ? "Saved: " + new Date(version.createdAt).toLocaleDateString() : "",
-                          ],
+                        : version.key === "provider"
+                          ? [
+                                documentState().lyrics?.providerId ? "Provider ID: " + documentState().lyrics?.providerId : "",
+                                kind === "translation"
+                                    ? languageChoices.find((l) => l[0] === p.translationLanguage)?.[1] || p.translationLanguage
+                                    : "Pronunciation",
+                            ]
+                          : [
+                                version.origin?.providerId ? "Provider ID: " + version.origin.providerId : "",
+                                version.model ? "Model: " + version.model : "",
+                                version.reasoningEffort ? "Thinking: " + version.reasoningEffort : "",
+                                version.createdAt ? "Saved: " + new Date(version.createdAt).toLocaleDateString() : "",
+                            ],
                 toggle: () => expand(version.key),
             });
             row.dataset.versionSignature = signature;
@@ -374,15 +392,23 @@ export function createVersionPanel(dependencies: Dependencies) {
             const { row, content } = versionRow({
                 key: version.hash,
                 kind: "original",
-                name: version.source,
+                name: version.source === "Local" ? "Jellyfin lyrics" : version.source,
                 description:
-                    (version.currentOnly ? "Currently supplied" : version.source === "Imported" ? "Imported original" : "Saved original") +
+                    (version.currentOnly
+                        ? version.source === "Local"
+                            ? "Currently supplied by Jellyfin"
+                            : "Current version"
+                        : version.autoSaved
+                          ? "Loaded from Jellyfin"
+                          : version.source === "Imported"
+                            ? "Imported original"
+                            : "Saved original") +
                     " · " +
                     (version.wordTimed ? "Word timing" : "Line / plain lyrics"),
                 details: [
                     version.providerId ? "Provider ID: " + version.providerId : "",
                     [version.title, version.artist].filter(Boolean).join(" · "),
-                    version.savedAt ? "Saved: " + new Date(version.savedAt).toLocaleDateString() : "Import to save this original.",
+                    version.savedAt ? "Saved: " + new Date(version.savedAt).toLocaleDateString() : "",
                 ],
                 toggle: () => {
                     browsing.original = browsing.original === version.hash ? null : version.hash;
@@ -390,6 +416,7 @@ export function createVersionPanel(dependencies: Dependencies) {
                 },
             });
             row.dataset.hash = version.hash;
+            row.dataset.autoSaved = String(!!version.autoSaved);
             row.dataset.versionSignature = signature;
             const target = context.scope;
             const path = "items/" + trackScope().itemId + "/originals/" + encodeURIComponent(version.hash);
@@ -413,7 +440,10 @@ export function createVersionPanel(dependencies: Dependencies) {
                     if (operation === "select") browsing.original = version.hash;
                     await refreshSong(true);
                 } catch (error) {
-                    if (context.scope === target && !target?.controller.signal.aborted && row.isConnected) showError(error, content);
+                    if (context.scope === target && !target?.controller.signal.aborted && row.isConnected) {
+                        if (operation === "delete") throw error;
+                        showError(error, content);
+                    }
                 }
             };
             const previewButton = button(
@@ -755,6 +785,7 @@ export function createVersionPanel(dependencies: Dependencies) {
                                             : "Generating local pronunciation…",
                                         false,
                                         documentState().pronunciation?.state === "complete" ? 4000 : 0,
+                                        "local-pronunciation",
                                     );
                                 } catch (error) {
                                     showError(error, prepare);

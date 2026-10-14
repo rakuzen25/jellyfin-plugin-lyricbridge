@@ -34,3 +34,8 @@ notices/LIBNMECAB-SOURCE.tar.gz in the plugin archive. Recipients may modify or
 replace that library and reverse engineer the combined work to debug those
 modifications as provided by the LGPL. Dictionary copying terms remain beside
 the installed dictionary and in notices/IPADIC-COPYING.
+
+Desktop QRC upload decoding adapts the QMC1 envelope mask from
+Presburger/qmc-decoder (MIT). See QMC-LICENSE for its copyright and terms.
+The Lyricify KRC/QRC helpers have local byte-input and bounded-decompression
+changes; upload validation does not change provider parsing policy.

@@ -1,9 +1,10 @@
 import { isRecord } from "../shared/invariants.ts";
 import type { Cue, LyricLine, RichLyrics } from "../shared/lyrics.ts";
-import type { RequestFailure } from "./api.ts";
+import { parseRequestIssues, type RequestFailure } from "./api.ts";
 import type { BridgeDocument, DisplayFailure, ServiceCapability, SourceCapability, TrackScope } from "./contracts.ts";
 import type { Preferences, Variant } from "./models.ts";
 import { isMatchAssessment } from "./search-models.ts";
+import { effectiveAuxiliaryChoice } from "./auxiliary.ts";
 const number = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
 const stringMap = (v: unknown): v is Record<string, string> => isRecord(v) && Object.values(v).every((x) => typeof x === "string");
@@ -69,7 +70,9 @@ function failure(v: unknown): v is RequestFailure {
         typeof v.message === "string" &&
         (v.retryable === undefined || typeof v.retryable === "boolean") &&
         (v.diagnosticId == null || typeof v.diagnosticId === "string") &&
-        (v.retryAt == null || typeof v.retryAt === "string")
+        (v.retryAt == null || typeof v.retryAt === "string") &&
+        (v.issues == null || parseRequestIssues(v.issues) !== null) &&
+        (v.issueCount == null || (number(v.issueCount) && Number.isSafeInteger(v.issueCount) && v.issueCount >= 0))
     );
 }
 function parsePreferences(v: unknown, defaults: Preferences): Preferences {
@@ -117,6 +120,7 @@ function document(v: unknown): v is BridgeDocument {
                         isRecord(x) &&
                         ["itemId", "hash", "source", "providerId", "title", "artist", "savedAt"].every((k) => typeof x[k] === "string") &&
                         typeof x.wordTimed === "boolean" &&
+                        (x.autoSaved === undefined || typeof x.autoSaved === "boolean") &&
                         number(x.revision),
                 ))) &&
         (v.detectedLanguages === undefined || strings(v.detectedLanguages)) &&
@@ -169,6 +173,10 @@ export function parseDocument(value: unknown, defaults: Preferences): BridgeDocu
     };
     if (!document(normalized)) throw new Error("Jellyfin returned malformed lyric data. Existing lyrics were retained; retry retrieval.");
     const validated: BridgeDocument = normalized;
+    validated.auxiliaryChoices = {
+        translation: effectiveAuxiliaryChoice(validated, "translation", validated.preferences),
+        pronunciation: effectiveAuxiliaryChoice(validated, "pronunciation", validated.preferences),
+    };
     for (const key of Object.getOwnPropertySymbols(value)) {
         const descriptor = Object.getOwnPropertyDescriptor(value, key);
         if (descriptor) Object.defineProperty(normalized, key, descriptor);
@@ -224,6 +232,11 @@ export function displayFailure(value: unknown): DisplayFailure {
               retryable: value.details.retryable === true,
               diagnosticId: typeof value.details.diagnosticId === "string" ? value.details.diagnosticId : undefined,
               retryAt: typeof value.details.retryAt === "string" ? value.details.retryAt : undefined,
+              issues: parseRequestIssues(value.details.issues) ?? undefined,
+              issueCount:
+                  number(value.details.issueCount) && Number.isSafeInteger(value.details.issueCount) && value.details.issueCount >= 0
+                      ? value.details.issueCount
+                      : undefined,
           }
         : undefined;
     return {

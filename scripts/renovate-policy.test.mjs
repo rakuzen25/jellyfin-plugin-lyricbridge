@@ -45,3 +45,34 @@ test("Playwright and its extracted versioned image share a patch-only automerge 
     assert.equal(config.rebaseWhen, "behind-base-branch");
     assert.equal(config.ignoreTests, false);
 });
+
+test("Renovate, pnpm and pip enforce the same 24-hour release age", () => {
+    assert.equal(config.minimumReleaseAge, "1 day");
+    assert.equal(config.minimumReleaseAgeBuffer, "30 minutes");
+    assert.equal(config.minimumReleaseAgeBehaviour, "timestamp-optional");
+    assert.equal(config.internalChecksFilter, "strict");
+    for (const rule of config.packageRules) {
+        for (const key of ["minimumReleaseAge", "minimumReleaseAgeBuffer", "minimumReleaseAgeBehaviour", "internalChecksFilter"]) {
+            assert.equal(Object.hasOwn(rule, key), false, `Package rule overrides ${key}`);
+        }
+    }
+    const workspace = readFileSync(new URL("../pnpm-workspace.yaml", import.meta.url), "utf8");
+    const minutes = Number(workspace.match(/^minimumReleaseAge: (\d+)$/m)?.[1]);
+    assert.equal(minutes, 24 * 60);
+    assert.match(workspace, /^minimumReleaseAgeStrict: true$/m);
+    const excludes = workspace.split("minimumReleaseAgeExclude:\n")[1];
+    assert.ok(excludes, "Reviewed exceptions must remain present");
+    for (const line of excludes.trim().split("\n")) {
+        assert.match(line.trim(), /^- "?[^*]+@\d+\.\d+\.\d+"?$/, "Exceptions must pin exact versions");
+    }
+    for (const file of [".github/actions/setup/action.yml", "README.md", "DEPENDENCY_UPGRADES.md"]) {
+        const content = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+        const installs = content.split("\n").filter((line) => line.includes("-m pip install") && line.includes("requirements-check.txt"));
+        assert.ok(installs.length > 0, `${file} must retain its Python setup command`);
+        for (const line of installs) {
+            const days = Number(line.match(/--uploaded-prior-to=P(\d+)D/)?.[1]);
+            assert.equal(days * 24 * 60, minutes, `${file} pip cutoff must match pnpm`);
+            assert.match(line, /scripts\/check-pip\.py &&/, `${file} must check pip support before installing`);
+        }
+    }
+});

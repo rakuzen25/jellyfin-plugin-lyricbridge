@@ -1,3 +1,5 @@
+import { FeedbackScope } from "../shared/feedback.ts";
+import { materialFeedback } from "./feedback.ts";
 import { icon } from "../shared/icons.ts";
 import type { Configuration, JobSummary, WebRendererStatus } from "./contracts.ts";
 import { hostFailure } from "./contracts.ts";
@@ -38,6 +40,7 @@ import { hostFailure } from "./contracts.ts";
             scroller?: { toCenter(element: HTMLElement, smooth: boolean): void };
         };
         "#lb-requests": HTMLInputElement;
+        "#lb-auto-pronunciation": HTMLInputElement;
         ".lb-config-footer .button-submit": HTMLButtonElement;
         "#lb-default-preview": HTMLElement;
     }
@@ -86,36 +89,29 @@ import { hostFailure } from "./contracts.ts";
         if (text !== undefined) n.textContent = text;
         return n;
     }
-    const noticeTimers = new Map<HTMLElement, { timer?: number }>();
+    const feedbackScope = new FeedbackScope(materialFeedback);
+    let feedbackVisible = true;
     function notice(target: HTMLElement, message: string, ttl = 0) {
-        const old = noticeTimers.get(target);
-        if (old) clearTimeout(old.timer);
-        noticeTimers.delete(target);
-        target.textContent = message;
-        target.hidden = !message;
-        target.setAttribute("role", "status");
-        if (ttl && message) {
-            const ticket: { timer?: number } = {};
-            ticket.timer = setTimeout(() => {
-                if (noticeTimers.get(target) !== ticket) return;
-                noticeTimers.delete(target);
-                if (target.isConnected && target.textContent === message) {
-                    target.textContent = "";
-                    target.hidden = true;
-                }
-            }, ttl);
-            noticeTimers.set(target, ticket);
-        }
+        if (!feedbackVisible) return;
+        feedbackScope.update(target, {
+            message,
+            severity: ttl ? "success" : /^(Loading|Saving|Testing|Resetting)/.test(message) ? "progress" : "info",
+            ttl,
+        });
     }
-    function failure(target: HTMLElement, message: string) {
-        notice(target, message);
-        target.setAttribute("role", "alert");
-        target.append(button("Dismiss", () => notice(target, target === status && dirty ? "Unsaved changes" : "")));
+    function failure(target: HTMLElement, message: string, details: string[] = []) {
+        if (!feedbackVisible) return;
+        feedbackScope.update(target, {
+            message,
+            severity: "error",
+            details,
+            actions: [{ label: "Dismiss", run: () => notice(target, target === status && dirty ? "Unsaved changes" : "") }],
+        });
     }
     page.addEventListener("viewhide", () => {
+        feedbackVisible = false;
         window.removeEventListener("resize", positionFooter);
-        for (const ticket of noticeTimers.values()) clearTimeout(ticket.timer);
-        noticeTimers.clear();
+        feedbackScope.dispose();
     });
     function changed(event?: Event) {
         if (event?.target instanceof Element && event.target.closest("[data-config-transient]")) return;
@@ -401,13 +397,8 @@ import { hostFailure } from "./contracts.ts";
                   "Web root: " + rendererRuntime.webRoot,
               ]
             : ["Renderer warning: status unavailable — use Repair to retry."];
-        rendererStatus.replaceChildren(
-            ...statusLines.map((text) => {
-                const line = document.createElement("div");
-                line.textContent = text;
-                return line;
-            }),
-        );
+        const rendererView = feedbackScope.update(rendererStatus, { message: statusLines[0] || "", severity });
+        rendererView.message.replaceChildren(...statusLines.map((text) => node("div", text)));
         const lang = config.Defaults.SourceLanguage;
         const languageOptions = query("#lb-default-language-options");
         if (languageOptions) {
@@ -462,10 +453,11 @@ import { hostFailure } from "./contracts.ts";
         for (const [key, selector] of [
             ["EnableWebRenderer", "#lb-web-enabled"],
             ["ScheduledRetrieval", "#lb-scheduled"],
+            ["AutoGeneratePronunciation", "#lb-auto-pronunciation"],
             ["AllowUserRequests", "#lb-requests"],
             ["AutoApproveUserRequests", "#lb-approval"],
         ] as const)
-            query(selector).checked = config[key];
+            query(selector).checked = key === "AutoGeneratePronunciation" ? config[key] !== false : config[key];
         const target = query("#lb-defaults");
         target.replaceChildren();
         const choices: Record<string, readonly (readonly string[])[]> = {
@@ -663,14 +655,11 @@ import { hostFailure } from "./contracts.ts";
                     notice(result, s.Name + ": connection succeeded.", 4000);
                 } catch (caught) {
                     const error = hostFailure(caught);
-                    result.dataset.state = "error";
-                    result.setAttribute("role", "alert");
-                    notice(result, s.Name + " connection failed: " + error.message + " Use Test connection to retry.");
-                    if (error.details?.diagnosticId) {
-                        const reference = node("div", "Diagnostic ID: " + error.details.diagnosticId);
-                        result.append(reference);
-                    }
-                    result.append(button("Dismiss", () => notice(result, "")));
+                    failure(
+                        result,
+                        s.Name + " connection failed: " + error.message + " Use Test connection to retry.",
+                        error.details?.diagnosticId ? ["Diagnostic ID: " + error.details.diagnosticId] : [],
+                    );
                 } finally {
                     testButton.disabled = !isConfigured();
                 }
@@ -708,24 +697,24 @@ import { hostFailure } from "./contracts.ts";
         resetOpen.hidden = false;
         resetWord.value = "";
         resetSubmit.disabled = true;
-        resetStatus.textContent = "";
+        notice(resetStatus, "");
         resetOpen.focus();
     };
     resetSubmit.onclick = async () => {
         resetSubmit.disabled = true;
         resetWord.disabled = true;
         query("#lb-reset-cancel").disabled = true;
-        resetStatus.textContent = "Resetting managed lyric library…";
+        notice(resetStatus, "Resetting managed lyric library…");
         try {
             await call("admin/reset", "POST", { confirmation: resetWord.value });
-            resetStatus.textContent = "Managed lyric library reset. Settings and source-library files were retained.";
+            notice(resetStatus, "Managed lyric library reset. Settings and source-library files were retained.", 4000);
             resetConfirm.hidden = true;
             resetOpen.hidden = false;
             resetWord.value = "";
             resetOpen.focus();
         } catch (caught) {
             const error = hostFailure(caught);
-            resetStatus.textContent = error.message || "Reset failed. Try again.";
+            failure(resetStatus, error.message || "Reset failed. Try again.");
             resetSubmit.disabled = resetWord.value !== "RESET";
         } finally {
             resetWord.disabled = false;
@@ -811,15 +800,20 @@ import { hostFailure } from "./contracts.ts";
             hostFailure(caught);
             console.error("LyricBridge configuration could not be loaded.");
             failure(status, "Settings could not load.");
-            status.append(button("Retry", loadSettings));
+            status.querySelector(".lb-material-actions")?.append(button("Retry", loadSettings));
         } finally {
             loading = false;
         }
     }
     page.addEventListener("viewshow", () => {
+        feedbackVisible = true;
         window.addEventListener("resize", positionFooter);
         positionFooter();
         if (!loaded) loadSettings();
+        else {
+            refreshDependentControls();
+            notice(status, dirty ? "Unsaved changes" : "");
+        }
     });
     query("form").addEventListener("input", changed);
     query("form").addEventListener("change", changed);
@@ -834,6 +828,7 @@ import { hostFailure } from "./contracts.ts";
         for (const [key, selector] of [
             ["EnableWebRenderer", "#lb-web-enabled"],
             ["ScheduledRetrieval", "#lb-scheduled"],
+            ["AutoGeneratePronunciation", "#lb-auto-pronunciation"],
             ["AllowUserRequests", "#lb-requests"],
             ["AutoApproveUserRequests", "#lb-approval"],
         ] as const)
@@ -863,10 +858,10 @@ import { hostFailure } from "./contracts.ts";
     const queueStatus = query("#lb-queue-status");
     let queueOffset = 0;
     query("#lb-refresh").onclick = async () => {
-        queueStatus.textContent = "Loading requests…";
+        notice(queueStatus, "Loading requests…");
         try {
             const jobs = await call<JobSummary[]>("jobs?offset=" + queueOffset + "&limit=50");
-            queueStatus.textContent = "";
+            notice(queueStatus, "");
             const target = query("#lb-queue");
             target.replaceChildren();
             if (!jobs.length) target.append(node("p", "No requests"));
@@ -884,11 +879,15 @@ import { hostFailure } from "./contracts.ts";
                         ),
                     );
                 if (job.error) {
-                    const error = node("div", job.error);
+                    const error = node("div");
                     error.className = "fieldDescription lb-action-status";
                     error.dataset.state = "error";
                     error.setAttribute("role", "alert");
-                    if (job.failure?.diagnosticId) error.append(node("div", "Diagnostic ID: " + job.failure.diagnosticId));
+                    feedbackScope.update(error, {
+                        message: job.error,
+                        severity: "error",
+                        details: job.failure?.diagnosticId ? ["Diagnostic ID: " + job.failure.diagnosticId] : [],
+                    });
                     row.append(error);
                 }
                 const actions = job.outputDeleted

@@ -10,6 +10,9 @@ strictDepBuilds: true
 pmOnFail: error
 # Restoration is explicit and frozen in CI/packaging; checks must not install.
 verifyDepsBeforeRun: false
+# Keep the 24-hour policy aligned with Renovate and pip (test:tooling checks it).
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
 minimumReleaseAgeExclude:
   - "@typescript-eslint/eslint-plugin@8.71.2"
   - "@typescript-eslint/parser@8.71.2"

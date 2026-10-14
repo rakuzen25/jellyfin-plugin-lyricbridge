@@ -1,0 +1,31 @@
+namespace LyricBridge;
+
+// QMC1 envelope mask adapted from Presburger/qmc-decoder (MIT).
+// See vendor/QMC-LICENSE. The payload uses the existing Lyricify QRC decoder.
+internal static class QrcDesktopContainer
+{
+    public static ReadOnlySpan<byte> Header => [0x98, 0x25, 0xb0, 0xac, 0xe3, 0x02, 0x83, 0x68, 0xe8, 0xfc, 0x6c];
+    private static readonly byte[][] Rows = [
+        [0x4a, 0xd6, 0xca, 0x90, 0x67, 0xf7, 0x52],
+        [0x5e, 0x95, 0x23, 0x9f, 0x13, 0x11, 0x7e],
+        [0x47, 0x74, 0x3d, 0x90, 0xaa, 0x3f, 0x51],
+        [0xc6, 0x09, 0xd5, 0x9f, 0xfa, 0x66, 0xf9],
+        [0xf3, 0xd6, 0xa1, 0x90, 0xa0, 0xf7, 0xf0],
+        [0x1d, 0x95, 0xde, 0x9f, 0x84, 0x11, 0xf4],
+        [0x0e, 0x74, 0xbb, 0x90, 0xbc, 0x3f, 0x92],
+        [0x00, 0x09, 0x5b, 0x9f, 0x62, 0x66, 0xa1]
+    ];
+    public static byte[] Unwrap(byte[] file)
+    {
+        var result = new byte[file.Length - Header.Length];
+        for (int position = Header.Length; position < file.Length; position++)
+        {
+            var index = (position > 0x7fff ? position % 0x7fff : position) & 0x7f;
+            var row = index / 16;
+            var column = index % 16;
+            var mask = column == 0 ? 0xc3 : column == 8 ? 0xd8 : column < 8 ? Rows[row][column - 1] : Rows[7 - row][15 - column];
+            result[position - Header.Length] = (byte)(file[position] ^ mask);
+        }
+        return result;
+    }
+}

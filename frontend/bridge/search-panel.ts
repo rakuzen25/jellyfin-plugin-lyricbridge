@@ -1,3 +1,4 @@
+import type { FeedbackSeverity } from "../shared/feedback.ts";
 import { requireValue } from "../shared/invariants.ts";
 import type { LyricLine, RichLyrics } from "../shared/lyrics.ts";
 import type {} from "../shared/runtime.ts";
@@ -21,9 +22,11 @@ interface Context {
     searchSession: SearchSession<SearchQuery, SearchResults> | null;
 }
 interface Dependencies {
+    canOpen(): boolean;
     responseOrder: symbol;
     context: Context;
     closePopup: () => void;
+    hideImprovement: () => void;
     closeSearch: (restore?: boolean) => void;
     documentState: () => BridgeDocument;
     api: (path: string, method?: string, body?: unknown, signal?: AbortSignal | null | undefined) => Promise<unknown>;
@@ -46,7 +49,13 @@ interface Dependencies {
     languageChoices: [string, string][];
     baseFetch: ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) &
         ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>);
-    notice: (node: HTMLElement | null | undefined, message: string, ttl?: number, expire?: (() => void) | undefined) => void;
+    notice: (
+        node: HTMLElement | null | undefined,
+        message: string,
+        ttl?: number,
+        expire?: (() => void) | undefined,
+        severity?: FeedbackSeverity,
+    ) => void;
     capabilities: () => Promise<void>;
 }
 export function createSearchPanel(dependencies: Dependencies) {
@@ -74,11 +83,12 @@ export function createSearchPanel(dependencies: Dependencies) {
         capabilities,
     } = dependencies;
     async function openVersions(better: RichLyrics | null | undefined = undefined, mixKind: AuxiliaryKind | undefined = undefined) {
+        if (!dependencies.canOpen()) return;
         closePopup();
         closeSearch();
         const target = context.scope;
         context.searchPopup = e("section", "lb-popup lb-search");
-        document.querySelectorAll(".lb-upgrade").forEach((node) => node.remove());
+        dependencies.hideImprovement();
         context.searchPopup.setAttribute("role", "dialog");
         context.searchPopup.setAttribute("aria-label", better ? "Preview lyric update" : "Search versions");
         const head = e("header", "lb-popup-header");
@@ -211,7 +221,9 @@ export function createSearchPanel(dependencies: Dependencies) {
             list.querySelectorAll<HTMLElement>(".lb-result").forEach((n) =>
                 n.setAttribute("aria-pressed", String(n.dataset.key === candidate.source + ":" + candidate.id)),
             );
-            preview.replaceChildren(e("p", "", "Loading preview…"));
+            const loading = e("p", "lb-preview-status");
+            preview.replaceChildren(loading);
+            notice(loading, "Loading preview…", 0, undefined, "progress");
             try {
                 const data = parseDocument(await api("items/" + requireValue(target).itemId + "/preview", "POST", candidate), defaults);
                 if (context.scope !== target || context.searchPopup !== searchPanel || picked !== candidate) return;
@@ -466,7 +478,7 @@ export function createSearchPanel(dependencies: Dependencies) {
                 const isImprovement = improvement?.key === key;
                 entry.badge.textContent = isImprovement ? "Better than current" : "Recommended";
                 entry.explanation.hidden = !isImprovement;
-                entry.explanation.textContent = isImprovement && improvement?.description ? "Why it’s better: " + improvement.description : "";
+                entry.explanation.textContent = isImprovement && improvement?.description ? improvement.description : "";
                 if (entry.badge.hidden !== (key !== recommended && !isImprovement)) entry.badge.hidden = key !== recommended && !isImprovement;
             }
             context.searchUsageRefresh?.();
@@ -522,7 +534,13 @@ export function createSearchPanel(dependencies: Dependencies) {
                         if (context.scope === target && context.searchPopup === searchPanel) showError(error, searchPanel);
                     });
                 }
-                progress.textContent = `${data.finished}/${data.total} sources · ${data.state === "cancelled" ? "search stopped" : data.state === "timed_out" ? "finished (search deadline reached)" : data.state}`;
+                notice(
+                    progress,
+                    `${data.finished}/${data.total} sources · ${data.state === "cancelled" ? "search stopped" : data.state === "timed_out" ? "finished (search deadline reached)" : data.state}${data.state !== "searching" && !data.candidates.length ? " · No versions found." : ""}`,
+                    0,
+                    undefined,
+                    data.state === "searching" ? "progress" : "info",
+                );
                 const errors = data.errors || [];
                 sourceFailures.hidden = !errors.length;
                 const failureSignature = JSON.stringify(errors);
@@ -534,7 +552,6 @@ export function createSearchPanel(dependencies: Dependencies) {
                         ...errors.map((error) => e("p", "lb-help", error.message + (error.diagnosticId ? " · Reference " + error.diagnosticId : ""))),
                     );
                 }
-                if (data.state !== "searching" && !data.candidates.length) progress.textContent += " · No versions found.";
             },
         );
         context.searchSession = session;
@@ -544,7 +561,7 @@ export function createSearchPanel(dependencies: Dependencies) {
                 session.cancel();
                 finalizeResults();
                 stopSearch.hidden = true;
-                progress.textContent = "Search stopped · results received so far";
+                notice(progress, "Search stopped · results received so far");
                 progress.tabIndex = -1;
                 progress.focus({ preventScroll: true });
             },
@@ -571,7 +588,7 @@ export function createSearchPanel(dependencies: Dependencies) {
             list.hidden = false;
             list.replaceChildren();
             preview.replaceChildren();
-            progress.textContent = "Searching…";
+            notice(progress, "Searching…");
             return session.start({ title: title.value, artist: artist.value, source: provider.value || null });
         };
         const submit = button("Search", search, "lb-primary lb-search-submit", { icon: "search" });

@@ -1,3 +1,6 @@
+import { PlaybackNotifications } from "./playback-notifications.ts";
+import { FeedbackScope, confirmFeedback, type FeedbackAction, type FeedbackSeverity } from "../shared/feedback.ts";
+import { feedbackHost, glassFeedback } from "./feedback.ts";
 import { RendererLifecycle } from "../renderer/lifecycle.ts";
 import { isRecord, requireValue } from "../shared/invariants.ts";
 import type { LyricLine, RichLyrics } from "../shared/lyrics.ts";
@@ -6,9 +9,10 @@ import type {} from "../shared/runtime.ts";
 import { createApi } from "./api.ts";
 import { auxiliary as auxiliaryText } from "./auxiliary.ts";
 import type { BridgeDocument, ServiceCapability, SourceCapability, TrackScope } from "./contracts.ts";
-import { button, disclosure, e, icon, section, select, setGenerationPanelOpen } from "./controls.ts";
+import { button, disclosure, e, section, select, setGenerationPanelOpen } from "./controls.ts";
 import { createDisplayPanel } from "./display-panel.ts";
 import { GenerationMonitor, activeGeneration, parseGenerationJob, type GenerationJob } from "./generation-state.ts";
+import { createImportPanel } from "./import-panel.ts";
 import { createLyricDecoration } from "./lyric-view.ts";
 import type { AuxiliaryKind, Preferences } from "./models.ts";
 import type { PreferenceSave } from "./preferences.ts";
@@ -26,6 +30,7 @@ export function installBridge() {
     "use strict";
     if (window.LyricBridge) return;
     const lifetime = new RendererLifecycle();
+    const feedbackScope = new FeedbackScope(glassFeedback);
     const baseFetch = window.fetch.bind(window),
         defaults: Preferences = {
             translationLanguage: "zh-Hans",
@@ -46,6 +51,7 @@ export function installBridge() {
         sequence = 0,
         lastRequest: Request | null = null,
         tools: HTMLElement | null = null,
+        notifications: PlaybackNotifications | null = null,
         settingsButton: HTMLButtonElement | null = null,
         popup: HTMLElement | null = null,
         searchPopup: HTMLElement | null = null,
@@ -63,6 +69,8 @@ export function installBridge() {
     }
     const metrics = { decorations: 0, requests: 0, stale: 0, searchRowUpdates: 0, searchSorts: 0, maxSearchPaintMs: 0 };
     const responseOrder = Symbol("lyric-response-order");
+    let unattributedErrors = new WeakMap<object, string>();
+    let noticeSequence = 0;
     const media = () => document.querySelector("audio");
     const lyricContainer = () =>
         [...document.querySelectorAll<HTMLElement>(".lyricsContainer")].filter((n) => n.getClientRects().length && !n.closest(".hide")).at(-1);
@@ -81,8 +89,10 @@ export function installBridge() {
         window.JellyfinLyricMotion?.setSharedTimingOffset?.(0);
         languagePlayback = null;
         document.querySelectorAll<HTMLElement>(".lb-instrumental-view").forEach((n) => n.remove());
-        for (const timer of noticeTimers.values()) lifetime.clearTimeout(timer.timer);
-        noticeTimers.clear();
+        notifications?.dispose();
+        notifications = null;
+        unattributedErrors = new WeakMap();
+        feedbackScope.dispose();
         scope?.controller.abort();
         if (scope?.timer) lifetime.clearTimeout(scope.timer);
         if (scope?.loadingTimer) lifetime.clearTimeout(scope.loadingTimer);
@@ -91,7 +101,7 @@ export function installBridge() {
         if (refreshFrame) lifetime.cancelFrame(refreshFrame);
         refreshFrame = 0;
         closePopup();
-        closeSearch(false);
+        closeSearch(false, true);
         settingsButton?.remove();
         settingsButton = null;
         tools?.remove();
@@ -192,7 +202,8 @@ export function installBridge() {
         ensureTools();
         updateStatus();
         for (const entry of preferenceSaves.values())
-            if (entry.error && entry.identity === saveIdentity()) showError(entry.error, tools, () => flushPreference(entry));
+            if (entry.error && entry.identity === saveIdentity())
+                showError(entry.error, tools, () => flushPreference(entry), { operation: "action:preferences" });
         updateLanguageOptions(popup?.querySelector<HTMLElement>(".lb-display-panel"));
         if (renderNow && JSON.stringify(nativePayload(previous).Lyrics) !== JSON.stringify(nativePayload(documentState().lyrics).Lyrics))
             render(documentState().lyrics);
@@ -230,52 +241,29 @@ export function installBridge() {
         updateSongPanel();
         searchUsageRefresh?.();
     }
-    const noticeTimers = new Map<HTMLElement, { timer: number }>();
-    function notice(node: HTMLElement | null | undefined, message: string, ttl = 0, expire: (() => void) | undefined = undefined) {
+    function notice(node: HTMLElement | null | undefined, message: string, ttl = 0, expire?: () => void, severity?: FeedbackSeverity) {
         if (!node) return;
-        const old = noticeTimers.get(node);
-        if (old) lifetime.clearTimeout(old.timer);
-        noticeTimers.delete(node);
-        if (node.textContent !== message) node.textContent = message;
-        node.hidden = !message;
-        if (ttl && message) {
-            const ticket = { timer: 0 };
-            ticket.timer = lifetime.timeout(() => {
-                if (noticeTimers.get(node) !== ticket) return;
-                noticeTimers.delete(node);
-                if (node.isConnected && node.textContent === message) {
-                    if (expire) expire();
-                    else {
-                        node.textContent = "";
-                        node.hidden = true;
-                    }
-                }
-            }, ttl);
-            noticeTimers.set(node, requireValue(ticket));
-        }
+        feedbackScope.update(node, {
+            message,
+            severity: severity || (ttl ? "success" : /^(Loading|Searching|Saving|Submitting|Testing)/.test(message) ? "progress" : "info"),
+            ttl,
+            expire,
+        });
     }
-    function status(message: string, error = false, ttl = 0) {
+    function status(message: string, error = false, ttl = 0, operation = ttl ? "action:status" : "retrieval") {
         ensureTools();
-        if (!tools) return;
-        const node = tools.querySelector<HTMLElement>(".lb-status");
-        notice(node, message, ttl);
-        if (message) {
-            const name = error
-                ? "warning"
-                : message.startsWith("Searching") || ["missing", "cleared", "rejected"].includes(current?.state || "")
-                  ? "info"
-                  : "check";
-            if (requireValue(node).dataset.icon !== name || !requireValue(node).querySelector(":scope > .lb-icon")) {
-                requireValue(node)
-                    .querySelectorAll(":scope > .lb-icon")
-                    .forEach((existing) => existing.remove());
-                requireValue(node).prepend(icon(name));
-            }
-            requireValue(node).dataset.icon = name;
-        }
-        requireValue(node).classList.toggle("lb-error", error);
+        notifications?.set(
+            operation,
+            { message, severity: error ? "error" : ttl ? "success" : /^(Loading|Searching|Generating)/.test(message) ? "progress" : "info", ttl },
+            operation === "retrieval" ? "lb-status" : operation === "local-pronunciation" ? "lb-local-status" : "lb-action-status",
+        );
     }
-    function showError(cause: unknown, parent: HTMLElement | null | undefined = undefined, retryAction: () => unknown = retry) {
+    function showError(
+        cause: unknown,
+        parent: HTMLElement | null | undefined = undefined,
+        retryAction: () => unknown = retry,
+        context: { operation?: string; secondary?: string; severity?: FeedbackSeverity; retryLabel?: string } = {},
+    ) {
         const error = displayFailure(cause);
         if (error.name === "AbortError" || (error.scope && error.scope !== scope)) return;
         const host = parent?.isConnected ? parent : tools;
@@ -283,113 +271,129 @@ export function installBridge() {
         const key = error.noticeKey || error.details?.diagnosticId || error.details?.code || safeMessage(error);
         if (error.persistent && scope?.dismissedNotices?.has(key)) return;
         if (key.startsWith("job:") && scope?.dismissedJobs?.has(key.slice(4))) return;
-        document.querySelectorAll<HTMLElement>('.lb-feedback[data-notice-key="' + CSS.escape(key) + '"]').forEach((n) => {
-            if (n.parentNode !== host) n.remove();
-        });
-        let box = host.querySelector<HTMLElement>(':scope > .lb-feedback[data-notice-key="' + CSS.escape(key) + '"]');
+        const overlay = host === tools && !!notifications;
+        let operation = context.operation || (error.noticeKey ? "notice:" + error.noticeKey : "");
+        if (!operation) {
+            operation = cause && typeof cause === "object" ? unattributedErrors.get(cause) || "" : "";
+            if (!operation) {
+                operation = "notice:unattributed:" + ++noticeSequence;
+                if (cause && typeof cause === "object") unattributedErrors.set(cause, operation);
+            }
+        }
+        if (!overlay)
+            document.querySelectorAll<HTMLElement>('.lb-feedback[data-notice-key="' + CSS.escape(key) + '"]').forEach((n) => {
+                if (!n.closest(".lb-tools") && n.parentNode !== host) n.remove();
+            });
+        let box = overlay
+            ? notifications?.get(operation)
+            : host.querySelector<HTMLElement>(':scope > .lb-feedback[data-notice-key="' + CSS.escape(key) + '"]');
         if (!box) {
-            box = e("div", "lb-feedback");
-            box.setAttribute("role", "alert");
-            host.append(box);
+            if (overlay)
+                box = requireValue(notifications).set(
+                    operation,
+                    { message: safeMessage(error), severity: "error" },
+                    operation === "retrieval" ? "lb-status" : operation === "local-pronunciation" ? "lb-local-status" : "",
+                );
+            else {
+                box = feedbackHost();
+                box.setAttribute("role", "alert");
+                host.append(box);
+            }
         }
         const signature = JSON.stringify([safeMessage(error), error.details, error.providerErrors]);
-        if (box.dataset.noticeSignature === signature) return;
+        if (!overlay && box.dataset.noticeSignature === signature) return;
         box.dataset.noticeSignature = signature;
         box.dataset.noticeKey = key;
         const informational = error.details?.code === "local_lyrics_missing";
         box.classList.toggle("lb-notice", informational);
-        box.replaceChildren(
-            icon(informational ? "info" : "warning"),
-            e("strong", "", informational ? "Jellyfin has no lyrics for this song. Try importing a file." : safeMessage(error)),
-        );
-        const actions = e("div", "lb-notice-actions");
-        box.append(actions);
         const d = error.details;
-        if (d && !informational) {
-            const details = e("details", "lb-error-details");
-            details.append(
-                e("summary", "", "Details"),
-                e(
-                    "p",
-                    "",
-                    `${d.code}${d.diagnosticId ? " · Reference " + d.diagnosticId : ""}${d.retryAt ? " · Retry after " + new Date(d.retryAt).toLocaleTimeString() : ""}`,
-                ),
-            );
-            for (const sourceError of error.providerErrors || [])
-                details.append(e("p", "", sourceError.message + (sourceError.diagnosticId ? " · Reference " + sourceError.diagnosticId : "")));
-            actions.append(details);
-        }
-        if (d?.code === "sign_in_required") actions.append(button("Sign in", () => (location.hash = "/login"), "", { icon: "external" }));
+        const actions: FeedbackAction[] = [];
+        const dismiss = () => {
+            if (error.persistent && scope) {
+                trackScope().dismissedNotices ??= new Set();
+                requireValue(trackScope().dismissedNotices).add(key);
+            }
+            if (key.startsWith("job:") && scope) {
+                trackScope().dismissedJobs ??= new Set();
+                requireValue(trackScope().dismissedJobs).add(key.slice(4));
+            }
+            if (d?.code === "local_romaji_failed" && scope) trackScope().dismissedLocalError = safeMessage(error);
+            if (overlay) notifications?.remove(operation);
+            else {
+                feedbackScope.releaseWithin(box);
+                box.remove();
+            }
+        };
+        if (d?.code === "sign_in_required") actions.push({ label: "Sign in", run: () => (location.hash = "/login") });
         else if (d?.code === "service_not_configured")
-            actions.append(
-                button(
-                    "Set up service",
-                    () => {
-                        if (current?.canSelect) location.hash = "/configurationpage?name=lyricbridge";
-                        else status("Ask an administrator to set up this service.", true);
-                    },
-                    "",
-                    { icon: "settings" },
-                ),
-            );
+            actions.push({
+                label: "Set up service",
+                run: () => {
+                    if (current?.canSelect) location.hash = "/configurationpage?name=lyricbridge";
+                    else status("Ask an administrator to set up this service.", true);
+                },
+            });
         else if (d?.retryable)
-            actions.append(
-                button(
-                    "Retry",
-                    () => {
+            actions.push({
+                label: context.retryLabel || "Retry",
+                run: () => {
+                    if (overlay) notifications?.remove(operation);
+                    else {
+                        feedbackScope.releaseWithin(box);
                         box.remove();
-                        retryAction();
-                    },
-                    "",
-                    { icon: "retry" },
-                ),
-            );
-        if (!host.classList.contains("lb-job-banner"))
-            actions.append(
-                button(
-                    "Dismiss",
-                    () => {
-                        if (error.persistent && scope) {
-                            trackScope().dismissedNotices ??= new Set();
-                            requireValue(trackScope().dismissedNotices).add(key);
-                        }
-                        if (key.startsWith("job:") && scope) {
-                            trackScope().dismissedJobs ??= new Set();
-                            requireValue(trackScope().dismissedJobs).add(key.slice(4));
-                        }
-                        if (d?.code === "local_romaji_failed" && scope) trackScope().dismissedLocalError = safeMessage(error);
-                        box.remove();
-                    },
-                    "",
-                    { icon: "close" },
-                ),
-            );
+                    }
+                    return retryAction();
+                },
+            });
+        if (!host.classList.contains("lb-job-banner")) actions.push({ label: "Dismiss", run: dismiss });
+        const options = {
+            message: informational ? "Jellyfin has no lyrics for this song. Try importing a file." : safeMessage(error),
+            severity: context.severity || (informational ? ("info" as const) : ("error" as const)),
+            secondary: context.secondary,
+            actions,
+            details:
+                d && !informational
+                    ? [
+                          d.code +
+                              (d.diagnosticId ? " · Reference " + d.diagnosticId : "") +
+                              (d.retryAt ? " · Retry after " + new Date(d.retryAt).toLocaleTimeString() : ""),
+                          ...(d.issues || []).map((issue) => (issue.location ? issue.location + ": " : "") + issue.message),
+                          ...(d.issueCount && d.issueCount > (d.issues?.length || 0)
+                              ? [`${d.issueCount} issues in total; showing the first ${d.issues?.length || 0}.`]
+                              : []),
+                          ...(error.providerErrors || []).map(
+                              (sourceError) => sourceError.message + (sourceError.diagnosticId ? " · Reference " + sourceError.diagnosticId : ""),
+                          ),
+                      ]
+                    : [],
+        };
+        if (overlay) requireValue(notifications).set(operation, options);
+        else feedbackScope.update(box, options);
     }
+
     async function retry() {
         try {
             const target = scope;
             const data = parseDocument(await api("items/" + requireValue(target).itemId + "/retry", "POST"), defaults);
             accept(data, requireValue(target), true);
         } catch (error) {
-            showError(error);
+            showError(error, tools, retry, { operation: "retrieval" });
         }
     }
     function ensureTools() {
         if (!scope || !isLyrics()) return;
-        const cachedHost = tools?.parentElement;
-        const host = cachedHost?.isConnected && !cachedHost.closest(".hide,[hidden]") ? cachedHost : lyricHost();
+        const host = lyricHost();
         if (!host) return;
-        if (tools?.isConnected) {
-            if (tools.parentNode !== host) host.append(tools);
+        if (tools?.isConnected && notifications) {
+            notifications.setHost(host);
             if (settingsButton && settingsButton.parentNode !== host) host.append(settingsButton);
             return;
         }
         tools = e("div", "lb-tools");
-        tools.setAttribute("aria-label", "Lyrics controls");
-        const state = e("span", "lb-status", "");
-        state.hidden = true;
-        state.setAttribute("role", "status");
-        state.setAttribute("aria-live", "polite");
+        tools.setAttribute("aria-label", "Playback notifications");
+        document.body.append(tools);
+        notifications = new PlaybackNotifications(tools, host);
+        notifications.set("retrieval", { message: "" }, "lb-status");
         settingsButton = button(
             "Lyrics settings",
             () => {
@@ -399,8 +403,7 @@ export function installBridge() {
             "lb-settings-trigger",
             { icon: "settings", iconOnly: true },
         );
-        tools.append(state);
-        host.append(tools, settingsButton);
+        host.append(settingsButton);
         const bar = [...document.querySelectorAll<HTMLElement>(".ak-lyrics-tools-bar")].find((n) => n.getClientRects().length && !n.closest(".hide"));
         if (bar) mountTimingBar(bar);
     }
@@ -412,10 +415,12 @@ export function installBridge() {
     }
     function updateStatus() {
         if (!current) return;
-        if (documentState().state === "ready" && documentState().pronunciation?.state !== "failed")
-            tools?.querySelector<HTMLElement>(":scope > .lb-feedback")?.remove();
+        ensureTools();
+        if (!notifications) return;
+        const data = documentState(),
+            target = trackScope();
         const messages: Record<string, string> = {
-            searching: `Searching… ${documentState().finished || 0}/${documentState().total || 0} sources`,
+            searching: `Searching… ${data.finished || 0}/${data.total || 0} sources`,
             ready: "",
             partial: "",
             instrumental: "",
@@ -424,118 +429,105 @@ export function installBridge() {
             cleared: "No version selected · automatic search paused",
             failed: "No lyrics available (some sources failed)",
         };
-        const initialWait = documentState().state === "searching" && performance.now() - requireValue(trackScope().loadingStarted) < 300;
-        status(initialWait ? "" : (messages[documentState().state ?? ""] ?? ""), documentState().state === "failed");
-        if (documentState().state !== "searching" && trackScope().loadingTimer) lifetime.clearTimeout(requireValue(trackScope().loadingTimer));
-        requireValue(tools)
-            .querySelectorAll<HTMLElement>(".lb-upgrade,.lb-retry,.lb-source-note,.lb-provider-details,.lb-local-status")
-            .forEach((n) => n.remove());
-        document.querySelectorAll<HTMLElement>(".lb-instrumental-view").forEach((n) => n.remove());
-        if (documentState().state === "instrumental") {
+        const initialWait = data.state === "searching" && performance.now() - (target.loadingStarted || 0) < 300;
+        notifications.set(
+            "retrieval",
+            {
+                message: initialWait ? "" : messages[data.state ?? ""] || "",
+                severity: data.state === "failed" ? "error" : data.state === "searching" ? "progress" : "info",
+                actions: ["missing", "failed", "rejected", "cleared"].includes(data.state || "") ? [{ label: "Search again", run: retry }] : [],
+                details:
+                    data.state !== "partial"
+                        ? (data.errors || []).map((error) => error.message + (error.diagnosticId ? " · Reference " + error.diagnosticId : ""))
+                        : [],
+            },
+            "lb-status",
+        );
+        if (data.state !== "searching" && target.loadingTimer) lifetime.clearTimeout(target.loadingTimer);
+        document.querySelectorAll<HTMLElement>(".lb-instrumental-view").forEach((node) => node.remove());
+        if (data.state === "instrumental") {
             const message = e("div", "lb-instrumental-view", "Instrumental music, please enjoy.");
             message.setAttribute("role", "status");
             lyricHost()?.append(message);
-            if (lyricContainer()?.querySelector<HTMLElement>(".lyricsLine")) render(null);
+            if (lyricContainer()?.querySelector(".lyricsLine")) render(null);
         }
-        if (["missing", "failed", "rejected", "cleared"].includes(requireValue(documentState().state)))
-            requireValue(tools).append(button("Search again", retry, "lb-retry", { icon: "retry" }));
-        const providerKey =
-            documentState().state === "partial" && documentState().errors?.length
-                ? "providers:" +
-                  requireValue(documentState().errors)
-                      .map((error) => error.diagnosticId || error.code + ":" + error.message)
-                      .sort()
-                      .join("|")
-                : null;
-        requireValue(tools)
-            .querySelectorAll<HTMLElement>(":scope > .lb-feedback")
-            .forEach((node) => {
-                if (node.dataset.noticeKey?.startsWith("providers:") && node.dataset.noticeKey !== providerKey) node.remove();
-            });
-        if (providerKey)
+        if (data.state === "partial" && data.errors?.length) {
+            const key =
+                "providers:" +
+                data.errors
+                    .map((error) => error.diagnosticId || error.code + ":" + error.message)
+                    .sort()
+                    .join("|");
             showError(
                 {
                     message: "Some sources unavailable. Showing available lyrics.",
                     details: { code: "partial_provider_failure", retryable: true },
-                    providerErrors: documentState().errors,
-                    noticeKey: providerKey,
+                    providerErrors: data.errors,
+                    noticeKey: key,
                     persistent: true,
                 },
                 tools,
+                retry,
+                { operation: "retrieval", severity: "warning" },
             );
-        if (documentState().errors?.length && documentState().state !== "partial") {
-            const d = e("details", "lb-provider-details");
-            d.append(e("summary", "", "Source details"));
-            requireValue(documentState().errors).forEach((error) =>
-                d.append(e("p", "", error.message + (error.diagnosticId ? " · Reference " + error.diagnosticId : ""))),
-            );
-            requireValue(tools).append(d);
         }
         if (
             !searchPopup &&
-            documentState().canSelect &&
-            documentState().better &&
-            trackScope().dismissedUpgrade !==
-                (requireValue(documentState().better).hash ||
-                    requireValue(documentState().better).source + ":" + requireValue(documentState().better).providerId)
+            data.canSelect &&
+            data.better &&
+            target.dismissedUpgrade !== (data.better.hash || data.better.source + ":" + data.better.providerId)
         ) {
-            const offer = e("div", "lb-upgrade lb-upgrade-offer");
-            const reason = documentState().improvement?.reason;
-            offer.append(
-                e(
-                    "span",
-                    "lb-upgrade-description",
-                    reason === "recording-match"
-                        ? "Better recording match"
-                        : reason === "auxiliary-completeness"
-                          ? "Lyric update available"
-                          : reason === "match-score"
-                            ? "Better lyric match"
-                            : "Better timing",
-                ),
-            );
-            const actions = e("div", "lb-upgrade-actions");
-            actions.append(
-                button("Preview", () => openVersions(requireValue(documentState().better)), "lb-primary", { icon: "preview" }),
-                button(
-                    "Dismiss",
-                    () => {
-                        trackScope().dismissedUpgrade =
-                            requireValue(documentState().better).hash ||
-                            requireValue(documentState().better).source + ":" + requireValue(documentState().better).providerId;
-                        updateStatus();
-                    },
-                    "",
-                    { icon: "close" },
-                ),
-            );
-            offer.append(actions);
-            requireValue(tools).append(offer);
-        }
-        if (documentState().pronunciation?.state === "running" || documentState().pronunciation?.state === "queued")
-            requireValue(tools).append(e("span", "lb-local-status", "Generating pronunciation…"));
-        if (
-            documentState().pronunciation?.state === "failed" &&
-            trackScope().dismissedLocalError !== requireValue(documentState().pronunciation).error
-        )
-            showError(
-                { message: requireValue(documentState().pronunciation).error, details: { code: "local_romaji_failed", retryable: true } },
-                null,
-                async () => {
-                    try {
-                        await api("items/" + trackScope().itemId + "/pronunciation", "POST", {
-                            hash: requireValue(documentState().lyrics).hash,
-                            includeSupplied: documentState().auxiliaryChoices?.pronunciation !== "auto",
-                            retry: true,
-                        });
-                        await refreshSong();
-                    } catch (error) {
-                        showError(error);
-                    }
+            const reason = data.improvement?.reason;
+            notifications.set(
+                "improvement",
+                {
+                    message:
+                        reason === "recording-match"
+                            ? "Better recording match"
+                            : reason === "auxiliary-completeness"
+                              ? "Lyric update available"
+                              : reason === "match-score"
+                                ? "Better lyric match"
+                                : "Better timing",
+                    severity: "info",
+                    actions: [
+                        { label: "Preview", run: () => openVersions(requireValue(documentState().better)) },
+                        {
+                            label: "Dismiss",
+                            run: () => {
+                                target.dismissedUpgrade =
+                                    requireValue(data.better).hash || requireValue(data.better).source + ":" + requireValue(data.better).providerId;
+                                notifications?.remove("improvement");
+                            },
+                        },
+                    ],
                 },
+                "lb-upgrade lb-upgrade-offer",
             );
+        } else notifications.remove("improvement");
+        if (data.pronunciation?.state === "running" || data.pronunciation?.state === "queued")
+            notifications.set("local-pronunciation", { message: "Generating pronunciation…", severity: "progress" }, "lb-local-status");
+        else if (data.pronunciation?.state === "failed" && target.dismissedLocalError !== data.pronunciation.error) {
+            const retryLocal = async () => {
+                try {
+                    await api("items/" + target.itemId + "/pronunciation", "POST", {
+                        hash: requireValue(documentState().lyrics).hash,
+                        includeSupplied: documentState().auxiliaryChoices?.pronunciation !== "auto",
+                        retry: true,
+                    });
+                    if (scope === target) await refreshSong();
+                } catch (error) {
+                    if (scope === target) showError(error, tools, retryLocal, { operation: "local-pronunciation", retryLabel: "Retry generation" });
+                }
+            };
+            showError({ message: data.pronunciation.error, details: { code: "local_romaji_failed", retryable: true } }, tools, retryLocal, {
+                operation: "local-pronunciation",
+                retryLabel: "Retry generation",
+            });
+        } else notifications.remove("local-pronunciation");
     }
     function closePopup() {
+        if (popup) feedbackScope.releaseWithin(popup);
         stopLanguagePlayback();
         if (!popup) return;
         const trigger = settingsButton;
@@ -565,6 +557,7 @@ export function installBridge() {
         popup.querySelectorAll<HTMLElement>('[role="tabpanel"]').forEach((panel) => (panel.hidden = panel.dataset.tab !== name));
     }
     function openPopup(tabName = "Song") {
+        if (!importPanel.canClose()) return;
         if (popup) {
             if (typeof tabName === "string") activateSettingsTab(tabName);
             else closePopup();
@@ -643,14 +636,21 @@ export function installBridge() {
         label: string = "Confirm",
         trigger: HTMLElement | undefined = undefined,
     ) {
-        parent.querySelector<HTMLElement>(":scope > .lb-confirmation")?.remove();
-        const box = e("div", "lb-confirmation");
+        const previous = parent.querySelector<HTMLElement>(":scope > .lb-confirmation");
+        if (previous) {
+            feedbackScope.releaseWithin(previous);
+            previous.remove();
+        }
+        const box = feedbackHost("confirmation");
         box.setAttribute("role", "alert");
-        box.append(e("p", "", message));
-        const actions = e("div", "lb-song-actions");
+        const view = feedbackScope.update(box, { message, severity: "warning" });
+        const actions = view.actions;
+        actions.classList.add("lb-song-actions");
+        actions.hidden = false;
         const cancel = button(
             "Cancel",
             () => {
+                feedbackScope.releaseWithin(box);
                 box.remove();
                 trigger?.focus();
             },
@@ -661,13 +661,18 @@ export function installBridge() {
             label,
             async () => {
                 confirm.disabled = true;
-                try {
-                    await action();
-                    box.remove();
-                } catch (error) {
-                    showError(error, box);
-                    confirm.disabled = false;
-                }
+                cancel.disabled = true;
+                await confirmFeedback(
+                    action,
+                    () => {
+                        feedbackScope.releaseWithin(box);
+                        box.remove();
+                        trigger?.focus();
+                    },
+                    (error) => showError(error, box),
+                );
+                confirm.disabled = false;
+                cancel.disabled = false;
             },
             "lb-danger",
             { icon: "check" },
@@ -898,11 +903,13 @@ export function installBridge() {
         fetch: baseFetch,
         saved: async (path) => {
             if (lifetime.isDisposed) return;
+            notifications?.remove("action:preferences");
             notice(popup?.querySelector(path === "preferences" ? ".lb-save-status" : ".lb-song-save-status"), "Saved", 4000);
             if (scope) await refreshSong();
         },
         failed: (error, retry) => {
-            if (!lifetime.isDisposed) showError(error, popup?.querySelector<HTMLElement>(".lb-display-panel") || tools, retry);
+            if (!lifetime.isDisposed)
+                showError(error, popup?.querySelector<HTMLElement>(".lb-display-panel") || tools, retry, { operation: "action:preferences" });
         },
     });
     const preferenceSaves = preferenceQueue.entries;
@@ -1022,7 +1029,8 @@ export function installBridge() {
             await api("items/" + requireValue(target).itemId + "/" + name, "POST");
             if (scope === target) await refreshSong(true);
         } catch (error) {
-            if (scope === target) showError(error, popup?.querySelector<HTMLElement>("[role=tabpanel]:not([hidden])") || tools);
+            if (scope === target) throw error;
+            throw new DOMException("The song changed", "AbortError");
         }
     }
     async function mark(clear: boolean) {
@@ -1031,7 +1039,8 @@ export function installBridge() {
             await api("items/" + requireValue(target).itemId + "/instrumental", "POST", { clear });
             if (scope === target) await refreshSong(true);
         } catch (error) {
-            if (scope === target) showError(error, popup?.querySelector<HTMLElement>("[role=tabpanel]:not([hidden])") || tools);
+            if (scope === target) throw error;
+            throw new DOMException("The song changed", "AbortError");
         }
     }
     async function generate(kind: AuxiliaryKind, service: string, parent: HTMLElement, forceNew = false) {
@@ -1086,43 +1095,123 @@ export function installBridge() {
             }
             watchGeneration(job, target, parent, text, kind);
         } catch (error) {
-            text.textContent = "";
+            notice(text, "");
             showError(error, parent);
         }
     }
 
     function watchGeneration(job: GenerationJob, target: TrackScope, parent: HTMLElement, text: HTMLElement, kind: AuxiliaryKind) {
         if (scope !== target || target.jobs?.has(job.id)) return;
-        text.textContent = job.state === "pending" ? "Awaiting administrator approval" : "Queued";
-        const banner = e("div", "lb-job-banner"),
-            progress = e("span", "lb-job-progress", text.textContent);
-        banner.setAttribute("role", "status");
-        banner.dataset.jobId = job.id;
-        banner.append(progress);
-        tools?.querySelector<HTMLElement>('[data-job-id="' + job.id + '"]')?.remove();
-        tools?.append(banner);
-        const dismiss = button(
-            "Dismiss",
-            () => {
-                target.dismissedJobs ??= new Set();
-                target.dismissedJobs.add(job.id);
-                banner.remove();
-            },
-            "",
-            { icon: "close", iconOnly: true },
-        );
+        const operation = "job:" + job.id;
+        let latest = job;
+        const name = kind === "pronunciation" ? "Pronunciation" : "Translation";
+        const describe = (next: GenerationJob) => name + " · " + next.request.service + " · " + next.state + " · " + next.progress + "%";
+        const dismiss = () => {
+            target.dismissedJobs ??= new Set();
+            target.dismissedJobs.add(job.id);
+            notifications?.remove(operation);
+        };
+        const showDetails = () => {
+            if (scope !== target) return;
+            openPopup("Versions");
+            const section = popup?.querySelector<HTMLElement>('[data-song-kind="' + kind + '"]');
+            const generation = section?.querySelector<HTMLElement>(".lb-generation");
+            if (!generation) return;
+            setGenerationPanelOpen(generation, true);
+            drawJobDetails(generation, kind);
+            const detail = generation.querySelector<HTMLElement>('[data-job-detail="' + job.id + '"]');
+            if (detail) {
+                detail.tabIndex = -1;
+                detail.focus({ preventScroll: true });
+                detail.scrollIntoView({ block: "nearest" });
+            }
+        };
+        const present = (
+            next: GenerationJob,
+            failure?: { message: string; retry: () => unknown; label: string; secondary?: string; details?: string[] },
+        ) => {
+            if (scope !== target || target.dismissedJobs?.has(job.id)) return;
+            const error = next.outputDeleted ? undefined : next.failure?.message || next.error;
+            const actions: FeedbackAction[] = [];
+            if (failure) actions.push({ label: failure.label, run: failure.retry });
+            else if (error && !activeGeneration(next)) actions.push({ label: "Retry generation", run: retryJob });
+            actions.push({ label: "Details", run: showDetails });
+            if (activeGeneration(next)) actions.push({ label: "Cancel request", run: cancelJob });
+            actions.push({ label: "Dismiss", run: dismiss });
+            const message =
+                failure?.message ||
+                (next.outputDeleted
+                    ? "Output deleted · Job history retained"
+                    : next.state === "complete"
+                      ? "Language rows ready"
+                      : next.state === "cancelled" && !error
+                        ? "Generation cancelled"
+                        : error ||
+                          (next.state === "pending"
+                              ? "Awaiting " + kind + " approval"
+                              : next.state === "queued"
+                                ? name + " queued"
+                                : "Generating " + kind + "…"));
+            const root = notifications?.set(
+                operation,
+                {
+                    message,
+                    secondary: failure?.secondary || describe(next),
+                    severity:
+                        failure || error
+                            ? "error"
+                            : activeGeneration(next)
+                              ? "progress"
+                              : ["complete", "cancelled"].includes(next.state)
+                                ? "success"
+                                : "info",
+                    details:
+                        failure?.details ||
+                        (error
+                            ? [
+                                  next.failure?.code || "generation_failed",
+                                  ...(next.failure?.diagnosticId ? ["Reference " + next.failure.diagnosticId] : []),
+                              ]
+                            : []),
+                    actions,
+                },
+                "lb-job-banner",
+            );
+            if (root) {
+                delete root.dataset.monitorError;
+                root.dataset.jobId = job.id;
+                root.querySelector(".lb-feedback-secondary")?.classList.add("lb-job-progress");
+                root.querySelector(".lb-notice-actions")?.classList.add("lb-job-actions");
+            }
+        };
         const retryJob = async () => {
             try {
                 await api("jobs/" + job.id + "/retry", "POST");
                 if (scope !== target) return;
                 target.dismissedJobs?.delete(job.id);
-                dismiss.hidden = true;
-                banner.querySelector<HTMLElement>(".lb-feedback")?.remove();
-                poll();
+                void monitor.poll();
             } catch (error) {
-                if (scope !== target) return;
-                showError(error, banner, retryJob);
-                dismiss.hidden = false;
+                if (scope === target)
+                    present(latest, {
+                        message: safeMessage(displayFailure(error)),
+                        retry: retryJob,
+                        label: "Retry generation",
+                        secondary: "Last known state: " + describe(latest),
+                    });
+            }
+        };
+        const cancelJob = async () => {
+            try {
+                await api("jobs/" + job.id + "/cancel", "POST");
+                if (scope === target) await monitor.poll();
+            } catch (error) {
+                if (scope === target)
+                    present(latest, {
+                        message: safeMessage(displayFailure(error)),
+                        retry: cancelJob,
+                        label: "Retry cancellation",
+                        secondary: "Last known state: " + describe(latest),
+                    });
             }
         };
         const monitor = new GenerationMonitor({
@@ -1130,79 +1219,43 @@ export function installBridge() {
             read: async (signal) => parseGenerationJob(await api("jobs/" + job.id, "GET", undefined, signal)),
             changed: async (next) => {
                 if (scope !== target || !next) return;
+                latest = next;
                 requireValue(target.jobs).set(job.id, next);
-                notice(text, next.request.service + " · " + next.state + " · " + next.progress + "%");
-                notice(progress, text.textContent);
-                const active = activeGeneration(next);
-                cancelButton.hidden = !active;
-                parentCancel.hidden = !active;
-                dismiss.hidden = false;
+                // A successful check replaces monitoring failures even if progress did not change.
+                present(next);
+                if (text.isConnected)
+                    notice(text, describe(next), 0, undefined, activeGeneration(next) ? "progress" : next.error || next.failure ? "error" : "info");
+                parentCancel.hidden = !activeGeneration(next);
                 const detailHost = popup?.querySelector<HTMLElement>('[data-song-kind="' + kind + '"]');
                 if (detailHost?.getClientRects().length) drawJobDetails(detailHost.querySelector<HTMLElement>(".lb-generation") || detailHost, kind);
-                else if (!next.outputDeleted && (next.failure || next.error) && !target.dismissedJobs?.has(job.id))
-                    showError({ message: next.failure?.message || next.error, details: next.failure, noticeKey: "job:" + job.id }, banner, retryJob);
-                if (next.outputDeleted) {
-                    notice(progress, "Output deleted · Job history retained");
-                    notice(text, "Output deleted · Job history retained");
-                    return;
-                }
-                if (next.state === "complete") {
-                    notice(progress, "Language rows ready", 4000, () => banner.remove());
-                    notice(text, "Language rows ready", 4000);
-                    await refreshSong();
-                    return;
-                }
-                if (next.state === "cancelled" && !next.failure && !next.error) {
-                    notice(progress, "Generation cancelled", 4000, () => banner.remove());
-                    notice(text, "Generation cancelled", 4000);
-                    return;
-                }
+                if (next.state === "complete" && !next.outputDeleted) await refreshSong();
             },
-            failed: (error, retry) => {
-                if (scope !== target) return;
-                showError(error, banner, retry);
-                dismiss.hidden = false;
+            failed: (error, retryCheck) => {
+                if (scope === target)
+                    present(latest, {
+                        message: "Could not check " + kind + " progress",
+                        retry: retryCheck,
+                        label: "Retry status check",
+                        secondary: "Last known state: " + describe(latest),
+                        details: [
+                            safeMessage(displayFailure(error)),
+                            ...(displayFailure(error).details?.diagnosticId ? ["Reference " + displayFailure(error).details?.diagnosticId] : []),
+                        ],
+                    });
+                if (scope === target) {
+                    const root = notifications?.get(operation);
+                    if (root) root.dataset.monitorError = safeMessage(displayFailure(error));
+                }
             },
         });
-        const poll = monitor.poll;
-        const cancelJob = () =>
-            api("jobs/" + job.id + "/cancel", "POST")
-                .then(poll)
-                .catch((error) => showError(error, banner));
-        const parentCancel = button("Cancel request", cancelJob, "", { icon: "close" }),
-            cancelButton = button("Cancel request", cancelJob, "", { icon: "close" });
-        parent.append(parentCancel);
-        const actions = e("div", "lb-job-actions");
-        dismiss.classList.add("lb-job-dismiss");
-        actions.append(
-            button(
-                "Details",
-                () => {
-                    if (scope !== target) return;
-                    openPopup("Versions");
-                    const section = requireValue(popup).querySelector<HTMLElement>('[data-song-kind="' + kind + '"]');
-                    const generation = section?.querySelector<HTMLElement>(".lb-generation");
-                    if (!generation) return;
-                    setGenerationPanelOpen(generation, true);
-                    drawJobDetails(generation, kind);
-                    const detail = generation.querySelector<HTMLElement>('[data-job-detail="' + job.id + '"]');
-                    if (detail) {
-                        detail.tabIndex = -1;
-                        detail.focus({ preventScroll: true });
-                        detail.scrollIntoView({ block: "nearest" });
-                    }
-                },
-                "",
-                { icon: "info" },
-            ),
-            cancelButton,
-        );
-        banner.append(actions, dismiss);
+        const parentCancel = button("Cancel request", cancelJob, "", { icon: "close" });
+        if (parent.isConnected) parent.append(parentCancel);
         target.jobs ??= new Map();
         target.jobActions ??= new Map();
         target.jobs.set(job.id, job);
         target.jobActions.set(job.id, { retry: retryJob, cancel: cancelJob });
-        poll();
+        present(job);
+        void monitor.poll();
     }
     async function restoreGeneration(target: TrackScope) {
         try {
@@ -1219,7 +1272,8 @@ export function installBridge() {
                 watchGeneration(job, target, host, e("span"), kind);
             }
         } catch (error) {
-            if (scope === target) showError(error, tools, () => restoreGeneration(target));
+            if (scope === target)
+                showError(error, tools, () => restoreGeneration(target), { operation: "action:restore-jobs", retryLabel: "Retry status check" });
         }
     }
 
@@ -1237,16 +1291,25 @@ export function installBridge() {
         searchPlaybackBar.setAttribute("aria-label", "Lyric version playback preview");
         searchPlaybackBar.append(e("span", "", label), ...actions);
         tools?.append(searchPlaybackBar);
+        notifications?.refreshBounds();
         searchPlaybackBar.querySelector("button")?.focus();
     }
-    function closeSearch(restore = true) {
+    function closeSearch(restore = true, force = false) {
+        if (!force && !importPanel.canClose()) return;
+        importPanel.dispose();
+        if (searchPopup) feedbackScope.releaseWithin(searchPopup);
         searchUsageRefresh = null;
-        searchPlaybackBar?.remove();
-        searchPlaybackBar = null;
         searchSession?.dispose();
         searchSession = null;
         searchPopup?.remove();
         searchPopup = null;
+        endPlaybackPreview(restore);
+        settingsButton?.focus();
+    }
+    function endPlaybackPreview(restore = true) {
+        searchPlaybackBar?.remove();
+        searchPlaybackBar = null;
+        notifications?.refreshBounds();
         const ending = playbackPreview.finish(scope, restore);
         if (ending.baseline && scope) {
             current = ending.baseline.doc;
@@ -1256,8 +1319,28 @@ export function installBridge() {
         }
         if (ending.pending && scope) accept(ending.pending.data, scope, true, ending.pending.order);
         if (scope && current) updateStatus();
-        settingsButton?.focus();
     }
+    const importPanel = createImportPanel({
+        scope: () => scope,
+        panel: () => searchPopup,
+        mount: (panel) => {
+            searchPopup = panel;
+            lyricHost()?.append(panel);
+        },
+        closePopup,
+        closeSearch,
+        endPlaybackPreview,
+        startPlaybackPreview,
+        api,
+        defaults,
+        refreshSong: () => refreshSong(true),
+        status: (message) => status(message, false, 4000),
+        showError,
+        updatePanelBounds,
+        saved: () => playbackPreview.discard(),
+        notice: (node, message, severity) => notice(node, message, 0, undefined, severity),
+        feedback: (node, options) => feedbackScope.update(node, options),
+    });
     async function importLyrics(existing: boolean) {
         const target = scope;
         const submit = async (text: string) => {
@@ -1274,22 +1357,7 @@ export function installBridge() {
             }
         };
         if (existing) return submit("");
-        const input = e("input");
-        input.type = "file";
-        input.accept = ".lrc,.txt,.qrc,.yrc,.ttml";
-        input.onchange = async () => {
-            const file = input.files?.[0];
-            if (!file) return;
-            if (file.size > 1000000) {
-                showError(
-                    new Error("Choose a lyric file up to 1 MB."),
-                    popup?.querySelector<HTMLElement>(".lb-original-feedback") || searchPopup || tools,
-                );
-                return;
-            }
-            await submit(await file.text());
-        };
-        input.click();
+        importPanel.open();
     }
     function buildMixPreview(parent: HTMLElement, donor: BridgeDocument, kind: AuxiliaryKind, target: TrackScope) {
         parent.replaceChildren(e("h3", "", "Use supplied " + kind + " from " + requireValue(donor.lyrics).source));
@@ -1380,7 +1448,9 @@ export function installBridge() {
         );
     }
     const { openVersions } = createSearchPanel({
+        canOpen: () => importPanel.canClose(),
         responseOrder,
+        hideImprovement: () => notifications?.remove("improvement"),
         context: {
             get scope() {
                 return scope;
@@ -1469,20 +1539,25 @@ export function installBridge() {
                         { status: 200, headers: { "Content-Type": "application/json" } },
                     );
                 } catch (error) {
-                    if (scope === target) showError(error);
+                    if (scope === target) showError(error, tools, retry, { operation: "retrieval" });
                     return new Response(JSON.stringify(nativePayload(null)), { status: 200, headers: { "Content-Type": "application/json" } });
                 }
             },
             transform(data, target, order, status) {
                 if (status !== 200) {
                     if (scope === target)
-                        showError({
-                            message:
-                                isRecord(data) && isRecord(data.error) && typeof data.error.message === "string"
-                                    ? data.error.message
-                                    : "Couldn’t retrieve lyrics",
-                            details: isRecord(data) ? data.error : undefined,
-                        });
+                        showError(
+                            {
+                                message:
+                                    isRecord(data) && isRecord(data.error) && typeof data.error.message === "string"
+                                        ? data.error.message
+                                        : "Couldn’t retrieve lyrics",
+                                details: isRecord(data) ? data.error : undefined,
+                            },
+                            tools,
+                            retry,
+                            { operation: "retrieval" },
+                        );
                     return data;
                 }
                 if (!isRecord(data) || !("state" in data || data.lyrics)) return data;
@@ -1492,7 +1567,10 @@ export function installBridge() {
                 return nativePayload(doc);
             },
             error(target) {
-                if (scope === target) showError({ message: "Network error retrieving lyrics.", details: { code: "network_error", retryable: true } });
+                if (scope === target)
+                    showError({ message: "Network error retrieving lyrics.", details: { code: "network_error", retryable: true } }, tools, retry, {
+                        operation: "retrieval",
+                    });
             },
         }),
     );

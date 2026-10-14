@@ -16,6 +16,7 @@ public sealed class Configuration : BasePluginConfiguration
     public SourceConfig[] Sources { get; set; } = new[] { "QQ", "NetEase", "Kugou", "Soda", "Musixmatch", "Spotify", "AppleMusic", "LRCLIB" }.Select(n => new SourceConfig { Name = n }).ToArray();
     public int MinimumMatch { get; set; } = 70;
     public bool ScheduledRetrieval { get; set; }
+    public bool AutoGeneratePronunciation { get; set; } = true;
     public bool AllowUserRequests { get; set; }
     public bool AutoApproveUserRequests { get; set; }
     public int UserRequestDailyQuota { get; set; } = 5;
@@ -66,7 +67,7 @@ public sealed class Registration : IPluginServiceRegistrator
         services.AddSingleton<SelectionService>();
         services.AddSingleton(sp => new LanguageVersionService(sp.GetRequiredService<Store>()));
         services.AddSingleton(sp => new TimingService(sp.GetRequiredService<Store>()));
-        services.AddSingleton(sp => new LyricQueryService(sp.GetRequiredService<MediaBrowser.Controller.Lyrics.ILyricManager>(), sp.GetRequiredService<Store>(), sp.GetRequiredService<Retrieval>(), sp.GetRequiredService<Discovery>(), sp.GetRequiredService<PreferenceService>(), sp.GetRequiredService<LocalPronunciation>(), sp.GetRequiredService<LanguageServices>(), () => Plugin.Instance.Configuration.Services.Select(s => s.Name).ToArray(), () => Plugin.Instance.Configuration.AllowUserRequests));
+        services.AddSingleton(sp => new LyricQueryService(sp.GetRequiredService<MediaBrowser.Controller.Lyrics.ILyricManager>(), sp.GetRequiredService<Store>(), sp.GetRequiredService<Retrieval>(), sp.GetRequiredService<Discovery>(), sp.GetRequiredService<PreferenceService>(), sp.GetRequiredService<LocalPronunciation>(), sp.GetRequiredService<LanguageServices>(), () => Plugin.Instance.Configuration.Services.Select(s => s.Name).ToArray(), () => Plugin.Instance.Configuration.AllowUserRequests, () => Plugin.Instance.Configuration.AutoGeneratePronunciation));
         services.AddSingleton(sp => new PreferenceService(sp.GetRequiredService<Store>(), () => Plugin.Instance.Configuration.Defaults));
         services.AddSingleton<ManagedLibraryMaintenance>();
         services.AddHostedService<TransientMaintenance>(); services.AddSingleton(sp => new Discovery(sp.GetRequiredService<Store>(), sp.GetRequiredService<ProviderRegistry>(), sp.GetRequiredService<Retrieval>(), () => Plugin.Instance.Configuration.MinimumMatch)); services.AddSingleton<LocalPronunciation>(); services.AddHostedService(sp => sp.GetRequiredService<LocalPronunciation>()); services.AddSingleton(_ => new Store(() => string.IsNullOrWhiteSpace(Plugin.Instance.Configuration.StoragePath) ? Plugin.Instance.DataDirectory : Plugin.Instance.Configuration.StoragePath)); services.AddSingleton(_ => new ProviderRegistry(() => Plugin.Instance.Configuration.Sources)); services.AddSingleton(sp => new Retrieval(sp.GetRequiredService<Store>(), sp.GetRequiredService<ProviderRegistry>(), sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Retrieval>>(), () => Plugin.Instance.Configuration.MinimumMatch));

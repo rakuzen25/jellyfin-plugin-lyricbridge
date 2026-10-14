@@ -222,7 +222,28 @@
                         }),
                     );
                 if(path.endsWith("/reject-matches")){rejectedDemo=true;return new Response(null,{status:204});}
-                if(path.endsWith("/import")){const input=await request.json();rejectedDemo=false;if(!input.existingLocal){const importedLines=input.text.split(/\r?\n/).filter(Boolean).map((text,i)=>{const match=text.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/);return {id:"import-"+i,text:match?match[3]:text,start:match?Math.round((Number(match[1])*60+Number(match[2]))*10000000):null,language:"und",cues:[],translations:{}};});importedDemo={hash:"demo-import",source:"Imported",title:"Imported demo lyrics",artist:"",lines:importedLines};}return new Response(null,{status:204});}
+                if (path.endsWith("/import/preview") || path.endsWith("/import")) {
+                    const input = await request.json();
+                    if (input.existingLocal) return new Response(null, { status: 204 });
+                    try {
+                        const bytes = Uint8Array.from(atob(input.fileBytes), (character) => character.charCodeAt(0));
+                        if (bytes.length > 1000000) throw new Error("Choose a lyric file up to 1 MB.");
+                        const encoding = input.encoding === "auto" ? (bytes[0] === 255 && bytes[1] === 254 ? "utf-16le" : bytes[0] === 254 && bytes[1] === 255 ? "utf-16be" : "utf-8") : input.encoding;
+                        const text = new TextDecoder(encoding, { fatal: true }).decode(bytes);
+                        const lines = [];
+                        for (const [index, raw] of text.split(/\r?\n/).entries()) {
+                            if (!raw.trim() || input.format !== "txt" && /^\[[a-z]+:[^\]]*\]$/i.test(raw)) continue;
+                            const match = input.format === "txt" ? null : raw.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/);
+                            if (input.format !== "txt" && raw.startsWith("[") && !match) throw new Error(`Line ${index + 1}: invalid lyric timestamp.`);
+                            lines.push({ id: "import-" + index, text: match ? match[3] : raw, start: match ? Math.round((Number(match[1]) * 60 + Number(match[2])) * 10000000) : null, language: "und", cues: [], translations: {} });
+                        }
+                        if (!lines.some((line) => line.text.trim())) throw new Error("This file contains no sung lyric lines.");
+                        const imported = { hash: "demo-import", source: "Imported", title: "Imported demo lyrics", artist: "", lines };
+                        if (path.endsWith("/import/preview")) return new Response(JSON.stringify({ fileName: input.fileName, format: lines.some((line) => line.start != null) ? "LRC" : "TXT", warnings: [], encoding, timing: lines.some((line) => line.start != null) ? "line" : "plain", lineCount: lines.length, document: { ...payload(), lyrics: imported, canSelect: false, canGenerate: false } }));
+                        rejectedDemo = false; importedDemo = imported;
+                        return new Response(null, { status: 204 });
+                    } catch (error) { return new Response(JSON.stringify({ error: { code: "invalid_import", message: error.message, retryable: false } }), { status: 422 }); }
+                }
                 if(path.endsWith("/mix")){const input=await request.json(),donor=payload().lyrics;const all=donor.lines.flatMap(l=>l.background?[l,l.background]:[l]);const text={};for(const [original,id] of Object.entries(input.mapping)){const line=all.find(l=>l.id===id);const value=input.kind==="pronunciation"?line?.pronunciation:line?.translations?.zh;if(value)text[original]=value;}const key="demo-mix-"+Date.now();mixedDemo.push({key,hash:input.hash,kind:input.kind,language:input.language,service:"Demo fixture",model:"Supplied · 42",text});mixedChoices[input.kind]=key;return new Response(null,{status:204});}
                 if (path.endsWith("/search")) return new Response(JSON.stringify({ id: "demo-search" }));
                 if (path.endsWith("/upgrade") || path.endsWith("/select")) {

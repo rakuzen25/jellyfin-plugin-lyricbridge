@@ -24,3 +24,5 @@ the notices associated with the actual renderer source rather than substituting
 licenses from a newer dependency revision.
 
 - OpenccNetLib 1.7.0: <https://github.com/laisuk/OpenccNet>, source commit `01f23ccd4feda86e7607cc1dd92ba93a44252e61` from the published package metadata. MIT code notice: `OPENCC-LICENSE`; the package's dictionary LICENSE is preserved byte-for-byte as `OPENCC-DATA-LICENSE`. The corresponding pinned `OpenccNetLib/THIRD_PARTY_NOTICES.md` is `OPENCC-THIRD-PARTY-NOTICES.md`, including OpenCC contributor attribution and compiled-pack licensing. The pinned source tree has no separate dictionary NOTICE or CHANGES file. LyricBridge uses the unmodified shipped converter and embedded dictionary resources.
+
+- Desktop QRC uploads: QMC1 envelope-mask adaptation from <https://github.com/Presburger/qmc-decoder/blob/master/src/seed.hpp> (MIT, `QMC-LICENSE`). The shared Lyricify decoder handles the enclosed QRC payload. Local KRC/QRC helper overloads accept bytes, bound decompressed output, validate container lengths and preserve non-BOM first characters.

@@ -9,6 +9,8 @@ public interface ILyricQueryRepository
     InstrumentalEvidence? Instrumental(Guid item);
     void RecordInstrumental(Guid item, InstrumentalEvidence evidence);
     void SaveDocument(RichLyrics lyrics);
+    StoreAdmission Admit(Guid? item = null);
+    void SaveAutomaticOriginal(Guid item, RichLyrics lyrics, StoreAdmission admission);
     IReadOnlyList<Variant> Versions(string hash);
     AuxiliarySelection? AuxiliaryChoice(Guid user, string hash, string kind, string language);
     TimingCorrection? Timing(Guid item, string hash);

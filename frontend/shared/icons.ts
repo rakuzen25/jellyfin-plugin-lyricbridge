@@ -11,6 +11,7 @@ import {
     Info,
     Library,
     ListFilter,
+    LoaderCircle,
     LocateFixed,
     Minus,
     Music,
@@ -42,6 +43,7 @@ const glyphs = {
     search: Search,
     preview: Eye,
     check: Check,
+    loading: LoaderCircle,
     retry: RefreshCw,
     generate: Sparkles,
     info: Info,
@@ -62,7 +64,7 @@ const glyphs = {
 export type IconName = keyof typeof glyphs;
 export const icon = (name: IconName) =>
     createElement(glyphs[name], {
-        class: "lb-icon",
+        class: name === "loading" ? "lb-icon lb-icon-loading" : "lb-icon",
         width: 20,
         height: 20,
         "stroke-width": 2,

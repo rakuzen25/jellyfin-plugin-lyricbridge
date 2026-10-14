@@ -2,7 +2,7 @@ using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Lyrics;
 namespace LyricBridge;
 
-public sealed class LyricQueryService(ILyricManager native, ILyricQueryRepository store, Retrieval retrieval, Discovery discovery, PreferenceService preferenceService, LocalPronunciation local, LanguageServices languages, Func<string[]> serviceNames, Func<bool> allowRequests)
+public sealed class LyricQueryService(ILyricManager native, ILyricQueryRepository store, Retrieval retrieval, Discovery discovery, PreferenceService preferenceService, LocalPronunciation local, LanguageServices languages, Func<string[]> serviceNames, Func<bool> allowRequests, Func<bool>? autoGeneratePronunciation = null)
 {
     public async Task<LyricOutcome> Discover(Audio item, CancellationToken token, bool retry = false)
     {
@@ -24,12 +24,14 @@ public sealed class LyricQueryService(ILyricManager native, ILyricQueryRepositor
         if (store.DiscoverySuppressed(audio.Id) || store.Rejection(audio.Id) != null) return null;
         var mark = store.Instrumental(audio.Id); if (mark?.Manual == true) return null;
         var selected = retrieval.Selected(audio.Id); if (selected?.Manual == true) return selected;
+        var admission = store.Admit(audio.Id);
         var found = await native.GetLyricsAsync(audio, token);
+        token.ThrowIfCancellationRequested();
         if (found?.Lyrics is { Count: > 0 })
         {
             var doc = new RichLyrics { Source = "Local", Title = audio.Name, Artist = string.Join(", ", audio.Artists), Lines = found.Lyrics.Select((l, i) => new LyricLine { Id = $"l{i}", Text = l.Text, Start = l.Start, Language = Normalization.Detect(l.Text), Cues = l.Cues?.Select(c => new Cue(c.Position, c.EndPosition, c.Start, c.End)).ToList() ?? [] }).ToList() };
             if (doc.Lines.Count == 1 && Lyricify.Lyrics.Helpers.InstrumentalHelper.IsInstrumental(doc.Lines[0].Text)) { store.RecordInstrumental(audio.Id, new InstrumentalEvidence("Local", "", "Instrumental notice", Expires: DateTime.UtcNow.AddDays(7))); return null; }
-            doc.Hash = Codec.ContentHash(doc); store.SaveDocument(doc); return doc;
+            doc.Hash = Codec.ContentHash(doc); store.SaveAutomaticOriginal(audio.Id, doc, admission); return doc;
         }
         return selected;
     }
@@ -41,10 +43,10 @@ public sealed class LyricQueryService(ILyricManager native, ILyricQueryRepositor
         if (outcome.Lyrics is { } lyrics)
         {
             lyrics.Hash = Codec.ContentHash(lyrics); if (!readOnly) store.SaveDocument(lyrics);
-            var selectedPronunciation = store.AuxiliaryChoice(userId, lyrics.Hash, "pronunciation", "")?.Key ?? "auto";
+            var selectedPronunciation = EmbeddedVersions.Choice(lyrics, "pronunciation", "", store.AuxiliaryChoice(userId, lyrics.Hash, "pronunciation", "")?.Key);
             var fullLocalKey = LocalPronunciation.Key(lyrics, preferences, true);
             var explicitLocal = selectedPronunciation == fullLocalKey;
-            pronunciation = selectedPronunciation == "auto" || explicitLocal ? readOnly ? local.Status(lyrics, preferences, explicitLocal) : local.Ensure(lyrics, preferences, explicitLocal) : new("unavailable");
+            pronunciation = selectedPronunciation == "auto" || explicitLocal ? readOnly || (!explicitLocal && !(autoGeneratePronunciation?.Invoke() ?? true)) ? local.Status(lyrics, preferences, explicitLocal) : local.Ensure(lyrics, preferences, explicitLocal) : new("unavailable");
             var localKey = LocalPronunciation.Key(lyrics, preferences, explicitLocal);
             var localKeys = new[] { LocalPronunciation.Key(lyrics, preferences), fullLocalKey };
             variants = store.Versions(lyrics.Hash).Where(v => (v.Service != "Kawazu" || localKeys.Contains(v.Key) || v.Key == selectedPronunciation)).Select(v => v.Kind == "translation" && v.Language.StartsWith("zh") ? v with { Text = v.Text.ToDictionary(k => k.Key, k => Display.Chinese(k.Value, Display.TranslationScript(preferences))) } : v).ToList();
@@ -55,7 +57,7 @@ public sealed class LyricQueryService(ILyricManager native, ILyricQueryRepositor
         var selectedHash = outcome.Lyrics?.Hash;
         var translationChoice = selectedHash == null ? null : store.AuxiliaryChoice(userId, selectedHash, "translation", preferences.TranslationLanguage);
         if (translationChoice == null && selectedHash != null && preferences.TranslationLanguage.StartsWith("zh")) translationChoice = store.AuxiliaryChoice(userId, selectedHash, "translation", preferences.TranslationLanguage == "zh-Hant" ? "zh-Hans" : "zh-Hant");
-        var auxiliaryChoices = new AuxiliaryChoices(translationChoice?.Key ?? "auto", selectedHash == null ? "auto" : store.AuxiliaryChoice(userId, selectedHash, "pronunciation", "")?.Key ?? "auto");
+        var auxiliaryChoices = new AuxiliaryChoices(EmbeddedVersions.Choice(outcome.Lyrics, "translation", preferences.TranslationLanguage, translationChoice?.Key), EmbeddedVersions.Choice(outcome.Lyrics, "pronunciation", "", selectedHash == null ? null : store.AuxiliaryChoice(userId, selectedHash, "pronunciation", "")?.Key));
         var timingFingerprint = outcome.Lyrics == null ? null : TimingService.Fingerprint(outcome.Lyrics);
         var timingCorrection = selectedHash == null ? null : store.Timing(id, selectedHash);
         if (timingCorrection?.Fingerprint != timingFingerprint) timingCorrection = null;

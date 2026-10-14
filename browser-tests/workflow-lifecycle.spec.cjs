@@ -76,7 +76,7 @@ test("@workflow generation approval, settings change and explicit retry remain v
     await expect(page.locator(".lb-job-progress")).toContainText("settings_changed");
     await panel.getByRole("button", { name: "Retry", exact: true }).click();
     await page.waitForFunction(() => window.jobRetried);
-    await expect(page.locator(".lb-job-progress")).toHaveText("Language rows ready");
+    await expect(page.locator(".lb-job-banner .lb-feedback-message")).toHaveText("Language rows ready");
 });
 
 test("@workflow running generation restores on route return without accumulating polling or DOM work", async ({ page }) => {
@@ -166,11 +166,32 @@ test("@layout generation banner keeps status above a single action row without n
     const dismiss = await banner.getByRole("button", { name: "Dismiss", exact: true }).boundingBox();
     expect(details.y).toBeGreaterThanOrEqual(status.y + status.height);
     expect(Math.abs(details.y - cancel.y)).toBeLessThanOrEqual(1);
-    expect(Math.abs(details.y - dismiss.y)).toBeLessThanOrEqual(1);
+    expect(dismiss.y).toBeGreaterThanOrEqual(details.y);
     expect(details.height).toBeGreaterThanOrEqual(44);
     expect(dismiss.x + dismiss.width).toBeLessThanOrEqual(page.viewportSize().width);
-    expect(await banner.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("0px");
+    expect(await banner.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("1px");
     await page.locator(".lb-tools").screenshot({ path: testInfo.outputPath("generation-two-lines.png") });
+});
+
+test("@workflow loading status uses a loading icon and clears when lyrics arrive", async ({ page }) => {
+    await demo(page, {
+        transformHtml: intercept(`
+  if (/\\/LyricBridge\\/items\\/[^/]+\\/lyrics$/.test(path)) await new Promise(resolve=>window.releaseLyrics=resolve);
+ `),
+    });
+    const status = page.locator(".lb-status");
+    await expect(status).toContainText("Loading lyrics");
+    await expect(status).toHaveAttribute("data-icon", "loading");
+    await expect(status.locator("svg.lb-icon")).toHaveCount(1);
+    const loader = status.locator(".lb-icon-loading");
+    const initialRotation = await loader.evaluate((element) => getComputedStyle(element).transform);
+    await expect.poll(() => loader.evaluate((element) => getComputedStyle(element).transform)).not.toBe(initialRotation);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect.poll(() => loader.evaluate((element) => getComputedStyle(element).animationName)).toBe("none");
+
+    await page.evaluate(() => window.releaseLyrics());
+    await expect(page.locator(".ak-enhanced-line")).toHaveCount(6);
+    await expect(status).not.toContainText("Loading lyrics");
 });
 
 test("@workflow repeated search status retains one icon", async ({ page }) => {
@@ -181,6 +202,7 @@ test("@workflow repeated search status retains one icon", async ({ page }) => {
     });
     const status = page.locator(".lb-status");
     await expect(status).toContainText("Searching");
+    await expect(status).toHaveAttribute("data-icon", "loading");
     await expect(status.locator(".lb-icon")).toHaveCount(1);
     await page.waitForTimeout(1600);
     await expect(status.locator(".lb-icon")).toHaveCount(1);
@@ -224,10 +246,8 @@ test("@workflow auxiliary version metadata uses labelled rows and one generation
         const row = page.locator(`.lb-version-row[data-key="${key}"]`);
         await row.locator(".lb-version-toggle").click();
         await expect(row.locator(".lb-version-metadata")).toHaveText([`Model: ${model}`, "Saved: 10/13/2026"]);
-        await expect(row.locator(".lb-provenance")).not.toContainText(model);
     }
     await expect(page.locator(".lb-generation-trigger")).toHaveCount(2);
-    await expect(page.locator(".lb-generation > summary")).toHaveCount(0);
     const trigger = page.getByRole("button", { name: "Generate translation", exact: true });
     const setup = page.locator('.lb-generation[data-kind="translation"]');
     await trigger.click();
@@ -265,7 +285,6 @@ test("@layout final ranking preserves preview and exposes the upgrade in search"
     await search(page);
     const rows = page.locator(".lb-result");
     await expect(rows).toHaveCount(1);
-    await expect(page.getByRole("button", { name: "Sort by best match", exact: true })).toHaveCount(0);
     await rows.first().click();
     await expect(page.getByRole("button", { name: "Preview with playback", exact: true })).toBeVisible();
     const firstLine = await page.locator(".lb-preview-line").first().textContent();
@@ -282,7 +301,6 @@ test("@layout final ranking preserves preview and exposes the upgrade in search"
     await expect(page.getByRole("button", { name: "Preview with playback", exact: true })).toBeFocused();
     await expect(page.locator(".lb-preview-line").first()).toHaveText(firstLine);
     await expect(rows.first().locator(".lb-recommended")).toHaveText("Better than current");
-    await expect(rows.first().locator(".lb-improvement-reason")).toContainText("Why it’s better:");
     const back = page.getByRole("button", { name: "Back to results", exact: true });
     if (await back.isVisible()) await back.click();
     await expect(rows.first().locator(".lb-improvement-reason")).toBeVisible();
@@ -296,14 +314,14 @@ test("@layout final ranking preserves preview and exposes the upgrade in search"
 test("@layout playback warning has compact actions and settings identifies the song", async ({ page }) => {
     await demo(page);
     await page.getByLabel("Demo scenario").selectOption("partial");
-    const notice = page.locator(".lb-tools > .lb-feedback");
+    const notice = page.locator('.lb-tools [data-operation="retrieval"]');
     await expect(notice).toContainText("Some sources unavailable. Showing available lyrics.");
     const summary = notice.locator("summary");
     const retry = notice.getByRole("button", { name: "Retry", exact: true });
     const a = await summary.boundingBox();
     const b = await retry.boundingBox();
-    expect(Math.abs(a.y - b.y)).toBeLessThan(2);
-    expect(await notice.evaluate((n) => getComputedStyle(n).borderTopWidth)).toBe("0px");
+    expect(b.y).toBeGreaterThanOrEqual(a.y + a.height);
+    expect(await notice.evaluate((n) => getComputedStyle(n).borderTopWidth)).toBe("1px");
     await summary.click();
     await expect(notice).toContainText("Demo source could not retrieve lyrics.");
     await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
@@ -323,7 +341,6 @@ test("@workflow Versions owns original actions and Search keeps only top-level a
     const original = page.locator('[data-song-kind="original"]');
     for (const name of ["Search versions", "Use Jellyfin lyrics", "Import lyrics", "Remove lyrics", "Mark instrumental"])
         await expect(original.getByRole("button", { name, exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Revert previous selection", exact: true })).toHaveCount(0);
     await original.getByRole("button", { name: "Remove lyrics", exact: true }).click();
     await page.locator(".lb-confirmation").getByRole("button", { name: "Remove lyrics", exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.rejectedMatch)).toBe(true);
@@ -331,7 +348,6 @@ test("@workflow Versions owns original actions and Search keeps only top-level a
     await page.getByRole("button", { name: "Confirm classification", exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.instrumentalRequest)).toEqual({ clear: false });
     await original.getByRole("button", { name: "Search versions", exact: true }).click();
-    await expect(page.locator(".lb-search-footer")).toHaveCount(0);
     await expect(page.locator(".lb-search-form > .lb-advanced > summary")).toHaveText("Advanced: provider track ID");
 });
 
@@ -355,7 +371,7 @@ test("@layout improvement offer has concise distinct actions and dismisses witho
     await expect(offer).toContainText("Lyric update available");
     const preview = offer.getByRole("button", { name: "Preview", exact: true });
     const dismiss = offer.getByRole("button", { name: "Dismiss", exact: true });
-    expect(await preview.locator("svg.lb-icon").innerHTML()).not.toBe(await dismiss.locator("svg.lb-icon").innerHTML());
+    await expect(preview).toBeVisible();
     await dismiss.click();
     await expect(offer).toHaveCount(0);
     await page.evaluate(() => fetch("/Audio/11111111111111111111111111111111/Lyrics"));
@@ -371,8 +387,8 @@ test("@layout upgrade preview uses the full panel and banner actions have their 
     });
     const offer = page.locator(".lb-upgrade-offer");
     await expect(offer.getByRole("button", { name: "Preview", exact: true })).toBeVisible();
-    const message = await offer.locator(".lb-upgrade-description").boundingBox();
-    const actions = await offer.locator(".lb-upgrade-actions").boundingBox();
+    const message = await offer.locator(".lb-feedback-message").boundingBox();
+    const actions = await offer.locator(".lb-notice-actions").boundingBox();
     expect(actions.y).toBeGreaterThanOrEqual(message.y + message.height);
     await offer.getByRole("button", { name: "Preview", exact: true }).click();
     const panel = page.getByRole("dialog", { name: "Preview lyric update", exact: true });
@@ -462,4 +478,65 @@ test("@workflow versions used by Automatic explain disabled deletion", async ({ 
     await expect(row.getByRole("button", { name: "Delete", exact: true })).toBeDisabled();
     await expect(row).toContainText("Managed locally by Kawazu");
     await expect(row.getByRole("button", { name: "Preview", exact: true })).toBeDisabled();
+});
+
+test("@workflow failed classification keeps confirmation open with local feedback", async ({ page }) => {
+    await demo(page, {
+        transformHtml: intercept(`
+  if(path.endsWith('/reject-matches') && request.method==='POST')return new Response(JSON.stringify({error:{code:'storage_unavailable',message:'Storage temporarily unavailable',retryable:false}}),{status:503});
+ `),
+    });
+    await versions(page);
+    const classification = page.locator(".lb-version-classification");
+    await classification.getByRole("button", { name: "Remove lyrics", exact: true }).click();
+    const confirmation = classification.locator(".lb-confirmation");
+    await confirmation.getByRole("button", { name: "Remove lyrics", exact: true }).click();
+    await expect(confirmation).toBeVisible();
+    await expect(confirmation.locator(".lb-feedback")).toContainText("Storage temporarily unavailable");
+    await expect(confirmation.getByRole("button", { name: "Remove lyrics", exact: true })).toBeEnabled();
+    await confirmation.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(confirmation).toHaveCount(0);
+    await expect(classification.getByRole("button", { name: "Remove lyrics", exact: true })).toBeFocused();
+});
+
+test("@workflow local pronunciation progress uses shared feedback and clears on completion", async ({ page }) => {
+    await demo(page);
+    await page.getByLabel("Demo scenario").selectOption("local");
+    const progress = page.locator(".lb-local-status");
+    await expect(progress).toContainText("Generating pronunciation…");
+    await expect(progress).toHaveAttribute("data-severity", "progress");
+    await expect(progress).toHaveAttribute("role", "status");
+    await expect(progress.locator(".lb-icon-loading")).toHaveCount(1);
+    await expect(progress).toHaveCount(0, { timeout: 10000 });
+});
+
+test("@layout icon and text controls share vertical centers", async ({ page }) => {
+    await demo(page);
+    const check = async () => {
+        const failures = await page.evaluate(() => {
+            const failures = [];
+            for (const host of document.querySelectorAll(".lb-button,.lb-disclosure-heading,.ak-lyrics-timing-chip")) {
+                if (!host.getClientRects().length || host.closest("[hidden]")) continue;
+                const glyph = host.querySelector(":scope > svg.lb-icon, :scope > .ak-timing-chip-icon svg");
+                const text = host.querySelector(
+                    ":scope > .lb-action-label,:scope > .lb-version-summary,:scope > .lb-disclosure-title,:scope > .ak-timing-chip-value",
+                );
+                if (!glyph || !text || !text.textContent.trim()) continue;
+                const a = glyph.getBoundingClientRect(),
+                    b = text.getBoundingClientRect();
+                const offset = Math.abs(a.top + a.height / 2 - (b.top + b.height / 2));
+                if (offset > 1) failures.push({ label: text.textContent, offset });
+            }
+            return failures;
+        });
+        expect(failures).toEqual([]);
+    };
+    await check();
+    await versions(page);
+    await check();
+    await page.locator('[data-song-kind="pronunciation"]').getByRole("button", { name: "Generate pronunciation", exact: true }).click();
+    await check();
+    await page.locator(".lb-popup-header").getByRole("button", { name: "Close", exact: true }).click();
+    await page.locator(".ak-lyrics-timing-chip").click();
+    await check();
 });

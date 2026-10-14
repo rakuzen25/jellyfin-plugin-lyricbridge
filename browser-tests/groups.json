@@ -4,7 +4,9 @@
         "preference-lifecycle.spec.cjs",
         "retrieval-states.spec.cjs",
         "saved-originals.spec.cjs",
-        "workflow-lifecycle.spec.cjs"
+        "embedded-versions.spec.cjs",
+        "workflow-lifecycle.spec.cjs",
+        "import-lyrics.spec.cjs"
     ],
     "rendering": [
         "artwork-lifecycle.spec.cjs",
@@ -15,7 +17,9 @@
         "renderer-lifecycle.spec.cjs",
         "short-lyrics.spec.cjs",
         "version-preview.spec.cjs",
-        "visual-parity.spec.cjs"
+        "visual-parity.spec.cjs",
+        "feedback.spec.cjs",
+        "playback-notifications.spec.cjs"
     ],
     "performance": ["full-song-performance.spec.cjs", "long-session.spec.cjs"]
 }

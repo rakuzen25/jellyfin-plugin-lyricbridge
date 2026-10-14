@@ -12,28 +12,16 @@ namespace Lyricify.Lyrics.Decrypter.Krc
         /// </summary>
         /// <param name="encryptedLyrics">加密的歌词</param>
         /// <returns>解密后的 KRC 歌词</returns>
-        public static string? DecryptLyrics(string encryptedLyrics)
+        public static string? DecryptLyrics(string encryptedLyrics) => DecryptLyrics(Convert.FromBase64String(encryptedLyrics), strictUtf8: false);
+
+        public static string DecryptLyrics(byte[] encryptedLyrics, int maxDecodedBytes = int.MaxValue, bool strictUtf8 = true)
         {
-            var data = Convert.FromBase64String(encryptedLyrics)[4..];
-
-            for (var i = 0; i < data.Length; ++i)
-            {
-                data[i] = (byte)(data[i] ^ DecryptKey[i % DecryptKey.Length]);
-            }
-
-            var res = Encoding.UTF8.GetString(SharpZipLibDecompress(data));
-            return res[1..];
-        }
-
-        protected static byte[] SharpZipLibDecompress(byte[] data)
-        {
-            var compressed = new MemoryStream(data);
-            var decompressed = new MemoryStream();
-            var inputStream = new InflaterInputStream(compressed);
-
-            inputStream.CopyTo(decompressed);
-
-            return decompressed.ToArray();
+            if (encryptedLyrics.Length < 5 || !encryptedLyrics.AsSpan(0, 4).SequenceEqual(new byte[] { 0x6b, 0x72, 0x63, 0x31 }))
+                throw new InvalidDataException("Invalid KRC header.");
+            var data = encryptedLyrics[4..];
+            for (var i = 0; i < data.Length; i++) data[i] ^= DecryptKey[i % DecryptKey.Length];
+            var decoded = BoundedInflation.Decode(data, maxDecodedBytes);
+            return new UTF8Encoding(false, strictUtf8).GetString(decoded).TrimStart('\uFEFF');
         }
     }
 }

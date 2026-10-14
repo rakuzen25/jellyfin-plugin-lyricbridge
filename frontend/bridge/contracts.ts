@@ -13,6 +13,7 @@ interface SavedOriginal {
     wordTimed: boolean;
     savedAt: string;
     revision: number;
+    autoSaved?: boolean;
 }
 export interface BridgeDocument {
     savedOriginals?: SavedOriginal[];

@@ -90,16 +90,25 @@
                     margin: 8px 0 16px;
                     line-height: 1.5;
                 }
+                #LyricBridgeConfig #lb-web-status .lb-material-message > div {
+                    font-weight: 400;
+                    color: inherit;
+                }
+                #LyricBridgeConfig #lb-reset-confirm {
+                    padding: 16px;
+                    margin-block: 12px;
+                    border-inline-start: 3px solid currentColor;
+                }
                 #LyricBridgeConfig #lb-web-status {
                     overflow-wrap: anywhere;
                 }
-                #LyricBridgeConfig #lb-web-status > :first-child {
+                #LyricBridgeConfig #lb-web-status > .lb-material-message > :first-child {
                     font-weight: 600;
                 }
-                #LyricBridgeConfig #lb-web-status[data-state="error"] > :first-child {
+                #LyricBridgeConfig #lb-web-status[data-state="error"] > .lb-material-message > :first-child {
                     color: #e77;
                 }
-                #LyricBridgeConfig #lb-web-status[data-state="warning"] > :first-child {
+                #LyricBridgeConfig #lb-web-status[data-state="warning"] > .lb-material-message > :first-child {
                     color: #dba84c;
                 }
                 #LyricBridgeConfig #lb-renderer-settings .lb-actions button {
@@ -214,19 +223,7 @@
                 #LyricBridgeConfig .lb-setup-guide li + li {
                     margin-top: 8px;
                 }
-                #LyricBridgeConfig .lb-action-status:not(:empty) {
-                    margin: 12px 0;
-                    padding: 12px;
-                    line-height: 1.5;
-                    border-inline-start: 3px solid currentColor;
-                }
-                #LyricBridgeConfig .lb-action-status[data-state="error"] {
-                    border-color: #e77;
-                    background: rgba(220, 65, 65, 0.12);
-                }
-                #LyricBridgeConfig .lb-action-status button {
-                    margin: 8px 8px 0 0;
-                }
+
                 #LyricBridgeConfig .lb-config-footer {
                     position: fixed;
                     bottom: 0;
@@ -307,6 +304,33 @@
                     #LyricBridgeConfig .lb-field-grid {
                         grid-template-columns: minmax(0, 1fr);
                     }
+                }
+                /* Native Material feedback; no lyrics glass tokens or effects. */
+                #LyricBridgeConfig .lb-material-feedback {
+                    line-height: 1.5;
+                    overflow-wrap: anywhere;
+                }
+                #LyricBridgeConfig .lb-material-feedback[hidden],
+                #LyricBridgeConfig .lb-material-feedback [hidden] {
+                    display: none;
+                }
+                #LyricBridgeConfig .lb-material-feedback[data-severity="error"],
+                #LyricBridgeConfig .lb-material-feedback[data-severity="warning"] {
+                    padding: 12px;
+                    margin-block: 12px;
+                    border-inline-start: 3px solid #d99855;
+                }
+                #LyricBridgeConfig .lb-material-actions {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    margin-top: 8px;
+                }
+                #LyricBridgeConfig .lb-material-diagnostics {
+                    margin-block: 8px;
+                }
+                #LyricBridgeConfig .lb-material-destructive {
+                    color: #e77;
                 }
             </style>
             <div data-role="content">
@@ -402,10 +426,26 @@
                             </section>
                             <section class="verticalSection" role="tabpanel" data-tab="Language services" hidden>
                                 <h3 class="sectionTitle">Language services</h3>
-                                <div class="lb-source-row">
-                                    <strong>Kawazu</strong> <span class="lb-config-badge">Local</span>
-                                    <p class="fieldDescription">Pronunciation only · Japanese → romaji. Supplied rows take priority.</p>
-                                </div>
+                                <details class="lb-service" data-service="Kawazu">
+                                    <summary class="lb-service-heading">
+                                        <span class="lb-service-main">
+                                            <span>Kawazu</span><span class="lb-config-badge">Local</span>
+                                            <span class="fieldDescription lb-service-capability"
+                                                >Pronunciation only · Japanese → romaji. Supplied rows take priority.</span
+                                            >
+                                        </span>
+                                        <span>Options</span>
+                                    </summary>
+                                    <div class="lb-service-body">
+                                        <label class="checkboxContainer emby-checkbox-label">
+                                            <input is="emby-checkbox" type="checkbox" id="lb-auto-pronunciation" />
+                                            <span>Automatically generate missing Japanese pronunciation</span>
+                                        </label>
+                                        <p class="fieldDescription">
+                                            Manual generation and saved pronunciation remain available when disabled. Work already queued may finish.
+                                        </p>
+                                    </div>
+                                </details>
                                 <div id="lb-services"></div>
                             </section>
                             <section class="verticalSection" role="tabpanel" data-tab="Display defaults" hidden>

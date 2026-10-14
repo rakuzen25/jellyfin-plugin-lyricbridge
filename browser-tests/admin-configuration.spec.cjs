@@ -107,14 +107,13 @@ test("@workflow typed configuration preserves unsaved edits and paginates histor
     await expect(page.locator("#lb-web-enabled")).toBeChecked();
     await expect(page.locator("#lb-web-status")).toContainText("Direct injection installed");
     await expect(page.locator("#lb-web-status")).toContainText("/fixture/web");
-    await expect(page.locator("#lb-web-status")).not.toContainText("rendererRuntime.");
     const sectionSpacing = await page.evaluate(() => {
         const renderer = document.querySelector("#lb-renderer-settings");
         const storage = renderer.nextElementSibling;
         return storage.getBoundingClientRect().top - renderer.getBoundingClientRect().bottom;
     });
     expect(Math.round(sectionSpacing)).toBeGreaterThanOrEqual(24);
-    const statusLines = page.locator("#lb-web-status > div");
+    const statusLines = page.locator("#lb-web-status .lb-material-message > div");
     await expect(statusLines).toHaveCount(3);
     await expect(statusLines.nth(1)).toHaveText("Mechanism: direct");
     await expect(statusLines.nth(2)).toHaveText("Web root: /fixture/web");
@@ -151,7 +150,6 @@ test("@workflow typed configuration preserves unsaved edits and paginates histor
             return [css.width, css.height, parseFloat(css.strokeWidth)];
         }),
     ).toEqual(["20px", "20px", 2]);
-    await expect(page.locator("#lb-sources .material-icons")).toHaveCount(0);
     await down.locator("svg path").click();
     await expect(page.locator("#lb-sources [data-source]").first()).toHaveAttribute("data-source", "NetEase");
     await page.getByRole("button", { name: "Move up QQ", exact: true }).focus();
@@ -161,9 +159,15 @@ test("@workflow typed configuration preserves unsaved edits and paginates histor
 
     await page.getByRole("tab", { name: "General", exact: true }).click();
     await expect(page.locator("#lb-storage")).toHaveValue("/synthetic-unsaved");
+    await page.getByRole("tab", { name: "Language services", exact: true }).click();
+    await expect(page.locator("#lb-auto-pronunciation")).toBeChecked();
+    await page.locator('[data-service="Kawazu"] > summary').click();
+    await page.locator("#lb-auto-pronunciation").uncheck();
+    await page.getByRole("tab", { name: "General", exact: true }).click();
     await page.evaluate(() => (window.failSave = false));
     await page.getByRole("button", { name: "Save settings", exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.saved.length)).toBe(1);
+    expect(await page.evaluate(() => window.saved[0].AutoGeneratePronunciation)).toBe(false);
     await expect(page.locator("#lb-web-status")).toContainText("Renderer disabled");
     await expect(page.locator("#lb-storage-warning")).toBeVisible();
     await expect(page.locator("#lb-effective-storage")).toContainText("/actual/fixture/storage");

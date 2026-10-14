@@ -20,6 +20,7 @@ public sealed class LanguageVersionService(ILanguageVersionRepository repository
         RequireCurrent(lyrics, input.Hash);
         if (input.Kind is not ("translation" or "pronunciation")) throw new WorkflowException(400, "invalid_request", "Choose translation or pronunciation.");
         var language = input.Kind == "translation" ? translationLanguage : "";
+        if (input.Key == "provider" && !EmbeddedVersions.Available(lyrics, input.Kind, language)) throw new WorkflowException(409, "language_version_unavailable", "This original has no included rows for the selected language.", true);
         if (!repository.SelectAuxiliary(ChoiceKey(user, input.Hash, input.Kind, language), input.Hash, input.Kind, language, input.Key)) throw new WorkflowException(409, "language_version_unavailable", "Reload and choose an available version.", true);
     }
     public void Delete(RichLyrics? lyrics, AuxiliarySelectionInput input)

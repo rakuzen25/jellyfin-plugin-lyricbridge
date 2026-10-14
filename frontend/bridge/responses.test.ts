@@ -82,6 +82,20 @@ test("preview-era responses without explicit account/song preferences are reject
     assert.throws(() => parseDocument(input, defaults), /invalid lyric response/);
 });
 
+test("unavailable embedded choices resolve to Automatic without changing the response", () => {
+    const input = fixture();
+    const before = JSON.stringify(input);
+    const parsed = parseDocument(input, defaults);
+    assert.equal(parsed.auxiliaryChoices?.pronunciation, "auto");
+    assert.equal(JSON.stringify(input), before);
+    input.lyrics.lines[0].translations = { en: "Hello" };
+    input.auxiliaryChoices.translation = "provider";
+    input.preferences = { ...defaults, translationLanguage: "fr" };
+    assert.equal(parseDocument(input, defaults).auxiliaryChoices?.translation, "auto");
+    input.preferences = { ...defaults, translationLanguage: "en" };
+    assert.equal(parseDocument(input, defaults).auxiliaryChoices?.translation, "provider");
+});
+
 test("saved-original summaries and delete permissions are validated before rendering", () => {
     const original = {
         itemId: "song",
@@ -96,6 +110,21 @@ test("saved-original summaries and delete permissions are validated before rende
     };
     const input = { ...fixture(), savedOriginals: [original], canDeleteOriginals: true };
     assert.equal(parseDocument(input, defaults).savedOriginals?.[0]?.hash, "original");
+    assert.equal(parseDocument({ ...input, savedOriginals: [{ ...original, autoSaved: true }] }, defaults).savedOriginals?.[0]?.autoSaved, true);
+    assert.throws(() => parseDocument({ ...input, savedOriginals: [{ ...original, autoSaved: "yes" }] }, defaults));
     assert.throws(() => parseDocument({ ...input, savedOriginals: [{ ...original, hash: 42 }] }, defaults));
     assert.throws(() => parseDocument({ ...input, canDeleteOriginals: "yes" }, defaults));
+});
+
+test("import source issues survive request and display error normalization", () => {
+    const issues = [{ code: "invalid_import_format", message: "Unmatched auxiliary row.", location: "ytlrc.lyric / Line 2" }];
+    const displayed = displayFailure(
+        new BridgeRequestError({ code: "invalid_import_format", message: "Import rejected", issues, issueCount: 30 }, null),
+    );
+    assert.deepEqual(displayed.details?.issues, issues);
+    assert.equal(displayed.details?.issueCount, 30);
+    assert.equal(
+        displayFailure({ details: { issues: [{ code: "bad", message: "bad", location: 42 }], issueCount: 1.5 } }).details?.issues,
+        undefined,
+    );
 });

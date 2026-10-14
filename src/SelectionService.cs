@@ -35,9 +35,11 @@ public sealed class SelectionService(ISelectionRepository repository, Retrieval 
         var applied = Codec.Deserialize<RichLyrics>(Codec.Serialize(offer.Lyrics))!;
         applied.Manual = true; return applied;
     }
+    public ImportedLyrics PreviewImport(Audio item, ImportLyricsInput input, CancellationToken token) => LyricImport.Parse(input, new("Imported", "local", item.Name, string.Join(", ", item.Artists), item.Album, null, 100), token);
     public async Task Import(Audio item, ImportLyricsInput input, CancellationToken token)
     {
         RichLyrics lyrics;
+        RawLyrics? raw = null;
         if (input.ExistingLocal)
         {
             var response = await native.GetLyricsAsync(item, token);
@@ -46,11 +48,12 @@ public sealed class SelectionService(ISelectionRepository repository, Retrieval 
         }
         else
         {
-            if (string.IsNullOrWhiteSpace(input.Text) || System.Text.Encoding.UTF8.GetByteCount(input.Text) > 1_000_000) throw new WorkflowException(400, "invalid_import", "Choose a lyric file up to 1 MB.");
-            lyrics = Normalization.Parse(new(input.Text, RawResponse: input.Text), new("Imported", "local", item.Name, string.Join(", ", item.Artists), item.Album, null, 100));
+            var imported = PreviewImport(item, input, token);
+            lyrics = imported.Lyrics; raw = imported.Raw;
         }
         if (lyrics.Lines.Count == 0) throw new WorkflowException(422, "empty_import", "This file contains no sung lyric lines.");
         lyrics.Hash = Codec.ContentHash(lyrics); lyrics.Manual = true;
-        discovery.Invalidate(item.Id); repository.ApplySelection(item.Id, new(lyrics, null), input.ExistingLocal ? null : new(input.Text, RawResponse: input.Text));
+        token.ThrowIfCancellationRequested();
+        discovery.Invalidate(item.Id); repository.ApplySelection(item.Id, new(lyrics, null), raw);
     }
 }

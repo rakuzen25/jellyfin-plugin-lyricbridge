@@ -15,7 +15,7 @@ public sealed class SafeExceptionFilter(ILogger<SafeExceptionFilter> logger) : I
     public void OnException(ExceptionContext context)
     {
         if (context.Exception is OperationCanceledException && context.HttpContext.RequestAborted.IsCancellationRequested) return;
-        if (context.Exception is WorkflowException workflow) { context.Result = new JsonResult(new { error = SafeError.Create(workflow.Code, workflow.Message, workflow.Retryable) }, Codec.Json) { StatusCode = workflow.Status }; context.ExceptionHandled = true; return; }
+        if (context.Exception is WorkflowException workflow) { context.Result = new JsonResult(new { error = SafeError.Create(workflow.Code, workflow.Message, workflow.Retryable) with { Issues = workflow.Issues, IssueCount = workflow.IssueCount } }, Codec.Json) { StatusCode = workflow.Status }; context.ExceptionHandled = true; return; }
         var error = context.Exception switch { ServiceFailure f => SafeError.Create(f.Code, f.Message, true, f.RetryAt?.UtcDateTime), OperationCanceledException => SafeError.Create("service_timeout", "The connection test timed out after 15 seconds. Check the endpoint or try a lower AI thinking level.", true), HttpRequestException => SafeError.Create("service_unavailable", "The service could not be reached or rejected the request. Check its endpoint and setup, then retry.", true), InvalidDataException => SafeError.Create("invalid_line_mapping", "The service response did not contain the expected lyric-line mapping. Check model JSON support or retry.", true), ArgumentException => SafeError.Create("invalid_request", "Check the supplied settings and try again."), InvalidOperationException => SafeError.Create("action_unavailable", "This action is unavailable in the current state."), _ => SafeError.Create("request_failed", "The lyric action could not complete. Try again or check the plugin configuration.", true) };
         logger.LogWarning("LyricBridge action failed: {Code}; diagnostic {DiagnosticId}", error.Code, error.DiagnosticId);
         context.Result = new JsonResult(new { error }, Codec.Json) { StatusCode = error.Code == "search_limit" ? 429 : error.Code == "invalid_request" ? 400 : 503 }; context.ExceptionHandled = true;
@@ -131,7 +131,16 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
     }
     [HttpPost("items/{id:guid}/reject-matches")]
     public IActionResult RejectMatches(Guid id) { if (!Admin) return Error(403, "permission_denied", "An administrator must reject library matches."); if (Item(id) == null) return NotFound(); selection.Reject(id); return NoContent(); }
-    [HttpPost("items/{id:guid}/import")]
+    [HttpPost("items/{id:guid}/import/preview"), RequestSizeLimit(7_000_000)]
+    public IActionResult ImportPreview(Guid id, ImportLyricsInput input, CancellationToken token)
+    {
+        if (!Admin) return Error(403, "permission_denied", "An administrator must import library lyrics.");
+        var item = Item(id); if (item == null) return NotFound();
+        var imported = selection.PreviewImport(item, input, token);
+        var document = query.Build(item, UserId, Admin, new() { State = "ready", Lyrics = imported.Lyrics, Complete = true }, readOnly: true) with { CanSelect = false, CanDeleteVariants = false, CanDeleteOriginals = false };
+        return JsonData(new ImportPreview(imported.FileName, imported.Format, imported.Encoding, imported.Timing, imported.LineCount, document, imported.Warnings));
+    }
+    [HttpPost("items/{id:guid}/import"), RequestSizeLimit(7_000_000)]
     public async Task<IActionResult> Import(Guid id, ImportLyricsInput input, CancellationToken token)
     {
         if (!Admin) return Error(403, "permission_denied", "An administrator must import library lyrics.");

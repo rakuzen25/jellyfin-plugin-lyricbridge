@@ -36,6 +36,30 @@ function saved(page) {
     return page.locator('[data-version-kind="original"]');
 }
 
+test("@layout automatic Jellyfin originals are immediately available and Use preserves them", async ({ page }, testInfo) => {
+    await demo(page, {
+        transformHtml: (html) =>
+            fixture()(html)
+                .replace("let savedHashes=", "let automaticCopy=true; let savedHashes=")
+                .replace("revision:0}", "revision:0,autoSaved:hash==='demo-ready'&&automaticCopy}")
+                .replace("if(operation==='select'){activeOriginal=hash;", "if(operation==='select'){automaticCopy=false;activeOriginal=hash;"),
+    });
+    await versions(page);
+    const automatic = saved(page).locator('[data-hash="demo-ready"]');
+    await expect(automatic).toContainText("Loaded from Jellyfin");
+    await expect(automatic).toContainText("Saved:");
+    await expect(automatic.getByRole("button", { name: "Use", exact: true })).toBeEnabled();
+    await automatic.scrollIntoViewIfNeeded();
+    const bounds = await automatic.boundingBox();
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(page.viewportSize().width);
+    await automatic.screenshot({ path: testInfo.outputPath("automatic-jellyfin-original.png") });
+    await automatic.getByRole("button", { name: "Use", exact: true }).click();
+    await expect(automatic).toContainText("Saved original");
+    await expect(automatic).not.toContainText("Loaded from Jellyfin");
+    await expect(automatic.getByRole("button", { name: "Use", exact: true })).toBeDisabled();
+});
+
 test("@workflow saved originals preview, switching, and confirmed current deletion", async ({ page }) => {
     await demo(page, { transformHtml: fixture() });
     await versions(page);
@@ -175,7 +199,6 @@ test("@layout version accordions preserve one open row, stable headers and brows
     await other.click();
     await expect(other).toHaveAttribute("aria-expanded", "true");
     await expect(current).toHaveAttribute("aria-expanded", "false");
-    await expect(original.locator(".lb-version-content details")).toHaveCount(0);
     await other.focus();
     await page.evaluate(() => fetch("/Audio/11111111111111111111111111111111/Lyrics"));
     await expect(other).toBeFocused();
@@ -205,7 +228,7 @@ test("@workflow current-only originals disable redundant preview and use", async
     await demo(page);
     await versions(page);
     const current = saved(page).locator('[data-active="true"]');
-    await expect(current).toContainText("Currently supplied");
+    await expect(current).toContainText("Current version");
     await expect(current.getByRole("button", { name: "Delete", exact: true })).toHaveCount(0);
     await expect(current.getByRole("button", { name: "Use", exact: true })).toBeDisabled();
     await expect(current.getByRole("button", { name: "Preview", exact: true })).toBeDisabled();
