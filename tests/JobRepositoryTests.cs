@@ -52,6 +52,6 @@ public sealed class JobRepositoryTests
                 Assert.Contains("jobs_user_created", plan);
             }
         }
-        finally { SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+        finally { TestHost.ClearDatabasePools(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
 }

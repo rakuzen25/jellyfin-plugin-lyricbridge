@@ -77,7 +77,7 @@ public sealed class ImprovementRankingTests
             Assert.Equal(changeSelection ? "new selection" : "original", store.Selection(item).Lyrics!.Lines[0].Text);
             await discovery.StopAll();
         }
-        finally { source.Release.TrySetResult(); SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+        finally { source.Release.TrySetResult(); TestHost.ClearDatabasePools(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
     private sealed class ControlledSource : ILyricSource
     {
@@ -115,6 +115,6 @@ public sealed class ImprovementRankingTests
             Assert.Null(store.Improvement(item));
             Assert.Equal("new selection", store.Selection(item).Lyrics!.Lines[0].Text);
         }
-        finally { SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+        finally { TestHost.ClearDatabasePools(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
 }

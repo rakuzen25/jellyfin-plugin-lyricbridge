@@ -34,7 +34,7 @@ public sealed class StoreOperationFilter(Store store) : IAsyncActionFilter
     }
 }
 [ApiController, Authorize, Route("LyricBridge"), TypeFilter(typeof(SafeExceptionFilter)), TypeFilter(typeof(StoreOperationFilter))]
-public sealed class Api(SelectionService selection, LanguageVersionService versions, TimingService timing, LyricQueryService query, LibraryAccess access, PreferenceService preferences, ManagedLibraryMaintenance maintenance, Generation generation, LanguageServices languages, Discovery discovery, LocalPronunciation local, WebRendererIntegration renderer) : ControllerBase
+public sealed class Api(SelectionService selection, LanguageVersionService versions, TimingService timing, LyricQueryService query, LibraryAccess access, PreferenceService preferences, ManagedLibraryMaintenance maintenance, Generation generation, LanguageServices languages, Discovery discovery, LocalPronunciation local, WebRendererIntegration renderer, Lazy<Plugin> plugin) : ControllerBase
 {
     private IActionResult JsonData(object? value) => new JsonResult(value, Codec.Json);
     private IActionResult Error(int status, string code, string message, bool retryable = false) => new JsonResult(new { error = SafeError.Create(code, message, retryable) }, Codec.Json) { StatusCode = status };
@@ -204,14 +204,14 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
     public IActionResult Runtime()
     {
         if (!Admin) return Error(403, "permission_denied", "Only administrators can inspect storage configuration.");
-        var configured = Plugin.Instance.Configuration.StoragePath;
-        var target = Path.GetFullPath(string.IsNullOrWhiteSpace(configured) ? Plugin.Instance.DataDirectory : configured);
+        var configured = plugin.Value.Configuration.StoragePath;
+        var target = Path.GetFullPath(string.IsNullOrWhiteSpace(configured) ? plugin.Value.DataDirectory : configured);
         return JsonData(new { activeStoragePath = query.ActiveStoragePath, configuredStoragePath = target, restartRequired = target != query.ActiveStoragePath });
     }
     [HttpGet("services")]
     public IActionResult Services() => JsonData(languages.Capabilities());
     [HttpGet("sources")]
-    public IActionResult Sources() => JsonData(Plugin.Instance.Configuration.Sources.Select(s => new { name = s.Name, enabled = s.Enabled, requiresCredential = s.Name is "Spotify" or "AppleMusic", configured = !string.IsNullOrWhiteSpace(s.Credential) }));
+    public IActionResult Sources() => JsonData(plugin.Value.Configuration.Sources.Select(s => new { name = s.Name, enabled = s.Enabled, requiresCredential = s.Name is "Spotify" or "AppleMusic", configured = !string.IsNullOrWhiteSpace(s.Credential) }));
     [HttpPost("services/{service}/test")]
     public async Task<IActionResult> TestService(string service, CancellationToken token) { if (!Admin) return Error(403, "permission_denied", "Only administrators can test service connections."); var doc = new RichLyrics { Lines = [new() { Id = "test", Text = "Good morning", Language = "en" }] }; await languages.Generate(doc, new() { Service = service, Kind = "translation", Language = "zh-Hans" }, new Progress<int>(), token); return JsonData(new { state = "ready", message = "Connection succeeded using synthetic text." }); }
     [HttpPost("items/{id:guid}/generate")]

@@ -33,7 +33,7 @@ public sealed class LocalPronunciationResetTests
         finally
         {
             release.TrySetResult(); await worker.StopAsync(CancellationToken.None);
-            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            TestHost.ClearDatabasePools(directory);
             if (Directory.Exists(directory)) Directory.Delete(directory, true);
         }
     }

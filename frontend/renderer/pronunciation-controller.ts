@@ -1,24 +1,29 @@
+import {
+    GOOGLE_ROMANIZATION_TIMEOUT_MS,
+    GOOGLE_ROMANIZATION_MAX_RETRIES,
+    GOOGLE_ROMANIZATION_RETRY_DELAY_MS,
+    GOOGLE_ROMANIZATION_CACHE_MAX_ENTRIES,
+    GOOGLE_ROMANIZATION_MAX_TEXT_CHARS,
+    GOOGLE_ROMANIZATION_CONCURRENCY,
+} from "./settings.ts";
 /* This Source Code Form is subject to the Mozilla Public License, v. 2.0.
  * See https://mozilla.org/MPL/2.0/. */
 import { requireValue } from "../shared/invariants.ts";
 import type {} from "../shared/runtime.ts";
 import type { CueInput, CueRange } from "./cue-ranges.ts";
 import { normalizedCueTextRanges, orderedCuesBySourcePosition } from "./cue-ranges.ts";
-import { RendererLifecycle } from "./lifecycle.ts";
+import { Lifecycle } from "../shared/lifecycle.ts";
 import type { LyricInput } from "./payload.ts";
 import { cueValue, lyricTextProfile } from "./payload.ts";
 import type { RendererState } from "./state.ts";
 import { detectScriptProfile } from "./text-processing.ts";
-import { nullableTick } from "./ticks.ts";
+import { finiteTick } from "./ticks.ts";
 function isFiniteNumber(value: unknown): value is number {
     return typeof value === "number" && Number.isFinite(value);
 }
 
 interface Dependencies {
-    lifecycle: RendererLifecycle;
-    GOOGLE_ROMANIZATION_TIMEOUT_MS: 6000;
-    GOOGLE_ROMANIZATION_MAX_RETRIES: 3;
-    GOOGLE_ROMANIZATION_RETRY_DELAY_MS: 1000;
+    lifecycle: Lifecycle;
     state: Pick<
         RendererState,
         | "googleRomanizationCache"
@@ -35,25 +40,11 @@ interface Dependencies {
         | "romanizationLineCount"
         | "romanizationAvailable"
     >;
-    GOOGLE_ROMANIZATION_CACHE_MAX_ENTRIES: 1800;
-    GOOGLE_ROMANIZATION_MAX_TEXT_CHARS: 1500;
-    GOOGLE_ROMANIZATION_CONCURRENCY: 3;
     redecorateForRomanization: () => void;
     warn: (...args: unknown[]) => void;
 }
 export function createPronunciationController(dependencies: Dependencies) {
-    const {
-        lifecycle,
-        GOOGLE_ROMANIZATION_TIMEOUT_MS,
-        GOOGLE_ROMANIZATION_MAX_RETRIES,
-        GOOGLE_ROMANIZATION_RETRY_DELAY_MS,
-        state,
-        GOOGLE_ROMANIZATION_CACHE_MAX_ENTRIES,
-        GOOGLE_ROMANIZATION_MAX_TEXT_CHARS,
-        GOOGLE_ROMANIZATION_CONCURRENCY,
-        redecorateForRomanization,
-        warn,
-    } = dependencies;
+    const { lifecycle, state, redecorateForRomanization, warn } = dependencies;
     const pending = new Set<AbortController>();
     const waiting = new Set<() => void>();
     function cancelPronunciationRequests() {
@@ -507,8 +498,8 @@ export function createPronunciationController(dependencies: Dependencies) {
         const rangeByCueIndex = new Map(ranges.map((range) => [range.cueIndex, range]));
 
         const convertedCues = sorted.map((cue, cueIndex) => {
-            let start = nullableTick(cueValue(cue, "Position", "position"));
-            let end = nullableTick(cueValue(cue, "EndPosition", "endPosition"));
+            let start = finiteTick(cueValue(cue, "Position", "position"));
+            let end = finiteTick(cueValue(cue, "EndPosition", "endPosition"));
             if (start === null) return Object.assign({}, cue);
             const range = rangeByCueIndex.get(cueIndex);
             if (range) {

@@ -31,7 +31,7 @@ public sealed class SelectionRepositoryTests
             store.ExpireTransientData(now);
             Assert.Null(store.Get<RichLyrics>("document", donor.Hash));
         }
-        finally { SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+        finally { TestHost.ClearDatabasePools(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
 
     [Fact]
@@ -60,6 +60,6 @@ public sealed class SelectionRepositoryTests
             Assert.NotNull(store.Selection(item).Rejected);
             Assert.Equal(before, Codec.Serialize(store.Selection(item)));
         }
-        finally { SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+        finally { TestHost.ClearDatabasePools(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
 }

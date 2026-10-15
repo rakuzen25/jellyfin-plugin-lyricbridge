@@ -1,12 +1,15 @@
+using Xunit;
 using LyricBridge;
 using System.Net;
 
-public static class PartialPronunciationTests
+public sealed class PartialPronunciationTests : TestHost
 {
-    public static async Task Run()
+    [Fact]
+    public async Task PartialPronunciationPreservesLineIdentity()
     {
+        var root = Root;
         var handler = new Handler();
-        var services = new LanguageServices(() => Plugin.Instance.Configuration.Services, new HttpClient(handler));
+        var services = Own(new LanguageServices(() => Plugin.Configuration.Services, new HttpClient(handler)));
         var doc = new RichLyrics
         {
             Lines = [
@@ -16,17 +19,19 @@ public static class PartialPronunciationTests
         ]
         };
         var request = new GenerationRequest { Kind = "pronunciation", Service = "Google" };
-        var result = await services.Generate(doc, request, new Progress<int>(), CancellationToken.None);
-        Check(result.Count == 1 && result["ja"] == "konnichiwa", "supported rows generated");
-        Check(request.SkippedRows["en"] == "latin_only" && request.SkippedRows["he"] == "unsupported_language", "skip reasons retained");
-        Check(doc.Lines.Count == 3 && doc.Lines[0].Text == "こんにちは", "stored originals unchanged");
+        var result = await services.Generate(doc, request, new Progress<int>(), TestContext.Current.CancellationToken);
+        Assert.True(result.Count == 1 && result["ja"] == "konnichiwa", "supported rows generated");
+        Assert.True(request.SkippedRows["en"] == "latin_only" && request.SkippedRows["he"] == "unsupported_language", "skip reasons retained");
+        Assert.True(doc.Lines.Count == 3 && doc.Lines[0].Text == "こんにちは", "stored originals unchanged");
         doc.Lines.RemoveAt(0);
-        try { await services.Generate(doc, request, new Progress<int>(), CancellationToken.None); throw new Exception("empty eligibility accepted"); }
-        catch (ServiceFailure e) { Check(e.Code == "unsupported_language", "actionable unsupported result"); }
-        Check(handler.Calls == 1, "no external request for unsupported rows");
-        Console.WriteLine("PASS: mixed-language partial pronunciation, skip reasons, unchanged originals, no eligible rows make no request.");
+        try
+        {
+            await services.Generate(doc, request, new Progress<int>(), TestContext.Current.CancellationToken);
+            throw new Exception("empty eligibility accepted");
+        }
+        catch (ServiceFailure e) { Assert.True(e.Code == "unsupported_language", "actionable unsupported result"); }
+        Assert.True(handler.Calls == 1, "no external request for unsupported rows");
     }
-    private static void Check(bool value, string message) { if (!value) throw new Exception(message); }
     private sealed class Handler : HttpMessageHandler
     {
         public int Calls;

@@ -68,35 +68,18 @@ Version metadata, source-result disclosures and ordinary settings descriptions a
 
 `pnpm test` includes confirmation outcome regressions. `feedback.spec.cjs` exercises both adapters across the rendering matrix: focus and expanded Details preservation, action placement, replacing expiry, independent messages and disposal. Workflow regressions cover generation recovery, repeated status icons, search cancellation, imports, versions and administrator dirty-state handling. The strict source-boundary check rejects new bespoke bridge feedback/confirmation markup outside the existing integration owner.
 
-### Local verification, 2026-10-13
+## Presentation details
 
-- Strict TypeScript/source boundaries, ESLint, Prettier, Knip, frontend unit suites and web/admin bundling passed.
-- Complete Chromium workflow group: 33 passed (`browser-tests/results-run.cqqgno/report/results.json`).
-- Four-project feedback/layout/visual matrix: 36 passed (`browser-tests/results-run.cqkGgx/report/results.json`). Existing playback and settings screenshot baselines were unchanged.
-- After final confirmation/job lifecycle cleanup: six affected workflow scenarios and twelve component/generation layout cases passed (`results-run.Md8rHH` and `results-run.9PQLQl`).
-- Administrator configuration regression passed again after the final hidden-view guard.
-- Final component tests with both production stylesheets loaded together: eight passed (`browser-tests/results-run.i7Km9c/report/results.json`). This covers busy controls, changed diagnostics, theme inheritance, default expiry and disposal.
+Administrator feedback uses native text-based Material statuses. Playback uses shared
+glass feedback. Instrumental labels, timing readouts, version metadata and request-history
+rows are ordinary content. A generic HTTP failure beside a background operation does
+not establish that the operation failed; request ownership and server state remain authoritative.
 
-Earlier checks failed on strip-only TypeScript constructor syntax, fixture module loading, an outdated administrator DOM assertion, a negative fixture targeting the wrong endpoint and a running-clock expiry boundary. Those were corrected and rerun. The old mobile assertion requiring all three labelled generation actions on one physical line was replaced with the agreed wrapping-action-area invariant after visual inspection; no snapshot was regenerated to hide a failure.
+Feedback SVGs use a flex wrapper matching the 21px message line box and align with the
+first line of wrapped notices. Buttons, accordions, version-row summaries and timing
+controls center icons against their text blocks. Geometry regressions cover alignment.
 
-These are local UI checks. No release-artifact, hosted CI or live-server verification is claimed for this styling change.
-
-### Follow-up completeness audit
-
-The first migration missed the direct `lb-local-status` banner for backend local-pronunciation generation. It also left preview loading and import reading/validation/import progress as direct text writes. These paths now use the shared glass status presentation, including the rotating progress indicator. The manually triggered local-generation status now has progress severity as well.
-
-The administrator adapter deliberately retains native text-based Material statuses; it is covered by the shared lifecycle without adopting glass icons. Instrumental labels, timing readouts, version metadata and request-history rows are ordinary content rather than transient operation feedback. A generic HTTP failure beside a running background operation does not, by itself, establish that the background operation failed; request ownership and server state remain authoritative.
-
-### Icon/text alignment
-
-Feedback SVGs use a flex wrapper matching the 21px message line box; they align with the first line of wrapped notices. Shared buttons, accordion headings, version-row summaries and timing controls center icons against their text blocks. Twelve alignment/feedback cases passed across desktop/mobile Chromium, Firefox and WebKit after this adjustment; the dedicated geometry assertion checks offsets within one CSS pixel.
-
-### Grouped playback verification
-
-The final notification/shared-feedback matrix passed all 28 cases across desktop/mobile Chromium, Firefox and WebKit (`browser-tests/results-run.Mr3aJv/report/results.json`). It covers priority, deduplication, expansion, diagnostic/focus preservation, four-second expiry, monitor failure/recovery, disposal, and bounds down to a 320×180 viewport. The bounded mobile screenshot was reviewed. The affected saved-original/workflow rerun passed 23 cases; preview controls passed seven matrix cases and the remaining WebKit case passed on an isolated rerun after a parallel-run timeout. That timeout is recorded rather than treated as a clean first-pass result. Existing playback/settings visual baselines passed without replacement in the preceding rendering run.
-
-Final TypeScript/boundary checks, ESLint, Prettier, all 19 frontend test files, and bundling passed. Knip reports an unused `embeddedText` export in concurrent auxiliary-lyrics work outside this notification change. No hosted CI, release or live-server evidence is claimed.
-
-### Import warnings and structured source errors
-
-Import preview uses the existing glass feedback adapter for persistent warnings, with expanded source locations; it adds no bespoke notification surface. Structured request errors preserve import `issues` and `issueCount` through API and display normalization so Details contains the server's native row, XML location or JSON path. The import panel disposes preview requests with its owning view and blocks dialog dismissal during final saving. See [IMPORT.md](IMPORT.md) for format and timing behavior.
+Import preview uses persistent warnings with expandable source locations. Structured
+request errors retain `issues` and `issueCount` so Details can show native rows, XML
+locations and JSON paths. Preview requests belong to the dialog's view; final saving
+blocks dismissal. See [lyric imports](IMPORT.md) for timing and format behavior.

@@ -10,7 +10,7 @@ import native from "@typescript/native/package.json" with { type: "json" };
 const root = fileURLToPath(new URL("../", import.meta.url));
 const execute = promisify(execFile);
 for (const workspace of [".", "frontend"]) {
-    test(`${workspace} resolves the native compiler and legacy compiler API side by side`, async () => {
+    test(`${workspace} resolves the native compiler and tooling compiler API`, async () => {
         const directory = path.resolve(root, workspace);
         const require = createRequire(path.join(directory, "package.json"));
         const { default: ts } = await import(require.resolve("typescript"));
@@ -27,15 +27,10 @@ for (const workspace of [".", "frontend"]) {
         });
         assert.deepEqual(imports, ["./module.ts"]);
         assert.match(native.version, /^7\./);
-        for (const [binary, expected] of [
-            ["tsc", native.version],
-            ["tsc6", ts.version],
-        ]) {
-            const { stdout } = await execute(path.join(directory, "node_modules/.bin", binary), ["--version"], {
-                cwd: directory,
-                encoding: "utf8",
-            });
-            assert.equal(stdout.trim(), `Version ${expected}`);
-        }
+        const { stdout } = await execute(path.join(directory, "node_modules/.bin/tsc"), ["--version"], {
+            cwd: directory,
+            encoding: "utf8",
+        });
+        assert.equal(stdout.trim(), `Version ${native.version}`);
     });
 }

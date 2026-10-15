@@ -37,7 +37,7 @@ public sealed class DiscoveryResetTests
         finally
         {
             provider.Release.TrySetResult(); await discovery.StopAll(); store.EndReset();
-            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            TestHost.ClearDatabasePools(directory);
             if (Directory.Exists(directory)) Directory.Delete(directory, true);
         }
     }

@@ -86,11 +86,10 @@ test("Renovate, pnpm and pip enforce the same 24-hour release age", () => {
     assert.equal(minutes, 24 * 60);
     assert.match(workspace, /^minimumReleaseAgeStrict: true$/m);
     const excludes = workspace.split("minimumReleaseAgeExclude:\n")[1];
-    assert.ok(excludes, "Reviewed exceptions must remain present");
-    for (const line of excludes.trim().split("\n")) {
+    for (const line of (excludes || "").trim().split("\n").filter(Boolean)) {
         assert.match(line.trim(), /^- "?[^*]+@\d+\.\d+\.\d+"?$/, "Exceptions must pin exact versions");
     }
-    for (const file of [".github/actions/setup/action.yml", "README.md", "DEPENDENCY_UPGRADES.md"]) {
+    for (const file of [".github/actions/setup/action.yml", "docs/DEVELOPMENT.md"]) {
         const content = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
         const installs = content.split("\n").filter((line) => line.includes("-m pip install") && line.includes("requirements-check.txt"));
         assert.ok(installs.length > 0, `${file} must retain its Python setup command`);

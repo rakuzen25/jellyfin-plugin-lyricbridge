@@ -4,9 +4,9 @@ LyricBridge uses release-please for one repository-wide version and changelog. I
 
 The flow is: Conventional Commits on `main` → release PR → passing PR checks and your merge → draft release and tag → risk-based code validation plus mandatory final artifact/reproducibility/installed-plugin checks → tested assets attached → your final Publish click. The draft workflow never installs on a live server; catalog updates begin only after stable publication. A draft without a green artifact workflow is not ready to publish.
 
-## One-time GitHub setup
+## GitHub configuration
 
-Use the shared GitHub App documented in [CATALOG.md](CATALOG.md): install it on this repository, configure `PLUGIN_APP_CLIENT_ID` and `PLUGIN_APP_PRIVATE_KEY`, and retain the required `validate` check on `main`. The App creates Release Please PRs that trigger ordinary CI. No long-lived release PAT is required; remove the obsolete `RELEASE_PLEASE_TOKEN` after confirming the migration.
+Use the shared GitHub App documented in [CATALOG.md](CATALOG.md): install it on this repository, configure `PLUGIN_APP_CLIENT_ID` and `PLUGIN_APP_PRIVATE_KEY`, and retain the required `validate` check on `main`. The App creates Release Please PRs that trigger ordinary CI. No long-lived release PAT is required.
 
 Artifact upload still uses the ordinary workflow token. The attaching job also has narrowly scoped OIDC and attestation permissions to sign the verified public receipt. External actions remain pinned to reviewed commits.
 

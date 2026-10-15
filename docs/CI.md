@@ -33,7 +33,7 @@ unneeded groups.
 
 ## File classification
 
-Every maintained tracked file and changed path must match a rule in `scripts/ci.py`.
+Every maintained tracked file and changed path must match a rule in `scripts/ci_policy.py`.
 New files under established source/test directories inherit that directory's conservative
 coverage. Unknown root files or unknown GitHub configuration fail quickly with their
 paths; add an explicit rule and regression before validation can pass. Deletes and both
@@ -121,7 +121,7 @@ uses the executing revision's Python pin. Python 3.15 is the supported local min
 `node scripts/check-toolchain.mjs` verifies Node/pnpm before dependency restoration.
 pnpm's automatic pre-script installation is disabled: restoration remains explicit
 and frozen. Only esbuild may run dependency lifecycle scripts. Reviewed, exact-version
-release-age exclusions created during the migration do not authorize other versions.
+release-age exclusions do not authorize other versions.
 
 Browser execution first checks the declared/installed Playwright version against the
 tagged, digest-pinned noble image, then verifies browser executables inside the offline
@@ -192,35 +192,27 @@ Standalone `scripts/package.sh` remains self-contained; it produces a package bu
 not assert that its source root was clean. Use `clean-package.py` for reproducibility
 acceptance. CI's prepared-web option refuses stale inputs/assets rather than silently
 skipping frontend verification.
+Clean candidate builds preserve older ZIPs under `dist/previous-*`, so only current
+archives participate in fingerprints and uploads. Prior archives do not supply validation.
 
-## Measuring improvement
+The CLI delegates local classification and fingerprints to `scripts/ci_policy.py`,
+authenticated evidence and reuse checks to `scripts/ci_evidence.py`, and scheduling
+and aggregation to `scripts/ci_planning.py`. All four modules participate in policy
+fingerprints, so changes invalidate affected evidence.
 
-The [last successful serial run](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/actions/runs/38133176042/job/114451861420)
-executed its validation job in 10m25s (excluding its initial queue). Step timings:
+## Measuring CI cost
 
-| Step | Duration |
-| --- | ---: |
-| Official reference bootstrap | 27s |
-| Backend restore + build/tests | 72s |
-| Serial browser suite | 6m23s |
-| Candidate packaging | 16s |
-| Two additional reproducibility builds | 33s |
-| Disposable installed-plugin validation | 60s |
-
-This published-source run predates the current extended stress coverage, so it is not
-a direct timing baseline for every local scenario. It does establish the serial cost
-and three-build duplication. Local backend execution after splitting the scenarios was
-49s for 78 passing tests. Future before/after Actions comparisons must use equivalent
-inputs and coverage; do not infer speedups from changing the workload alone.
-
-Compare Actions critical-path durations on comparable changes after this workflow is
-pushed. Targets are a few minutes for ordinary checks and parallel five-minute sessions
-for rendering changes, excluding queues/downloads. Do not claim measured CI speedups
-until the new jobs have executed on GitHub. Runner minutes may rise while wall time falls.
+Compare Actions critical-path durations using equivalent source inputs, coverage and
+hardware. Separate queues/downloads from execution; compare wall time and runner
+minutes separately. Long playback sessions test sustained ownership and remain risk-selected.
+Cache hits accelerate restoration without attesting validation. Keep current timing and
+artifact results in workflow evidence rather than carrying dated measurements in this guide.
 
 Backend tests use xUnit v3 and Microsoft Testing Platform on the pinned .NET 10 SDK.
-VSTest and older SDK test runners are unsupported. Fixtures remain serial; CI retains TRX
-and console evidence even on failure and rejects runs that execute no tests.
+VSTest and older SDK test runners are unsupported. Tests run with up to four parallel collections. Each fixture owns its configuration,
+workers and database pools; only the process-wide File Transformation callback tests
+use a nonparallel collection. CI retains TRX and console evidence even on failure
+and rejects runs that execute no tests.
 
 Prettier checks maintained TypeScript, JavaScript tooling, JSON, YAML, frontend CSS
 and administrator HTML. Generated output and vendored sources are excluded; the

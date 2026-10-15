@@ -1,12 +1,15 @@
+using Xunit;
 using LyricBridge;
 using System.Net;
 using System.Text.Json;
 
-public static class GenerationProfileTests
+public sealed class GenerationProfileTests : TestHost
 {
-    public static async Task Run(string root)
+    [Fact]
+    public async Task QueuedAndRunningJobsKeepExecutionSnapshots()
     {
-        var config = Plugin.Instance.Configuration.Services.First(s => s.Name == "AI");
+        var root = Root;
+        var config = Plugin.Configuration.Services.First(s => s.Name == "AI");
         var original = (config.Endpoint, config.Model, config.ApiKey);
         try
         {
@@ -14,42 +17,45 @@ public static class GenerationProfileTests
             config.Model = "model-a";
             config.ApiKey = "credential-secret";
             var handler = new SnapshotHandler();
-            var services = new LanguageServices(() => Plugin.Instance.Configuration.Services, new HttpClient(handler));
-            var store = new Store(Path.Combine(root, "generation-profile"));
+            var services = Own(new LanguageServices(() => Plugin.Configuration.Services, new HttpClient(handler)));
+            var store = Own(new Store(Path.Combine(root, "generation-profile")));
             var doc = new RichLyrics { Hash = "profile-fixture", Lines = [new() { Id = "line", Text = "hello", Language = "en" }] };
             store.Put("document", doc.Hash, doc);
-            using var worker = new Generation(TestConfiguration.Policy, store, services);
+            var worker = Own(new Generation(Policy, store, services));
             var job = worker.Request(Guid.NewGuid(), Guid.NewGuid(), doc, new() { Service = "AI" }, true);
             var originalKey = job.CacheKey;
-            Check(!Codec.Serialize(job).Contains("secret"), "profile must not persist endpoint or credential secrets");
+            Assert.True(!Codec.Serialize(job).Contains("secret"), "profile must not persist endpoint or credential secrets");
             config.Model = "model-b";
-            await worker.StartAsync(CancellationToken.None);
+            await worker.StartAsync(TestContext.Current.CancellationToken);
             await Until(() => store.Get<Job>("job", job.Id)?.State == "settings_changed");
-            Check(handler.Calls == 0, "changed queued profile must not call service");
+            Assert.True(handler.Calls == 0, "changed queued profile must not call service");
             var retry = worker.Action(job.Id, "retry", job.UserId, true);
-            Check(retry.Id == job.Id && retry.CacheKey != originalKey, "retry retains admission and changes identity");
-            await handler.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(retry.Id == job.Id && retry.CacheKey != originalKey, "retry retains admission and changes identity");
+            await handler.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
             config.Model = "model-c";
             config.ApiKey = "rotated-secret";
             handler.Release.SetResult();
             await Until(() => store.Get<Job>("job", job.Id)?.State == "complete");
             var variant = store.Get<Variant>("variant", job.VariantKey)!;
-            Check(handler.Model == "model-b" && variant.Model == "model-b", "running execution and provenance use captured model");
-            Check(variant.Profile == retry.Profile, "saved version retains generation profile");
-            Check(variant.CacheKey == retry.CacheKey, "result keeps dispatched identity");
-            await worker.StopAsync(CancellationToken.None);
+            Assert.True(handler.Model == "model-b" && variant.Model == "model-b", "running execution and provenance use captured model");
+            Assert.True(variant.Profile == retry.Profile, "saved version retains generation profile");
+            Assert.True(variant.CacheKey == retry.CacheKey, "result keeps dispatched identity");
+            await worker.StopAsync(TestContext.Current.CancellationToken);
             var before = services.CurrentProfile(new() { Service = "AI" });
             config.ApiKey = "another-secret";
-            Check(before == services.CurrentProfile(new() { Service = "AI" }), "credential rotation preserves profile");
+            Assert.True(before == services.CurrentProfile(new() { Service = "AI" }), "credential rotation preserves profile");
         }
         finally { (config.Endpoint, config.Model, config.ApiKey) = original; }
-        Console.WriteLine("PASS: queued configuration invalidation, retry identity, running snapshot, provenance and credential redaction.");
     }
 
-    private static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
     private static async Task Until(Func<bool> condition)
     {
-        for (var i = 0; i < 100; i++) { if (condition()) return; await Task.Delay(50); }
+        for (var i = 0; i < 100; i++)
+        {
+            if (condition())
+                return;
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
         throw new TimeoutException("Generation state did not settle.");
     }
     private sealed class SnapshotHandler : HttpMessageHandler
@@ -65,7 +71,13 @@ public static class GenerationProfileTests
             Model = body.RootElement.GetProperty("model").GetString();
             Entered.SetResult();
             await Release.Task.WaitAsync(token);
-            return new(HttpStatusCode.OK) { Content = new StringContent(Codec.Serialize(new { choices = new[] { new { message = new { content = "{\"lines\":[{\"id\":\"line\",\"text\":\"translated\"}]}" } } } })) };
+            return new(HttpStatusCode.OK)
+            {
+                Content = new StringContent(Codec.Serialize(new
+                {
+                    choices = new[] { new { message = new { content = "{\"lines\":[{\"id\":\"line\",\"text\":\"translated\"}]}" } } }
+                }))
+            };
         }
     }
 }

@@ -128,7 +128,7 @@ public sealed class AutomaticOriginalTests : IDisposable
         await query.Read(item, token); Assert.Single(store.SavedOriginals(item.Id));
     }
 
-    public void Dispose() { SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    public void Dispose() { TestHost.ClearDatabasePools(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
 }
 
 public class AutomaticNativeProxy : DispatchProxy

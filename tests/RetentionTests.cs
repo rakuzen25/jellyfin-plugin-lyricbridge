@@ -42,6 +42,6 @@ public sealed class RetentionTests
             Assert.True(store.BeginReset()); store.ResetManagedLibrary(); store.EndReset();
             Assert.Empty(store.All<Job>("job"));
         }
-        finally { SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+        finally { TestHost.ClearDatabasePools(root); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 }

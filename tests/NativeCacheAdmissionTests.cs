@@ -34,6 +34,6 @@ public sealed class NativeCacheAdmissionTests
             store.DeleteOriginal(item, doc.Hash); release.SetResult(); await work.WaitAsync(TimeSpan.FromSeconds(5), Xunit.TestContext.Current.CancellationToken);
             Assert.Null(store.GetDocument(doc.Hash)); Assert.Null(store.Selection(item).Lyrics); Assert.True(store.DiscoverySuppressed(item));
         }
-        finally { release.TrySetResult(); SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+        finally { release.TrySetResult(); TestHost.ClearDatabasePools(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
 }

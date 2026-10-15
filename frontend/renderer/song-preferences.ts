@@ -1,3 +1,4 @@
+import { TIMING_OFFSET_MIN_SECONDS, TIMING_OFFSET_MAX_SECONDS, SONG_PREFERENCES_STORAGE_KEY, SONG_PREFERENCES_MAX_ENTRIES } from "./settings.ts";
 /* This Source Code Form is subject to the Mozilla Public License, v. 2.0.
  * See https://mozilla.org/MPL/2.0/. */
 import { isRecord } from "../shared/invariants.ts";
@@ -5,45 +6,24 @@ import type {} from "../shared/runtime.ts";
 import type { LyricInput } from "./payload.ts";
 import { cueValue, lyricTextProfile } from "./payload.ts";
 import type { RendererState } from "./state.ts";
-import { nullableTick } from "./ticks.ts";
+import { finiteTick } from "./ticks.ts";
 function isFiniteNumber(value: unknown): value is number {
     return typeof value === "number" && Number.isFinite(value);
 }
 
 interface Dependencies {
-    TIMING_OFFSET_MIN_SECONDS: -15;
-    TIMING_OFFSET_MAX_SECONDS: 15;
     state: Pick<
         RendererState,
-        | "songPreferences"
-        | "lyrics"
-        | "lyricsAcceptedKey"
-        | "lyricsRequestKey"
-        | "songPreferenceKey"
-        | "romanizationMode"
-        | "timingOffsetSeconds"
-        | "timingPickActive"
-        | "timingUndo"
+        "songPreferences" | "lyrics" | "lyricsAcceptedKey" | "lyricsRequestKey" | "songPreferenceKey" | "romanizationMode" | "timingOffsetSeconds"
     >;
-    SONG_PREFERENCES_STORAGE_KEY: "lyricbridge.renderer.songs";
+    resetTimingInteraction: () => void;
     lyricSignature: (lyrics: LyricInput[]) => string;
     stableHash: (input: string) => number;
-    SONG_PREFERENCES_MAX_ENTRIES: 300;
     updateRomanizationToggleUi: () => void;
     updateTimingControlsUi: () => void;
 }
 export function createSongPreferences(dependencies: Dependencies) {
-    const {
-        TIMING_OFFSET_MIN_SECONDS,
-        TIMING_OFFSET_MAX_SECONDS,
-        state,
-        SONG_PREFERENCES_STORAGE_KEY,
-        lyricSignature,
-        stableHash,
-        SONG_PREFERENCES_MAX_ENTRIES,
-        updateRomanizationToggleUi,
-        updateTimingControlsUi,
-    } = dependencies;
+    const { state, lyricSignature, stableHash, updateRomanizationToggleUi, updateTimingControlsUi, resetTimingInteraction } = dependencies;
     function finiteNumber(value: unknown, fallback = 0) {
         const numeric = Number(value);
         return isFiniteNumber(numeric) ? numeric : fallback;
@@ -93,17 +73,17 @@ export function createSongPreferences(dependencies: Dependencies) {
 
         lyrics.forEach((lyric, lineIndex: number) => {
             const profile = lyricTextProfile(lyric);
-            const start = nullableTick(cueValue(lyric, "Start", "start"));
-            const end = nullableTick(cueValue(lyric, "End", "end"));
+            const start = finiteTick(cueValue(lyric, "Start", "start"));
+            const end = finiteTick(cueValue(lyric, "End", "end"));
             const rawCues = cueValue(lyric, "Cues", "cues");
             const cues = Array.isArray(rawCues) ? rawCues : [];
             const cueSignature = cues
                 .map((cue) =>
                     [
-                        nullableTick(cueValue(cue, "Position", "position")),
-                        nullableTick(cueValue(cue, "EndPosition", "endPosition")),
-                        nullableTick(cueValue(cue, "Start", "start")),
-                        nullableTick(cueValue(cue, "End", "end")),
+                        finiteTick(cueValue(cue, "Position", "position")),
+                        finiteTick(cueValue(cue, "EndPosition", "endPosition")),
+                        finiteTick(cueValue(cue, "Start", "start")),
+                        finiteTick(cueValue(cue, "End", "end")),
                     ]
                         .map((value) => (value === null ? "null" : value))
                         .join(":"),
@@ -151,8 +131,7 @@ export function createSongPreferences(dependencies: Dependencies) {
          * restore independently, while timing defaults to the source file.
          */
         state.timingOffsetSeconds = timingMatches ? storedOffset : 0;
-        state.timingPickActive = false;
-        state.timingUndo = null;
+        resetTimingInteraction();
         updateRomanizationToggleUi();
         updateTimingControlsUi();
     }

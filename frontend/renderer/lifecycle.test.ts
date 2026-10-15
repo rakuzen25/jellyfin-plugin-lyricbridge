@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { RendererLifecycle } from "./lifecycle.ts";
+import { Lifecycle } from "../shared/lifecycle.ts";
 
 test("listener ownership deduplicates registration and releases repeated temporary hooks", () => {
-    const scope = new RendererLifecycle(),
+    const scope = new Lifecycle(),
         target = new EventTarget();
     let calls = 0;
     const listener = () => calls++;
@@ -30,12 +30,12 @@ test("listener ownership deduplicates registration and releases repeated tempora
 
 test("disposal settles a queued cooperative yield and normal completion releases its owner", async () => {
     Object.defineProperty(globalThis, "window", { configurable: true, value: { setTimeout, clearTimeout, clearInterval } });
-    const cancelled = new RendererLifecycle();
+    const cancelled = new Lifecycle();
     const pending = cancelled.sleep(1000);
     cancelled.dispose();
     assert.equal(await pending, false);
     assert.equal(cancelled.resourceCount, 0);
-    const completed = new RendererLifecycle();
+    const completed = new Lifecycle();
     assert.equal(await completed.sleep(0), true);
     assert.equal(completed.resourceCount, 0);
     completed.dispose();

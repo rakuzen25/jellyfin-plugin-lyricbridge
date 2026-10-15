@@ -17,15 +17,3 @@ verifyDepsBeforeRun: false
 # Keep the 24-hour policy aligned with Renovate and pip (test:tooling checks it).
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
-minimumReleaseAgeExclude:
-  - "@typescript-eslint/eslint-plugin@8.71.2"
-  - "@typescript-eslint/parser@8.71.2"
-  - "@typescript-eslint/project-service@8.71.2"
-  - "@typescript-eslint/scope-manager@8.71.2"
-  - "@typescript-eslint/tsconfig-utils@8.71.2"
-  - "@typescript-eslint/type-utils@8.71.2"
-  - "@typescript-eslint/types@8.71.2"
-  - "@typescript-eslint/typescript-estree@8.71.2"
-  - "@typescript-eslint/utils@8.71.2"
-  - "@typescript-eslint/visitor-keys@8.71.2"
-  - typescript-eslint@8.71.2

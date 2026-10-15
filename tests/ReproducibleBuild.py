@@ -15,7 +15,7 @@ import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-from ci import digest
+from ci_policy import digest
 from source_inventory import source_files
 
 repository = Path(__file__).resolve().parent.parent

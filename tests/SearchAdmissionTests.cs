@@ -28,7 +28,7 @@ public sealed class SearchAdmissionTests
             Assert.NotNull(discovery.Search(user, item, track, null));
             await discovery.StopAll();
         }
-        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+        finally { TestHost.ClearDatabasePools(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
     private sealed class WaitingSource : ILyricSource
     {

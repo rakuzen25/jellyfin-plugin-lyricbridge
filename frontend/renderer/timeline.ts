@@ -1,7 +1,7 @@
 /* This Source Code Form is subject to the Mozilla Public License, v. 2.0.
  * See https://mozilla.org/MPL/2.0/. */
 import type { CueInput } from "./cue-ranges.ts";
-import { finiteTick, nullableTick } from "./ticks.ts";
+import { finiteTick } from "./ticks.ts";
 export interface TimelineLyric {
     Start?: unknown;
     start?: unknown;
@@ -168,9 +168,9 @@ export function planInstrumentalGaps(lineData: LineBounds[], minimumTicks = INST
         .map((line, lineIndex) => ({
             line,
             lineIndex,
-            startTicks: nullableTick(line && line.startTicks),
-            endTicks: nullableTick(line && line.endTicks),
-            trustedEndTicks: nullableTick(line && line.trustedEndTicks),
+            startTicks: finiteTick(line && line.startTicks),
+            endTicks: finiteTick(line && line.endTicks),
+            trustedEndTicks: finiteTick(line && line.trustedEndTicks),
         }))
         .filter((item) => item.startTicks !== null && (item.line == null || item.line.text == null || String(item.line.text).trim().length > 0))
         .sort((left, right) => left.startTicks! - right.startTicks! || left.lineIndex - right.lineIndex);

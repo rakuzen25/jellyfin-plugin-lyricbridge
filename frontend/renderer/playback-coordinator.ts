@@ -1,3 +1,4 @@
+import { TICKS_PER_SECOND, LINE_CLASS_NEIGHBORHOOD } from "./settings.ts";
 /* This Source Code Form is subject to the Mozilla Public License, v. 2.0.
  * See https://mozilla.org/MPL/2.0/. */
 import { isRecord, requireValue } from "../shared/invariants.ts";
@@ -7,7 +8,7 @@ import type { CueInput } from "./cue-ranges.ts";
 import type { CueRecord, RenderGap, RenderLine } from "./models.ts";
 import { cueValue } from "./payload.ts";
 import type { RendererState } from "./state.ts";
-import { nullableTick } from "./ticks.ts";
+import { finiteTick } from "./ticks.ts";
 import { nextLyricStartTicks as nextTimelineStart } from "./timeline.ts";
 function isFiniteNumber(value: unknown): value is number {
     return typeof value === "number" && Number.isFinite(value);
@@ -15,7 +16,6 @@ function isFiniteNumber(value: unknown): value is number {
 
 interface Dependencies {
     finiteNumber: (value: unknown, fallback?: number) => number;
-    TICKS_PER_SECOND: 10000000;
     clampTimingOffsetSeconds: (value: unknown) => number;
     state: Pick<
         RendererState,
@@ -38,7 +38,6 @@ interface Dependencies {
     motionHandoffActive: (word: AnimatedWord, timelineTicks: number) => boolean;
     setStaticWordState: (word: AnimatedWord, stateName: string, frameNow: number, preserveMotion?: boolean) => void;
     resetWordMotion: (word: AnimatedWord) => void;
-    LINE_CLASS_NEIGHBORHOOD: 6;
     motionContinuityGain: (word: AnimatedWord, timelineTicks: number) => number;
     updateMotionGlyphs: (word: AnimatedWord, timelineTicks: number, continuityGain?: number) => void;
     updateWholeMotion: (word: AnimatedWord, timelineTicks: number, continuityGain?: number) => void;
@@ -46,7 +45,6 @@ interface Dependencies {
 export function createPlaybackCoordinator(dependencies: Dependencies) {
     const {
         finiteNumber,
-        TICKS_PER_SECOND,
         clampTimingOffsetSeconds,
         state,
         projectedMediaSeconds,
@@ -57,7 +55,6 @@ export function createPlaybackCoordinator(dependencies: Dependencies) {
         motionHandoffActive,
         setStaticWordState,
         resetWordMotion,
-        LINE_CLASS_NEIGHBORHOOD,
         motionContinuityGain,
         updateMotionGlyphs,
         updateWholeMotion,
@@ -109,8 +106,8 @@ export function createPlaybackCoordinator(dependencies: Dependencies) {
     }
 
     function cueEndTicks(lineIndex: number, cueIndex: number, cue: CueInput, cues: (CueRecord | CueInput)[]) {
-        const start = nullableTick(cueValue(cue, "Start", "start")) || 0;
-        const explicitEnd = nullableTick(cueValue(cue, "End", "end"));
+        const start = finiteTick(cueValue(cue, "Start", "start")) || 0;
+        const explicitEnd = finiteTick(cueValue(cue, "End", "end"));
         if (explicitEnd !== null && explicitEnd > start) {
             return explicitEnd;
         }
@@ -126,7 +123,7 @@ export function createPlaybackCoordinator(dependencies: Dependencies) {
         for (let nextIndex = Math.max(0, Number(cueIndex) + 1); nextIndex < cueList.length; nextIndex += 1) {
             const nextEntry = cueList[nextIndex];
             const nextCue = nextEntry && isRecord(nextEntry.cue) ? nextEntry.cue : nextEntry;
-            const nextStart = nullableTick(cueValue(requireValue(nextCue), "Start", "start"));
+            const nextStart = finiteTick(cueValue(requireValue(nextCue), "Start", "start"));
 
             if (nextStart !== null && nextStart > start) {
                 return nextStart;
@@ -135,7 +132,7 @@ export function createPlaybackCoordinator(dependencies: Dependencies) {
 
         const currentLyric = state.lyrics && state.lyrics[lineIndex];
 
-        const explicitLineEnd = nullableTick(cueValue(currentLyric, "End", "end"));
+        const explicitLineEnd = finiteTick(cueValue(currentLyric, "End", "end"));
 
         if (explicitLineEnd !== null && explicitLineEnd > start) {
             return explicitLineEnd;

@@ -64,7 +64,7 @@ Lyrics settings → Versions includes **Saved originals** as well as saved trans
 
 Deleting a saved original removes that song’s association and its timing correction. A deleted current original is replaced by the newest remaining saved original. If no saved originals remain, current lyrics are cleared and automatic discovery pauses until an explicit retry, import or selection. Shared documents and their dependent versions remain when another song, selection, composition/donor, improvement offer or unaffected active job requires them. Affected jobs are cancelled transactionally; retained history identifies deleted output and cannot retry it. Media and external lyric files are never deleted.
 
-This development version uses storage schema 5. Existing schema 4 and other unsupported databases are rejected without migration or changes. Use a new empty development storage directory; keep existing production storage untouched.
+Storage uses schema 5. Unsupported databases are rejected without changes. Back up the complete storage directory and configure new empty storage when the schema is unsupported.
 
 Saved translation and pronunciation versions are listed separately. Each lists its service, model, thinking level, and generation time when available. Choose Preview, then Use to save the selection for your account and this original lyric content. Translation choices are separate for each target language. Automatic prefers supplied rows; Provider supplied only excludes generated rows.
 
@@ -149,8 +149,5 @@ Versions owns search, import, Jellyfin selection, rejection and instrumental
 classification. Shared changes remain administrator-only and classification changes
 require confirmation. Search keeps provider track ID in an Advanced disclosure in the search form, which collapses into the query summary; it does not duplicate these actions.
 
-The one-step Revert action and endpoint have been removed. Restore lyrics by choosing
-a saved original; change rejected/instrumental classification explicitly. No undo
-snapshots are created or returned by the current API. This change does not migrate or
-delete existing databases. Deleting the current original selects the newest remaining
+Restore lyrics by choosing a saved original; change rejected/instrumental classification explicitly. Deleting the current original selects the newest remaining
 saved original, retaining that version's timing and auxiliary choices.

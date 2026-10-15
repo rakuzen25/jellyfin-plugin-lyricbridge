@@ -1,17 +1,36 @@
+import {
+    LYRIC_VISUAL_WATCHDOG_MS,
+    LYRIC_FRAME_RECOVERY_MS,
+    PERFORMANCE_STORAGE_KEY,
+    GOOGLE_ROMANIZATION_MAX_TEXT_CHARS,
+    TIMING_OFFSET_FINE_STEP_SECONDS,
+    TIMING_OFFSET_STEP_SECONDS,
+    TIMING_OFFSET_MIN_SECONDS,
+    TIMING_OFFSET_MAX_SECONDS,
+    PERFORMANCE_TARGET_FPS,
+    LRC_TARGET_FPS,
+    PAUSED_TARGET_FPS,
+    MEDIA_DISCOVERY_RETRY_MS,
+    PREMIUM_ACCENTS,
+} from "./settings.ts";
+import { createRendererDiagnostics } from "./diagnostics.ts";
+import { detectScriptProfile } from "./text-processing.ts";
+import { createWordModel } from "./word-model.ts";
+import { createInstrumentalView } from "./instrumental-view.ts";
 import { requireValue } from "../shared/invariants.ts";
 import type {} from "../shared/runtime.ts";
 import { createAccentController } from "./accent-controller.ts";
 import { createArtworkController } from "./artwork-controller.ts";
+import { createAutoFollow } from "./auto-follow.ts";
 import { createControlsPreferences } from "./controls-preferences.ts";
 import type { CueInput } from "./cue-ranges.ts";
-import type { GeometryWord } from "./geometry.ts";
 import { createLyricView } from "./lyric-view.ts";
-import type { CueRecord, RenderGap, RenderSegment, RenderWord } from "./models.ts";
+import type { RenderWord } from "./models.ts";
 import type { LyricInput } from "./payload.ts";
 import { createPlaybackCoordinator } from "./playback-coordinator.ts";
 import { createPronunciationController } from "./pronunciation-controller.ts";
 import { createSongPreferences } from "./song-preferences.ts";
-import type { RendererState } from "./state.ts";
+import { createRendererState } from "./state.ts";
 function eventElement(event: Event): HTMLElement | null {
     return event.target instanceof HTMLElement ? event.target : null;
 }
@@ -21,16 +40,13 @@ function isFiniteNumber(value: unknown): value is number {
 
 import { ArtworkLoader } from "./artwork-loader.ts";
 import { replaceChildren, setText } from "./dom.ts";
-import { BASE_WIPE_GRADIENT_EM, createWordGeometry } from "./geometry.ts";
+import { createWordGeometry } from "./geometry.ts";
 import { detectStockJellyfinTvEnvironment, getCurrentLyricPage, getCurrentLyricsContainer, isLyricsPage, isLyricsUrl, ROUTE_RE } from "./host.ts";
-import { createKaraokeAnimation, WORD_PROGRESS_SMOOTH_TAU_MS } from "./karaoke-animation.ts";
-import { RendererLifecycle } from "./lifecycle.ts";
-import { clamp01 } from "./motion.ts";
+import { createKaraokeAnimation } from "./karaoke-animation.ts";
+import { Lifecycle } from "../shared/lifecycle.ts";
 import { cueValue, lyricPayloadIdentity, lyricTimingMode, normalizeLyricsPayload, usableEnhancedCueCount } from "./payload.ts";
 import { projectClock, resetClock } from "./playback-clock.ts";
-import { detectScriptProfile, firstStrongDirection, getGraphemeRanges, getWordRanges, usesWholeShapedMotion } from "./text-processing.ts";
-import { nullableTick } from "./ticks.ts";
-import { planInstrumentalGaps, calculateLineBounds as timelineBounds } from "./timeline.ts";
+import { calculateLineBounds as timelineBounds } from "./timeline.ts";
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -92,349 +108,19 @@ export function installRenderer() {
     }
     let acceptedOriginalIdentity = "",
         acceptedOriginalTrack = "";
-    const lifecycle = new RendererLifecycle();
+    const lifecycle = new Lifecycle();
     let hookedMedia: HTMLMediaElement | null = null;
     const mediaWakeReleases: (() => void)[] = [];
     lifecycle.own(() => releaseMediaWakeHooks());
     const artworkLoader = new ArtworkLoader(
         () => new Image(),
-        () => state.atmosphereTimeoutCount++,
+        () => artwork.recordTimeout(),
     );
     lifecycle.own(() => artworkLoader.dispose());
-    const TICKS_PER_SECOND = 10000000;
-    const INSTRUMENTAL_GAP_MIN_TICKS = 2 * TICKS_PER_SECOND;
-    const INSTRUMENTAL_GAP_SYMBOL = "♪";
-    const SVG_NS = "http://www.w3.org/2000/svg";
-    const INSTRUMENTAL_NOTE_VIEWBOX_WIDTH = 64;
-    const INSTRUMENTAL_NOTE_VIEWBOX_HEIGHT = 80;
-    const INSTRUMENTAL_GAP_PROGRESS_EPSILON = 0.001;
-    const INSTRUMENTAL_WAVE_PERIOD_SECONDS = 1.35;
-    const INSTRUMENTAL_WAVE_MAX_AMPLITUDE = 2.35;
-    const INSTRUMENTAL_WAVE_SEGMENTS = 20;
-    const LYRIC_VISUAL_WATCHDOG_MS = 700;
-    const LYRIC_FRAME_RECOVERY_MS = 36;
 
     let reducedMotionMediaQuery: MediaQueryList | null = null;
 
-    /*
-     * Jellyfin's lyric parser can discard Unicode format controls.  The ASCII
-     * transport token survives the complete TTML -> ELRC -> Jellyfin path and
-     * is removed before the lyric is painted.  The old invisible marker is
-     * still accepted so existing local files do not break.
-     */
-
-    const UNIFIED_RENDERER_SIGNATURE = "unified-pc-mobile-v3:60fps:multiscript-shaped-wipe:classic-bloom64:atmo-dynamic-kawarp-v325-hotfix";
-
-    // Display-only lyric wipe smoothing.
-    // Behaviour adapted from the current am-lyrics renderer.
-    const SHORT_WORD_GLOW_MIN_DURATION_MS = 1320;
-    const LINE_CLASS_NEIGHBORHOOD = 6;
-
-    /*
-     * Phase-locked lyric clock.
-     *
-     * Some embedded media engines expose currentTime in visible steps even
-     * while requestAnimationFrame is healthy. Between trustworthy media-clock
-     * samples we advance a monotonic projection, then gently phase-correct it
-     * when currentTime moves again. Large jumps still snap immediately.
-     */
-
-    // Dynamic Background is the only atmosphere engine in God Mode.
-    // It is presentation-only and never changes lyric timing.
-    const ATMOSPHERE_ART_MAX_WIDTH = 720;
-    const DYNAMIC_BACKGROUND_SOURCE = "chengggit Dynamic Background 3.2.4 + Better Lyrics Kawarp";
-    const DYNAMIC_BACKGROUND_ENGINE = "kawarp-domain-warp-hardened";
-    const DYNAMIC_BACKGROUND_TRANSITION_MS = 260;
-    const DYNAMIC_BACKGROUND_DOM_STABLE_MS = 900;
-    const DYNAMIC_BACKGROUND_UNBOUND_DOM_CONFIRM_MS = 1500;
-    const DYNAMIC_BACKGROUND_INHERITED_DOM_STABLE_MS = 0;
-    const DYNAMIC_BACKGROUND_INHERITED_DOM_CONFIRM_MS = 0;
-    const DYNAMIC_BACKGROUND_DIRECT_GRACE_MS = 700;
-    const DYNAMIC_BACKGROUND_DIRECT_LOAD_TIMEOUT_MS = 900;
-    const DYNAMIC_BACKGROUND_WEAK_RECHECK_MS = 12000;
-    const DYNAMIC_BACKGROUND_NO_ART_CONFIRM_MS = 2500;
-    const DYNAMIC_BACKGROUND_NO_ART_RETRY_MS = 10000;
-    const DYNAMIC_BACKGROUND_DIRECT_RETRY_MS = 1500;
-    const DYNAMIC_BACKGROUND_WEBGL_RETRY_BASE_MS = 30000;
-    const DYNAMIC_BACKGROUND_WEBGL_RETRY_MAX_MS = 300000;
-    const DYNAMIC_BACKGROUND_SETTINGS = Object.freeze({
-        opacity: 0.75,
-        warpIntensity: 1.0,
-        blurPasses: 8,
-        blurSize: 128,
-        animationSpeed: 1.8,
-        transitionDuration: DYNAMIC_BACKGROUND_TRANSITION_MS,
-        saturation: 1.7,
-        dithering: 0,
-        tintColor: [0.157, 0.157, 0.235],
-        tintIntensity: 0.15,
-        scale: 1.0,
-        audioResponsive: false,
-        pauseOnInactive: true,
-    });
-
-    const PERFORMANCE_STORAGE_KEY = "lyricbridge.renderer.performance";
-
-    // PC/mobile-only Google Romanization. Requests begin only after the user
-    // selects Romanized view for a native-script song.
-    const SONG_PREFERENCES_STORAGE_KEY = "lyricbridge.renderer.songs";
-    const GOOGLE_ROMANIZATION_CACHE_MAX_ENTRIES = 1800;
-    const GOOGLE_ROMANIZATION_MAX_TEXT_CHARS = 1500;
-    const GOOGLE_ROMANIZATION_MAX_RETRIES = 3;
-    const GOOGLE_ROMANIZATION_RETRY_DELAY_MS = 1000;
-    const GOOGLE_ROMANIZATION_TIMEOUT_MS = 6000;
-    const GOOGLE_ROMANIZATION_CONCURRENCY = 3;
-
-    // Per-timeline display synchronization. Positive values delay the lyrics;
-    // negative values make lyrics appear earlier. The permanent UI is one
-    // compact timing chip; its popover keeps ±0.1 s nudging, one-tap word/line
-    // synchronization and Reset out of the main lyric view.
-    const TIMING_OFFSET_FINE_STEP_SECONDS = 0.1;
-    const TIMING_OFFSET_STEP_SECONDS = 0.5;
-    const TIMING_OFFSET_MIN_SECONDS = -15;
-    const TIMING_OFFSET_MAX_SECONDS = 15;
-    const SONG_PREFERENCES_MAX_ENTRIES = 300;
-
-    const PERFORMANCE_TARGET_FPS = Object.freeze({
-        desktop: 60,
-        mobile: 60,
-    });
-
-    /*
-     * Normal LRC only changes at line boundaries, so 20 fps is still very
-     * cheap with the active-line-only renderer while cutting worst-case visual
-     * line-transition latency from ~100 ms to ~50 ms.
-     */
-    const LRC_TARGET_FPS = 20;
-    const PAUSED_TARGET_FPS = 2;
-
-    /*
-     * Lifecycle guards. Decoration retries are deliberately bounded and only
-     * exist while a live lyrics route + captured payload are waiting for
-     * Jellyfin's DOM. Outside the lyrics page the animation loop is fully
-     * dormant instead of polling the whole SPA forever.
-     */
-    const DECORATION_RETRY_MS = 120;
-    const DECORATION_RETRY_WINDOW_MS = 6000;
-    const MEDIA_DISCOVERY_RETRY_MS = 250;
-    const ATMOSPHERE_IMAGE_TIMEOUT_MS = 6500;
-
-    /*
-     * User-requested premium glow palette.
-     *
-     * IMPORTANT:
-     * These colors are used ONLY by the glyph-shaped shadow produced by the
-     * am-lyrics-style grow animation. The lyric text and lyric wipe stay white.
-     */
-    const ACCENT_STORAGE_KEY = "lyricbridge.renderer.accent";
-
-    const ACCENT_HISTORY_STORAGE_KEY = "lyricbridge.renderer.recentAccents";
-
-    /*
-     * Compact five-color OLED palette. Each selection keeps a clean primary
-     * edge and a complementary outer bloom instead of making every shadow the
-     * same hue.
-     */
-    const PREMIUM_ACCENTS = Object.freeze([
-        { id: "ruby", name: "Ruby", rgb: "255, 62, 102", secondaryRgb: "255, 112, 72", tertiaryRgb: "226, 78, 255", gain: 0.99 },
-        { id: "solar-yellow", name: "Solar Yellow", rgb: "255, 232, 62", secondaryRgb: "255, 142, 48", tertiaryRgb: "48, 242, 220", gain: 0.49 },
-        { id: "emerald", name: "Emerald", rgb: "48, 246, 158", secondaryRgb: "52, 255, 214", tertiaryRgb: "148, 94, 255", gain: 0.55 },
-        { id: "sapphire", name: "Sapphire Blue", rgb: "66, 136, 255", secondaryRgb: "72, 222, 255", tertiaryRgb: "255, 92, 194", gain: 0.82 },
-        { id: "electric-violet", name: "Electric Violet", rgb: "152, 76, 255", secondaryRgb: "82, 172, 255", tertiaryRgb: "72, 255, 228", gain: 1.0 },
-    ]);
-    const NEUTRAL_ACCENT = Object.freeze({
-        id: "neutral-fallback",
-        name: "Neutral Fallback",
-        rgb: "214, 226, 255",
-        secondaryRgb: "196, 180, 255",
-        tertiaryRgb: "255, 214, 238",
-        gain: 0.72,
-    });
-
-    const state: RendererState = {
-        lyrics: null,
-        generation: 0,
-        decoratedGeneration: -1,
-        lyricsRequestSeq: 0,
-        lyricsRequestKey: "",
-        lyricsRequestKeys: new Map(),
-        lyricsAcceptedKey: "",
-        lyricsAcceptedSeq: 0,
-        lyricsStaleResponseDrops: 0,
-        lineData: [],
-        rafId: 0,
-        frameTimer: 0,
-        animationLoopRunning: false,
-        animationLoopStarts: 0,
-        animationLoopStops: 0,
-        animationLoopErrors: 0,
-        animationLoopRecoveries: 0,
-        animationWatchdogRecoveries: 0,
-        animationWatchdogTimer: 0,
-        lastAnimationLoopError: "",
-        lastMediaWarning: 0,
-        geometryTimer: 0,
-        backgroundAnchorTimer: 0,
-        decorationRetryStartedAt: 0,
-        decorationRetryCount: 0,
-        decorationRetryExpiredCount: 0,
-        lastActiveLine: -999,
-        lastActiveLineSignature: "",
-        activeLineIndexes: [],
-        activeLineScratch: [],
-        handoffLineIndexes: new Set(),
-        retiredLineElements: [],
-        lineEndPrefix: [],
-        instrumentalGaps: [],
-        activeInstrumentalGapIndex: -1,
-        instrumentalPhaseActiveIndex: -1,
-        instrumentalPastCount: 0,
-        instrumentalGapRenderCount: 0,
-        instrumentalGapMaxDurationTicks: 0,
-        mediaElement: null,
-        mediaProbeAt: 0,
-        mediaSwitchCount: 0,
-        staleMediaEventDrops: 0,
-        timedCueCount: 0,
-        lyricTimingMode: "none",
-        backgroundVocalCount: 0,
-        overlapFrameCount: 0,
-        maxSimultaneousLines: 1,
-
-        performanceMode: "auto",
-        performanceProfile: "desktop",
-        performanceFrameCount: 0,
-        performanceWindowStart: 0,
-        measuredFps: 0,
-        lastRenderedFrameAt: 0,
-        forceNextFrame: false,
-        pausedSettleUntil: 0,
-        lyricViewHidden: false,
-        renderedFrameCount: 0,
-        watchdogLineCursor: 0,
-        skippedRafFrames: 0,
-        lineTransitionCount: 0,
-        lastLineSyncCount: 0,
-        maxLineSyncCount: 0,
-        playbackClockMedia: null,
-        playbackClockSeconds: 0,
-        playbackClockRawSeconds: 0,
-        playbackClockFrameNow: 0,
-        playbackClockCorrectionMs: 0,
-        playbackClockHardSnaps: 0,
-        playbackClockSuspended: false,
-        mediaStartOffsetSource: "",
-        mediaStartOffsetTicks: 0,
-
-        accentMode: "shuffle",
-        accent: null,
-        accentSignature: "",
-        accentHistory: [],
-        accentBag: [],
-        accentRandomSource: "math-random",
-        accentSelectionReason: "initial",
-        accentReplayArmed: false,
-
-        shapedWordCount: 0,
-        scriptProfileCounts: {},
-        fontGeometryRefreshCount: 0,
-
-        romanizationMode: "native",
-        romanizationAvailable: false,
-        romanizationCandidate: false,
-        romanizationLoadState: "idle",
-        romanizationLoadError: "",
-        romanizationSource: "none",
-        romanizationToggle: null,
-        googleRomanizationCache: new Map(),
-        googleRomanizationFragmentCache: new Map(),
-        googleRomanizationAttempted: new Set(),
-        googleRomanizationRequest: null,
-        googleRomanizationState: "idle",
-        googleRomanizationError: "",
-        googleRomanizationLineCount: 0,
-        romanizationLineCount: 0,
-        romanizationToggleCount: 0,
-
-        songPreferenceKey: "",
-        songPreferences: Object.create(null),
-        lyricToolsHost: null,
-        lyricToolsBar: null,
-        timingControls: null,
-        timingPopover: null,
-        timingPopoverDismissInstalled: false,
-        timingOffsetSeconds: 0,
-        sharedTimingOffsetSeconds: 0,
-        timingOffsetChangeCount: 0,
-        timingPickActive: false,
-        timingUndo: null,
-        timingPickListenerInstalled: false,
-        lyricSeekInteractionInstalled: false,
-        lyricAutoFollowInstalled: false,
-        lyricAutoFollowSuspendedUntil: 0,
-        lyricAutoFollowLastIndex: -1,
-        lyricAutoFollowLastAt: 0,
-        lyricAutoFollowScroller: null,
-        lyricAutoFollowTargetTop: null,
-        lyricAutoFollowBehavior: null,
-        lyricAutoFollowScrollCount: 0,
-        lyricAutoFollowManualScrollCount: 0,
-        lyricAutoFollowForceCount: 0,
-        lyricAutoFollowLastReason: "",
-        lyricStockAutoFollowSuppressCount: 0,
-        lyricStockAutoFollowLastReason: "",
-        lyricSeekCount: 0,
-        instrumentalSeekCount: 0,
-        lastLyricSeekKind: "",
-        lastLyricSeekSourceTicks: null,
-        lastLyricSeekMediaSeconds: null,
-
-        // Dynamic Background state. This build intentionally has one atmosphere engine.
-        atmosphereMode: "dynamic",
-        atmosphereRoot: null,
-        atmosphereMediaKey: "",
-        atmosphereArtwork: "",
-        atmosphereSource: "none",
-        atmosphereLastCheck: 0,
-        atmosphereLoadSeq: 0,
-        atmospherePendingKey: "",
-        atmospherePendingSince: 0,
-        atmosphereTimeoutCount: 0,
-        atmosphereFailedKey: "",
-        atmosphereFailedAt: 0,
-        atmosphereAnalysis: null,
-        atmosphereDynamicRenderer: null,
-        atmosphereDynamicCanvas: null,
-        atmosphereDynamicBaseIndex: 0,
-        atmosphereDynamicCurrentArtwork: "",
-        atmosphereDynamicCurrentFingerprint: null,
-        atmosphereDynamicVisualDedupCount: 0,
-        atmosphereDynamicFingerprintFailures: 0,
-        atmosphereDynamicIdentityMethod: "none",
-        atmosphereDynamicWebglAvailable: null,
-        atmosphereDynamicFallbackReason: "",
-        atmosphereDynamicContextLossCount: 0,
-        atmosphereDynamicTransitionCount: 0,
-        atmosphereDynamicInterruptedTransitions: 0,
-        atmosphereDynamicResizeCount: 0,
-        atmosphereDynamicStaleCommitDrops: 0,
-        atmosphereDynamicDirectLoadFailures: 0,
-        atmosphereDynamicDomFallbackCommits: 0,
-        atmosphereDynamicDirectRetryAt: 0,
-        atmosphereDynamicWeakSource: false,
-        atmosphereDynamicResolvedKey: "",
-        atmosphereDynamicResolvedAt: 0,
-        atmosphereDynamicNoArtwork: false,
-        atmosphereDynamicNoArtFailures: 0,
-        atmosphereDynamicDomBaseline: new Set(),
-        atmosphereDynamicDomCandidateSinceByUrl: new Map(),
-        atmosphereDynamicFastInheritedCommits: 0,
-        atmosphereDynamicMediaStableSince: 0,
-        atmosphereDynamicWebglFailureCount: 0,
-        atmosphereDynamicWebglRetryAt: 0,
-        atmosphereDynamicProbeToken: 0,
-        atmosphereDynamicProbeTimers: [],
-    };
+    const state = createRendererState();
 
     function log(...args: unknown[]) {
         console.log("[JellyfinLyricMotion]", ...args);
@@ -444,181 +130,10 @@ export function installRenderer() {
         console.warn("[JellyfinLyricMotion]", ...args);
     }
 
-    function cueRecordStart(record: CueRecord) {
-        return nullableTick(cueValue(record.cue, "Start", "start")) ?? 0;
-    }
-
-    function buildWordRecords(text: string, lineIndex: number, cueRecords: CueRecord[]): RenderWord[] {
-        const ranges = getWordRanges(text, cueRecords);
-
-        return ranges.map((range, wordIndex) => {
-            const wordLength = Math.max(1, range.end - range.start);
-            const segments: RenderSegment[] = [];
-
-            cueRecords.forEach((record, cueIndex) => {
-                const overlapStart = Math.max(range.start, record.startPos);
-                const overlapEnd = Math.min(range.end, record.endPos);
-
-                if (overlapEnd <= overlapStart) return;
-
-                const start = isFiniteNumber(record.start) ? record.start : cueRecordStart(record);
-
-                const end = isFiniteNumber(record.end) ? record.end : cueEndTicks(lineIndex, cueIndex, record.cue, cueRecords);
-
-                segments.push({
-                    cueIndex,
-                    startPos: overlapStart - range.start,
-                    endPos: overlapEnd - range.start,
-                    start,
-                    end,
-                });
-            });
-
-            segments.sort((a, b) => {
-                if (a.startPos !== b.startPos) return a.startPos - b.startPos;
-                return a.start - b.start;
-            });
-
-            /*
-             * The word itself is one shaped DOM span. Cue boundaries only
-             * control the progress math. Extend the outermost segment to the
-             * word edges so punctuation/combining ink never pops in at the
-             * final frame.
-             */
-            if (segments.length) {
-                requireValue(segments[0]).startPos = 0;
-                requireValue(segments[segments.length - 1]).endPos = wordLength;
-
-                for (let i = 0; i < segments.length - 1; i += 1) {
-                    const left = segments[i];
-                    const right = segments[i + 1];
-                    const boundary = Math.max(
-                        requireValue(left).startPos,
-                        Math.min(wordLength, (requireValue(left).endPos + requireValue(right).startPos) / 2),
-                    );
-
-                    requireValue(left).endPos = boundary;
-                    requireValue(right).startPos = boundary;
-                }
-            }
-
-            const start = segments[0]?.start ?? Number.NaN;
-            const end = segments.length ? Math.max(...segments.map((segment) => segment.end)) : Number.NaN;
-
-            const scriptProfile = detectScriptProfile(range.text);
-
-            return {
-                lineIndex,
-                wordIndex,
-                text: range.text,
-                startPos: range.start,
-                endPos: range.end,
-                length: wordLength,
-                segments,
-                start,
-                end,
-                scriptProfile,
-                paintMode: usesWholeShapedMotion(scriptProfile) ? "shaped" : "spatial",
-                isRtl: firstStrongDirection(range.text) === "rtl",
-                element: null,
-                visualProgress: 0,
-                lastPaintAt: Number.NaN,
-                motionMode: "none",
-                motionGlow: false,
-                motionDurationMs: 0,
-                motionGlyphs: [],
-                wholeMotion: null,
-                geometryReady: false,
-                geometrySource: "unprepared",
-            };
-        });
-    }
-
-    function visibleWordLength(word: GeometryWord) {
-        if (!word || !word.text) return 0;
-
-        return getGraphemeRanges(word.text).filter((range) => /\S/u.test(range.text)).length;
-    }
-
-    function canUseGraphemeMotionOverlay(word: RenderWord) {
-        if (!word) return false;
-
-        const compact = String(word.text || "").replace(/\s+/g, "");
-
-        if (!compact) return false;
-
-        /* Explicit join controls mean that visual shaping can cross the
-         * Unicode grapheme boundary. Keep those words intact. */
-        if (compact.indexOf("\u200c") >= 0 || compact.indexOf("\u200d") >= 0) {
-            return false;
-        }
-
-        /* Arabic-family joining and unknown complex scripts must remain one
-         * shaped run. Indic/Dravidian/Bengali/Thai/etc. are safe here because
-         * getGraphemeRanges() refuses boundaries after viramas, before marks,
-         * inside Hangul clusters or across join controls. That lets an entire
-         * akshara/grapheme receive the exact same staggered Classic Bloom used
-         * by Latin without splitting conjuncts or vowel marks. */
-        return ["arabic", "complex", "universal"].indexOf(word.scriptProfile) < 0;
-    }
-
-    function classifyWordMotion(words: RenderWord[]) {
-        const reducedMotion = prefersReducedMotion();
-
-        words.forEach((word) => {
-            if (reducedMotion || !word.segments.length || !isFiniteNumber(word.start) || !isFiniteNumber(word.end) || word.end <= word.start) {
-                word.motionMode = "none";
-                word.motionGlow = false;
-                word.motionDurationMs = 0;
-                return;
-            }
-
-            const durationMs = (word.end - word.start) / 10000;
-            const wordLen = Math.max(1, visibleWordLength(word));
-            const text = word.text || "";
-
-            word.glyphCount = wordLen;
-
-            /*
-             * Motion eligibility is language-agnostic.
-             *
-             * Rendering remains script-aware later:
-             * segment-safe scripts -> staggered grapheme layer
-             * contextual/complex scripts -> one fully-shaped word
-             */
-            const canAnimate = !text.includes("-") && wordLen > 0;
-
-            let growable = canAnimate && wordLen <= 7;
-
-            if (growable) {
-                if (wordLen <= 1) {
-                    growable = durationMs >= 1050 && durationMs >= wordLen * 525;
-                } else if (wordLen <= 3) {
-                    growable = durationMs >= SHORT_WORD_GLOW_MIN_DURATION_MS + (wordLen - 2) * 140;
-                } else {
-                    growable = durationMs >= 850 && durationMs >= wordLen * 190;
-                }
-            }
-
-            /* Motion and bloom are one effect. Words that miss the complete
-             * grow/glow eligibility test keep only their neutral timed sweep;
-             * a lift without its bloom reads as a stray vertical jump. */
-            word.motionMode = growable ? "grow" : "none";
-
-            word.motionGlow = growable;
-            word.motionDurationMs = durationMs;
-
-            /*
-             * Repo-style dynamic intensity/growth, computed once per word.
-             * Per-grapheme position decay is added later for segment-safe overlays.
-             */
-            const minDuration = 400;
-            const maxDuration = 3000;
-            const rawDurationProgress = clamp01((durationMs - minDuration) / (maxDuration - minDuration));
-
-            word._motionDurationProgress = rawDurationProgress ** 3;
-        });
-    }
+    const { buildWordRecords, visibleWordLength, canUseGraphemeMotionOverlay, classifyWordMotion } = createWordModel({
+        cueEndTicks: (...args) => cueEndTicks(...args),
+        prefersReducedMotion,
+    });
 
     const { prepareWordGeometry } = createWordGeometry({ visibleWordLength, canUseGraphemeMotionOverlay, shouldUsePerGlyphMotion });
 
@@ -646,9 +161,9 @@ export function installRenderer() {
             wakeAnimationLoop();
             if (
                 !preserveScroll &&
-                !state.timingPickActive &&
+                !controls.isTimingPickActive() &&
                 state.activeInstrumentalGapIndex < 0 &&
-                performance.now() >= state.lyricAutoFollowSuspendedUntil &&
+                performance.now() >= autoFollow.suspendedUntil &&
                 state.lastActiveLine >= 0
             )
                 focusLyricLineIndex(lyricPlaybackFollowIndex(state.lastActiveLine), { force: true, behavior: "auto", reason: "layout-refresh" });
@@ -753,11 +268,7 @@ export function installRenderer() {
     }
 
     const { readAccentMode, applyAccentTheme, selectSongAccent, setAccentMode, rerollAccent, currentAccent } = createAccentController({
-        ACCENT_STORAGE_KEY,
-        PREMIUM_ACCENTS,
         state,
-        ACCENT_HISTORY_STORAGE_KEY,
-        NEUTRAL_ACCENT,
         stableHash: (...args) => stableHash(...args),
         lyricSignature: (...args) => lyricSignature(...args),
         wakeAnimationLoop: (...args) => wakeAnimationLoop(...args),
@@ -872,8 +383,8 @@ export function installRenderer() {
         retireDecoratedLines(source === "request-switch");
 
         if (keepDynamicVisible) {
-            const root = state.atmosphereRoot;
-            if (root && root.isConnected && state.atmosphereArtwork) {
+            const root = artwork.root;
+            if (root && root.isConnected && artwork.artwork) {
                 root.classList.add("ak-atmosphere-ready");
             }
             document.documentElement.classList.add("ak-lyricmotion-atmosphere-active");
@@ -908,25 +419,15 @@ export function installRenderer() {
         state.romanizationLineCount = 0;
         state.songPreferenceKey = "";
         state.timingOffsetSeconds = 0;
-        state.timingPickActive = false;
-        state.timingUndo = null;
+        resetTimingInteraction();
         if (typeof removeRomanizationToggle === "function") removeRomanizationToggle();
         if (typeof removeTimingControls === "function") removeTimingControls();
-        if (state.lyricToolsHost && state.lyricToolsHost.parentNode) {
-            state.lyricToolsHost.parentNode.removeChild(state.lyricToolsHost);
-        }
-        state.lyricToolsHost = null;
+        removeTools();
         state.lastActiveLine = -999;
         state.lastActiveLineSignature = "";
         state.activeLineIndexes = [];
         resetMotionHandoffs();
-        state.lyricAutoFollowSuspendedUntil = 0;
-        state.lyricAutoFollowLastIndex = -1;
-        state.lyricAutoFollowLastAt = 0;
-        state.lyricAutoFollowScroller = null;
-        state.lyricAutoFollowTargetTop = null;
-        state.lyricAutoFollowBehavior = null;
-        state.lyricAutoFollowLastReason = "lyrics-cleared";
+        autoFollow.reset("lyrics-cleared", true);
         state.lineEndPrefix = [];
         state.instrumentalGaps = [];
         state.activeInstrumentalGapIndex = -1;
@@ -1077,8 +578,7 @@ export function installRenderer() {
          * its player source. */
         if (trackChanged) {
             invalidateAtmosphereLoads("lyrics-accepted");
-            state.atmosphereFailedKey = "";
-            state.atmosphereLastCheck = 0;
+            artwork.trackChanged();
             scheduleDynamicBackgroundProbeBurst("lyrics-accepted");
         }
 
@@ -1089,9 +589,7 @@ export function installRenderer() {
         state.lastActiveLineSignature = "";
         state.activeLineIndexes = [];
         resetMotionHandoffs();
-        state.lyricAutoFollowSuspendedUntil = 0;
-        state.lyricAutoFollowLastIndex = -1;
-        state.lyricAutoFollowLastReason = "lyrics-accepted";
+        autoFollow.reset("lyrics-accepted");
         state.lineEndPrefix = [];
         state.instrumentalGaps = [];
         state.activeInstrumentalGapIndex = -1;
@@ -1138,13 +636,10 @@ export function installRenderer() {
         applySongPreferences,
         persistCurrentSongPreference,
     } = createSongPreferences({
-        TIMING_OFFSET_MIN_SECONDS,
-        TIMING_OFFSET_MAX_SECONDS,
         state,
-        SONG_PREFERENCES_STORAGE_KEY,
+        resetTimingInteraction: () => controls.resetTimingInteraction(),
         lyricSignature: (...args) => lyricSignature(...args),
         stableHash: (...args) => stableHash(...args),
-        SONG_PREFERENCES_MAX_ENTRIES,
         updateRomanizationToggleUi: (...args) => updateRomanizationToggleUi(...args),
         updateTimingControlsUi: (...args) => updateTimingControlsUi(...args),
     });
@@ -1152,55 +647,17 @@ export function installRenderer() {
     const { cancelPronunciationRequests, lyricsHaveNativeScript, requestGoogleRomanizationForLyrics, displayLyricForCurrentMode } =
         createPronunciationController({
             lifecycle,
-            GOOGLE_ROMANIZATION_TIMEOUT_MS,
-            GOOGLE_ROMANIZATION_MAX_RETRIES,
-            GOOGLE_ROMANIZATION_RETRY_DELAY_MS,
             state,
-            GOOGLE_ROMANIZATION_CACHE_MAX_ENTRIES,
-            GOOGLE_ROMANIZATION_MAX_TEXT_CHARS,
-            GOOGLE_ROMANIZATION_CONCURRENCY,
             redecorateForRomanization: (...args) => redecorateForRomanization(...args),
             warn: (...args) => warn(...args),
         });
 
     const calculateLineBounds = (lyric: LyricInput, lineIndex: number, words: RenderWord[], cues: CueInput[], rawTextLength: number) =>
         timelineBounds(state.lyrics, lyric, lineIndex, words, cues, rawTextLength);
-    const {
-        formatTimingOffset,
-        updateTimingControlsUi,
-        invalidateTimingPaintState,
-        setTimingOffsetSeconds,
-        adjustTimingOffsetSeconds,
-        resetTimingOffsetValue,
-        undoTimingOffset,
-        suppressJellyfinLyricAutoFollow,
-        updateLyricSyncButton,
-        lyricPlaybackFollowIndex,
-        focusLyricLineIndex,
-        refreshLyricScrollSpace,
-        installLyricAutoFollowHooks,
-        installLyricSeekInteractionHooks,
-        stopTimingSyncMode,
-        beginTimingSyncMode,
-        removeTimingControls,
-        ensureTimingControls,
-        removeRomanizationToggle,
-        updateRomanizationToggleUi,
-        ensureRomanizationToggle,
-        redecorateForRomanization,
-        setRomanizationMode,
-        prepareRomanizationForLyrics,
-    } = createControlsPreferences({
+    const autoFollow = createAutoFollow({
         state,
-        clampTimingOffsetSeconds: (...args) => clampTimingOffsetSeconds(...args),
-        resetWordMotion: (...args) => resetWordMotion(...args),
-        wakeAnimationLoop: (...args) => wakeAnimationLoop(...args),
-        persistCurrentSongPreference: (...args) => persistCurrentSongPreference(...args),
-        finiteNumber: (...args) => finiteNumber(...args),
-        resetPlaybackClock: (...args) => resetPlaybackClock(...args),
-        chooseTimelineTicks: (...args) => chooseTimelineTicks(...args),
-        TICKS_PER_SECOND,
-        getLocalMediaElement: (...args) => getLocalMediaElement(...args),
+        lifecycle,
+        isTimingPickActive: () => controls.isTimingPickActive(),
         motion: {
             get query() {
                 return reducedMotionMediaQuery;
@@ -1209,53 +666,56 @@ export function installRenderer() {
                 reducedMotionMediaQuery = value;
             },
         },
+    });
+    const {
+        suppressJellyfinLyricAutoFollow,
+        updateLyricSyncButton,
+        lyricPlaybackFollowIndex,
+        focusLyricLineIndex,
+        refreshLyricScrollSpace,
+        installLyricAutoFollowHooks,
+    } = autoFollow;
+    const controls = createControlsPreferences({
+        state,
+        clampTimingOffsetSeconds: (...args) => clampTimingOffsetSeconds(...args),
+        resetWordMotion: (...args) => resetWordMotion(...args),
+        wakeAnimationLoop: (...args) => wakeAnimationLoop(...args),
+        persistCurrentSongPreference: (...args) => persistCurrentSongPreference(...args),
+        finiteNumber: (...args) => finiteNumber(...args),
+        resetPlaybackClock: (...args) => resetPlaybackClock(...args),
+        chooseTimelineTicks: (...args) => chooseTimelineTicks(...args),
+        getLocalMediaElement: (...args) => getLocalMediaElement(...args),
+        autoFollow,
         lifecycle,
         warn: (...args) => warn(...args),
         sourceTimelineTicks: (...args) => sourceTimelineTicks(...args),
-        TIMING_OFFSET_FINE_STEP_SECONDS,
         queueDecoration: (...args) => queueDecoration(...args),
         requestGoogleRomanizationForLyrics: (...args) => requestGoogleRomanizationForLyrics(...args),
         lyricsHaveNativeScript: (...args) => lyricsHaveNativeScript(...args),
         loadSongPreferences: (...args) => loadSongPreferences(...args),
     });
-
-    function createSvgElement(name: string, attributes: Record<string, string | number> | null = null) {
-        const node = document.createElementNS(SVG_NS, name);
-
-        if (attributes) {
-            Object.entries(attributes).forEach(([key, value]) => {
-                node.setAttribute(key, String(value));
-            });
-        }
-
-        return node;
-    }
-
-    const INSTRUMENTAL_NOTE_PATH =
-        "M18.15 72.25C10.90 72.25 5.75 68.35 5.75 62.85" +
-        "C5.75 56.75 12.10 51.55 20.25 51.55" +
-        "C24.55 51.55 28.15 52.70 30.75 54.60" +
-        "V13.45C30.75 11.65 32.20 10.20 34.00 10.20H37.05" +
-        "C47.90 10.20 56.20 15.10 59.10 23.35" +
-        "C60.55 27.45 60.10 31.60 58.00 35.00" +
-        "C53.35 31.30 47.05 29.10 38.55 28.70V59.10" +
-        "C38.55 66.65 29.80 72.25 18.15 72.25Z";
-
-    function appendInstrumentalNoteShape(parent: SVGElement, className = "") {
-        if (!parent) return;
-
-        /* One closed silhouette is used for base paint, liquid paint and clip.
-         * The previous ellipse+rect+flag construction could expose seams at
-         * fractional scaling and made the moving clip look broken in Chromium. */
-        const shape = createSvgElement("path", {
-            d: INSTRUMENTAL_NOTE_PATH,
-            "fill-rule": "nonzero",
-            "clip-rule": "nonzero",
-        });
-
-        if (className) shape.setAttribute("class", className);
-        parent.appendChild(shape);
-    }
+    const {
+        formatTimingOffset,
+        updateTimingControlsUi,
+        invalidateTimingPaintState,
+        setTimingOffsetSeconds,
+        adjustTimingOffsetSeconds,
+        resetTimingOffsetValue,
+        undoTimingOffset,
+        stopTimingSyncMode,
+        beginTimingSyncMode,
+        installLyricSeekInteractionHooks,
+        removeTimingControls,
+        ensureTimingControls,
+        removeRomanizationToggle,
+        updateRomanizationToggleUi,
+        ensureRomanizationToggle,
+        redecorateForRomanization,
+        setRomanizationMode,
+        prepareRomanizationForLyrics,
+        resetTimingInteraction,
+        removeTools,
+    } = controls;
 
     function prefersReducedMotion() {
         if (renderQuality === "low-power") return true;
@@ -1270,457 +730,20 @@ export function installRenderer() {
         }
     }
 
-    function instrumentalWaveMotionAllowed() {
-        return !prefersReducedMotion();
-    }
-
-    function instrumentalWaveGeometry(gap: RenderGap, progress: number, ticks: number | null = null) {
-        const normalized = clamp01(finiteNumber(progress, 0));
-        const baseY = INSTRUMENTAL_NOTE_VIEWBOX_HEIGHT * (1 - normalized);
-
-        /*
-         * The liquid surface remains alive through most of the break, then
-         * intentionally settles before the next vocal arrives. Motion is
-         * derived from media time, not a free-running CSS timer, so pause and
-         * seek are deterministic. Reduced-motion clients receive the
-         * same fill progression with a flat surface.
-         */
-        const riseIn = smoothstepBetween(0.015, 0.09, normalized);
-        const flattenOut = 1 - smoothstepBetween(0.68, 0.98, normalized);
-        const amplitude = instrumentalWaveMotionAllowed() ? INSTRUMENTAL_WAVE_MAX_AMPLITUDE * riseIn * flattenOut : 0;
-
-        const elapsedSeconds = gap ? Math.max(0, (finiteNumber(ticks, gap.startTicks) - gap.startTicks) / TICKS_PER_SECOND) : 0;
-        const phase = (elapsedSeconds / INSTRUMENTAL_WAVE_PERIOD_SECONDS) * Math.PI * 2;
-
-        const points = [];
-        for (let index = 0; index <= INSTRUMENTAL_WAVE_SEGMENTS; index += 1) {
-            const ratio = index / INSTRUMENTAL_WAVE_SEGMENTS;
-            const x = INSTRUMENTAL_NOTE_VIEWBOX_WIDTH * ratio;
-            const y = Math.max(0, Math.min(INSTRUMENTAL_NOTE_VIEWBOX_HEIGHT, baseY + amplitude * Math.sin(phase + ratio * Math.PI * 2)));
-
-            points.push([x, y]);
-        }
-
-        const surfacePath = points
-            .map((point, index: number) => `${index ? "L" : "M"}${requireValue(point[0]).toFixed(3)} ${requireValue(point[1]).toFixed(3)}`)
-            .join(" ");
-        const fillPath =
-            `${surfacePath} ` +
-            `L${INSTRUMENTAL_NOTE_VIEWBOX_WIDTH} ${INSTRUMENTAL_NOTE_VIEWBOX_HEIGHT} ` +
-            `L0 ${INSTRUMENTAL_NOTE_VIEWBOX_HEIGHT} Z`;
-
-        return {
-            baseY,
-            amplitude,
-            phase,
-            fillPath,
-            surfacePath,
-        };
-    }
-
-    function setInstrumentalGapFill(gap: RenderGap, progress: number, ticks: number | null = null) {
-        if (!gap || !gap.element) return 0;
-
-        const normalized = clamp01(finiteNumber(progress, 0));
-        const geometry = instrumentalWaveGeometry(gap, normalized, ticks);
-
-        if (gap.fillClipElement) {
-            gap.fillClipElement.setAttribute("d", geometry.fillPath);
-        }
-
-        if (gap.surfaceElement) {
-            gap.surfaceElement.setAttribute("d", geometry.surfacePath);
-            gap.surfaceElement.style.opacity = normalized > 0.02 && normalized < 0.992 ? "1" : "0";
-        }
-
-        gap.lastProgress = normalized;
-        gap.lastWavePhase = geometry.phase;
-        gap.lastWaveAmplitude = geometry.amplitude;
-        return normalized;
-    }
-
-    function setInstrumentalGapPhase(gap: RenderGap | null | undefined, phase: string) {
-        if (!gap || !gap.element || gap.visualPhase === phase) {
-            return false;
-        }
-
-        gap.visualPhase = phase;
-        gap.element.classList.toggle("ak-future", phase === "future");
-        gap.element.classList.toggle("ak-active", phase === "active");
-        gap.element.classList.toggle("ak-past", phase === "past");
-
-        if (phase === "future") {
-            setInstrumentalGapFill(gap, 0);
-        } else if (phase === "past") {
-            setInstrumentalGapFill(gap, 1);
-        }
-
-        return true;
-    }
-
-    function instrumentalPastCountAtTicks(ticks: number) {
-        const gaps = state.instrumentalGaps;
-        if (!gaps.length) return 0;
-
-        const now = finiteNumber(ticks, 0);
-        let low = 0;
-        let high = gaps.length;
-
-        /* Upper-bound search on endTicks: number of fully completed gaps. */
-        while (low < high) {
-            const middle = (low + high) >> 1;
-            if (requireValue(gaps[middle]).endTicks <= now) {
-                low = middle + 1;
-            } else {
-                high = middle;
-            }
-        }
-
-        return low;
-    }
-
-    function syncInstrumentalGapPhases(ticks: number, activeGap: RenderGap | null = null) {
-        const gaps = state.instrumentalGaps;
-        if (!gaps.length) {
-            state.instrumentalPastCount = 0;
-            state.instrumentalPhaseActiveIndex = -1;
-            return;
-        }
-
-        const pastCount = instrumentalPastCountAtTicks(ticks);
-        const previousPastCount = Math.max(0, Math.min(gaps.length, state.instrumentalPastCount || 0));
-        const activeIndex = activeGap ? finiteNumber(activeGap.index, -1) : -1;
-        const previousActiveIndex = finiteNumber(state.instrumentalPhaseActiveIndex, -1);
-
-        /*
-         * Normal playback crosses at most one boundary at a time. Update only
-         * rows whose phase can have changed instead of rescanning every
-         * instrumental row on every animation frame. Arbitrary seeks remain
-         * correct because the changed past/future range is replayed here.
-         */
-        if (pastCount > previousPastCount) {
-            for (let index = previousPastCount; index < pastCount; index += 1) {
-                if (index !== activeIndex) {
-                    setInstrumentalGapPhase(gaps[index], "past");
-                }
-            }
-        } else if (pastCount < previousPastCount) {
-            for (let index = pastCount; index < previousPastCount; index += 1) {
-                if (index !== activeIndex) {
-                    setInstrumentalGapPhase(gaps[index], "future");
-                }
-            }
-        }
-
-        if (previousActiveIndex >= 0 && previousActiveIndex < gaps.length && previousActiveIndex !== activeIndex) {
-            setInstrumentalGapPhase(gaps[previousActiveIndex], previousActiveIndex < pastCount ? "past" : "future");
-        }
-
-        if (activeIndex >= 0 && activeIndex < gaps.length) {
-            setInstrumentalGapPhase(gaps[activeIndex], "active");
-        }
-
-        state.instrumentalPastCount = pastCount;
-        state.instrumentalPhaseActiveIndex = activeIndex;
-    }
-
-    function createInstrumentalGapRow(gap: RenderGap) {
-        if (!gap) return null;
-
-        const row = document.createElement("div");
-        row.className = "ak-instrumental-gap-line ak-future";
-        row.dataset.akInstrumentalGap = String(gap.index);
-        row.dataset.akInstrumentalNextLine = String(gap.nextLineIndex);
-
-        const note = document.createElement("span");
-        note.className = "ak-instrumental-note";
-        note.setAttribute("role", "button");
-        note.setAttribute("tabindex", "0");
-        note.setAttribute("aria-label", `Seek to start of ${Math.max(0, gap.durationTicks / TICKS_PER_SECOND).toFixed(1)} second instrumental break`);
-        note.setAttribute("title", "Enter or click to seek to the instrumental break; Space plays or pauses");
-
-        const svg = createSvgElement("svg", {
-            class: "ak-instrumental-note-svg",
-            viewBox: `0 0 ${INSTRUMENTAL_NOTE_VIEWBOX_WIDTH} ${INSTRUMENTAL_NOTE_VIEWBOX_HEIGHT}`,
-            "aria-hidden": "true",
-            focusable: "false",
-            role: "presentation",
-        });
-
-        const defs = createSvgElement("defs");
-        const idRoot = `ak-instrumental-${state.generation}-${gap.index}`;
-        const fillClipId = `${idRoot}-fill`;
-        const shapeClipId = `${idRoot}-shape`;
-
-        const fillClip = createSvgElement("clipPath", {
-            id: fillClipId,
-            clipPathUnits: "userSpaceOnUse",
-        });
-        const fillWave = createSvgElement("path", {
-            d:
-                `M0 ${INSTRUMENTAL_NOTE_VIEWBOX_HEIGHT} ` +
-                `L${INSTRUMENTAL_NOTE_VIEWBOX_WIDTH} ${INSTRUMENTAL_NOTE_VIEWBOX_HEIGHT} ` +
-                `L${INSTRUMENTAL_NOTE_VIEWBOX_WIDTH} ${INSTRUMENTAL_NOTE_VIEWBOX_HEIGHT} ` +
-                `L0 ${INSTRUMENTAL_NOTE_VIEWBOX_HEIGHT} Z`,
-        });
-        fillClip.appendChild(fillWave);
-
-        const shapeClip = createSvgElement("clipPath", {
-            id: shapeClipId,
-            clipPathUnits: "userSpaceOnUse",
-        });
-        appendInstrumentalNoteShape(shapeClip);
-
-        defs.appendChild(fillClip);
-        defs.appendChild(shapeClip);
-        svg.appendChild(defs);
-
-        const base = createSvgElement("g", {
-            class: "ak-instrumental-note-base-vector",
-        });
-        appendInstrumentalNoteShape(base);
-        svg.appendChild(base);
-
-        const liquid = createSvgElement("g", {
-            class: "ak-instrumental-note-liquid",
-            "clip-path": `url(#${fillClipId})`,
-        });
-        appendInstrumentalNoteShape(liquid);
-        svg.appendChild(liquid);
-
-        const surface = createSvgElement("path", {
-            class: "ak-instrumental-note-surface",
-            d: `M0 ${INSTRUMENTAL_NOTE_VIEWBOX_HEIGHT} ` + `L${INSTRUMENTAL_NOTE_VIEWBOX_WIDTH} ${INSTRUMENTAL_NOTE_VIEWBOX_HEIGHT}`,
-            "clip-path": `url(#${shapeClipId})`,
-        });
-        svg.appendChild(surface);
-
-        note.appendChild(svg);
-        row.appendChild(note);
-
-        gap.element = row;
-        gap.fillClipElement = fillWave;
-        gap.surfaceElement = surface;
-        gap.visualPhase = "future";
-        gap.lastProgress = 0;
-        setInstrumentalGapFill(gap, 0);
-
-        return row;
-    }
-
-    function removeInstrumentalGapRows(container: HTMLElement | null = null) {
-        state.instrumentalGaps.forEach((gap) => {
-            const element = gap && gap.element;
-
-            if (element && element.parentNode) {
-                try {
-                    element.parentNode.removeChild(element);
-                } catch {
-                    // Framework-owned lyric DOM can disappear during cleanup.
-                }
-            }
-        });
-
-        const root = container || getCurrentLyricsContainer(true);
-
-        if (root && typeof root.querySelectorAll === "function") {
-            try {
-                Array.from(root.querySelectorAll<HTMLElement>(".ak-instrumental-gap-line")).forEach((element: HTMLElement) => {
-                    if (element.parentNode) {
-                        element.parentNode.removeChild(element);
-                    }
-                });
-            } catch {
-                // Best-effort stale-row cleanup only.
-            }
-        }
-
-        state.instrumentalGaps = [];
-        state.activeInstrumentalGapIndex = -1;
-        state.instrumentalPhaseActiveIndex = -1;
-        state.instrumentalPastCount = 0;
-    }
-
-    function installInstrumentalGapRows(container: HTMLElement | null) {
-        removeInstrumentalGapRows(container);
-
-        const gaps = planInstrumentalGaps(state.lineData);
-
-        gaps.forEach((gap) => {
-            const nextLine = state.lineData[gap.nextLineIndex];
-            const nextElement = nextLine && nextLine.element;
-            const parent = nextElement && nextElement.parentNode;
-
-            if (!parent) return;
-
-            const row = createInstrumentalGapRow(gap);
-
-            if (!row) return;
-
-            /*
-             * Follow the upcoming lyric's base direction so mixed LTR/RTL
-             * songs place the synthetic note on the same reading lane instead
-             * of inheriting only the document direction.
-             */
-            try {
-                const direction = String(nextElement.getAttribute("dir") || "").toLowerCase();
-                if (direction === "rtl" || direction === "ltr") {
-                    row.setAttribute("dir", direction);
-                }
-            } catch {
-                // Direction is visual-only; never block lyric decoration.
-            }
-
-            parent.insertBefore(row, nextElement);
-        });
-
-        state.instrumentalGaps = gaps.filter((gap) => !!gap.element);
-        state.instrumentalGaps.forEach((gap, index: number) => {
-            gap.index = index;
-            if (gap.element) {
-                gap.element.dataset.akInstrumentalGap = String(index);
-            }
-        });
-        state.instrumentalGapMaxDurationTicks = state.instrumentalGaps.reduce((maximum, gap) => Math.max(maximum, gap.durationTicks), 0);
-        state.activeInstrumentalGapIndex = -1;
-        state.instrumentalPhaseActiveIndex = -1;
-        state.instrumentalPastCount = 0;
-
-        return state.instrumentalGaps;
-    }
-
-    function findInstrumentalGapInList(gaps: RenderGap[], ticks: number) {
-        if (!gaps || !gaps.length) return null;
-
-        let low = 0;
-        let high = gaps.length - 1;
-        let candidate = -1;
-
-        while (low <= high) {
-            const middle = (low + high) >> 1;
-            const gap = gaps[middle];
-
-            if (requireValue(gap).startTicks <= ticks) {
-                candidate = middle;
-                low = middle + 1;
-            } else {
-                high = middle - 1;
-            }
-        }
-
-        if (candidate < 0) return null;
-
-        const gap = gaps[candidate];
-
-        return ticks >= requireValue(gap).startTicks && ticks < requireValue(gap).endTicks ? gap : null;
-    }
-
-    function findInstrumentalGapAtTicks(ticks: number) {
-        return findInstrumentalGapInList(state.instrumentalGaps, ticks);
-    }
-
-    function instrumentalGapProgress(gap: RenderGap, ticks: number) {
-        if (!gap) return 0;
-
-        const duration = Math.max(1, finiteNumber(gap.durationTicks, 0));
-
-        return Math.max(0, Math.min(1, (finiteNumber(ticks, gap.startTicks) - gap.startTicks) / duration));
-    }
-
-    function instrumentalGapDistanceBand(lineIndex: number, nextLineIndex: number) {
-        const center = nextLineIndex - 0.5;
-        const distance = Math.abs(lineIndex - center);
-
-        /*
-         * No lyric line is the visual focus during an instrumental gap.
-         * Returning near/near2 here used to keep the lines immediately around
-         * the synthetic note too bright, making the completed lyric compete
-         * with the progress indicator. Preserve only the far-distance fade;
-         * the normal past/future phase opacity handles nearby lyrics.
-         */
-        if (distance >= 4.5) return "far";
-        return "middle";
-    }
-
-    function updateInstrumentalGapVisual(gap: RenderGap | null | undefined, ticks: number) {
-        const nextIndex = gap ? gap.index : -1;
-        const previousIndex = state.activeInstrumentalGapIndex;
-
-        if (previousIndex !== nextIndex) {
-            if (gap) {
-                state.instrumentalGapRenderCount += 1;
-            }
-            state.activeInstrumentalGapIndex = nextIndex;
-        }
-
-        /*
-         * Synthetic note rows remain visible as dim future/past lyric items,
-         * just like the surrounding text. This prevents the indicator from
-         * popping into existence at the exact gap boundary and also makes
-         * seek-back/seek-forward state deterministic.
-         */
-        syncInstrumentalGapPhases(ticks, gap ?? null);
-
-        if (!gap || !gap.element || !gap.element.isConnected || !gap.element.parentNode) {
-            return 0;
-        }
-
-        const progress = instrumentalGapProgress(gap, ticks);
-
-        const currentTicks = finiteNumber(ticks, gap.startTicks);
-        const playbackAdvanced = gap.lastRenderTicks !== currentTicks;
-        const animatedSurface = instrumentalWaveMotionAllowed();
-
-        if (
-            gap.lastProgress < 0 ||
-            Math.abs(progress - gap.lastProgress) >= INSTRUMENTAL_GAP_PROGRESS_EPSILON ||
-            (animatedSurface && playbackAdvanced)
-        ) {
-            setInstrumentalGapFill(gap, progress, currentTicks);
-            gap.lastRenderTicks = currentTicks;
-        }
-
-        return progress;
-    }
-
-    function inspectInstrumentalBreaks() {
-        const active = state.instrumentalGaps[state.activeInstrumentalGapIndex] || null;
-
-        return {
-            symbol: INSTRUMENTAL_GAP_SYMBOL,
-            visualRenderer: "inline-svg-liquid-wave-v3",
-            transitionModel: "future-active-past",
-            rectangularTextClipArtifact: false,
-            liquidSurface: "media-time-wave+progressive-flattening",
-            reducedMotionSurface: "flat",
-            seekable: true,
-            seekTarget: "gap-start",
-            keyboardActivation: "enter-seek-space-playback",
-            seekCount: state.instrumentalSeekCount,
-            minimumGapSeconds: INSTRUMENTAL_GAP_MIN_TICKS / TICKS_PER_SECOND,
-            detected: state.instrumentalGaps.length,
-            activeIndex: state.activeInstrumentalGapIndex,
-            active: active
-                ? {
-                      startSeconds: Number((active.startTicks / TICKS_PER_SECOND).toFixed(3)),
-                      endSeconds: Number((active.endTicks / TICKS_PER_SECOND).toFixed(3)),
-                      durationSeconds: Number((active.durationTicks / TICKS_PER_SECOND).toFixed(3)),
-                      nextLineIndex: active.nextLineIndex,
-                      intro: !!active.isIntro,
-                      progress: active.lastProgress >= 0 ? Number(active.lastProgress.toFixed(4)) : 0,
-                  }
-                : null,
-            renderCount: state.instrumentalGapRenderCount,
-            longestSeconds: Number((state.instrumentalGapMaxDurationTicks / TICKS_PER_SECOND).toFixed(3)),
-            gaps: state.instrumentalGaps.map((gap) => ({
-                startSeconds: Number((gap.startTicks / TICKS_PER_SECOND).toFixed(3)),
-                endSeconds: Number((gap.endTicks / TICKS_PER_SECOND).toFixed(3)),
-                durationSeconds: Number((gap.durationTicks / TICKS_PER_SECOND).toFixed(3)),
-                nextLineIndex: gap.nextLineIndex,
-                intro: !!gap.isIntro,
-            })),
-        };
-    }
+    const {
+        removeInstrumentalGapRows,
+        installInstrumentalGapRows,
+        findInstrumentalGapAtTicks,
+        instrumentalGapDistanceBand,
+        updateInstrumentalGapVisual,
+        inspectInstrumentalBreaks,
+    } = createInstrumentalView({
+        instrumentalSeekCount: () => controls.instrumentalSeekCount,
+        state,
+        finiteNumber,
+        prefersReducedMotion,
+        smoothstepBetween: (...args) => smoothstepBetween(...args),
+    });
 
     const {
         decorationInProgress,
@@ -1735,6 +758,7 @@ export function installRenderer() {
         queueDecoration,
         isMobileEnvironment,
     } = createLyricView({
+        invalidateFollowTarget: () => autoFollow.invalidateTarget(),
         displayLyricForCurrentMode: (...args) => displayLyricForCurrentMode(...args),
         state,
         createUntimedSpan: (...args) => createUntimedSpan(...args),
@@ -1744,7 +768,6 @@ export function installRenderer() {
         classifyWordMotion: (...args) => classifyWordMotion(...args),
         createWordSpan: (...args) => createWordSpan(...args),
         lifecycle,
-        TICKS_PER_SECOND,
         stableHash: (...args) => stableHash(...args),
         removeInstrumentalGapRows: (...args) => removeInstrumentalGapRows(...args),
         resetMotionHandoffs: (...args) => resetMotionHandoffs(...args),
@@ -1761,8 +784,6 @@ export function installRenderer() {
         queueMotionGeometryRefresh: (...args) => queueMotionGeometryRefresh(...args),
         ensureAnimationLoop: (...args) => ensureAnimationLoop(...args),
         warn: (...args) => warn(...args),
-        DECORATION_RETRY_WINDOW_MS,
-        DECORATION_RETRY_MS,
     });
 
     function readPerformanceMode() {
@@ -1799,7 +820,7 @@ export function installRenderer() {
         if (previous !== state.performanceProfile) {
             state.lastRenderedFrameAt = 0;
             invalidateAtmosphereLoads("performance-profile-change");
-            state.atmosphereLastCheck = 0;
+            artwork.requestRefresh();
             rebuildDynamicBackgroundRenderer("performance-profile-change");
         }
 
@@ -1874,11 +895,18 @@ export function installRenderer() {
         }
     }
 
+    const artwork = createArtworkController({
+        state,
+        applyPerformanceClassToPage: (...args) => applyPerformanceClassToPage(...args),
+        artworkLoader,
+        lifecycle,
+        getLocalMediaElement: (...args) => getLocalMediaElement(...args),
+        warn: (...args) => warn(...args),
+        prefersReducedMotion: (...args) => prefersReducedMotion(...args),
+    });
     const {
-        readAtmosphereMode,
         removeAtmosphereRoot,
         invalidateAtmosphereLoads,
-        clearDynamicProbeTimers,
         scheduleDynamicBackgroundProbeBurst,
         mediaItemId,
         currentLyricsItemId,
@@ -1889,34 +917,7 @@ export function installRenderer() {
         resizeDynamicBackgroundRenderer,
         refreshAtmosphere,
         maybeRefreshAtmosphere,
-    } = createArtworkController({
-        state,
-        applyPerformanceClassToPage: (...args) => applyPerformanceClassToPage(...args),
-        wakeAnimationLoop: (...args) => wakeAnimationLoop(...args),
-        artworkLoader,
-        lifecycle,
-        getLocalMediaElement: (...args) => getLocalMediaElement(...args),
-        warn: (...args) => warn(...args),
-        ATMOSPHERE_ART_MAX_WIDTH,
-        DYNAMIC_BACKGROUND_DOM_STABLE_MS,
-        DYNAMIC_BACKGROUND_UNBOUND_DOM_CONFIRM_MS,
-        DYNAMIC_BACKGROUND_INHERITED_DOM_STABLE_MS,
-        DYNAMIC_BACKGROUND_INHERITED_DOM_CONFIRM_MS,
-        ATMOSPHERE_IMAGE_TIMEOUT_MS,
-        prefersReducedMotion: (...args) => prefersReducedMotion(...args),
-        DYNAMIC_BACKGROUND_SETTINGS,
-        DYNAMIC_BACKGROUND_WEBGL_RETRY_MAX_MS,
-        DYNAMIC_BACKGROUND_WEBGL_RETRY_BASE_MS,
-        DYNAMIC_BACKGROUND_SOURCE,
-        DYNAMIC_BACKGROUND_ENGINE,
-        DYNAMIC_BACKGROUND_TRANSITION_MS,
-        DYNAMIC_BACKGROUND_WEAK_RECHECK_MS,
-        DYNAMIC_BACKGROUND_NO_ART_RETRY_MS,
-        DYNAMIC_BACKGROUND_DIRECT_GRACE_MS,
-        DYNAMIC_BACKGROUND_DIRECT_LOAD_TIMEOUT_MS,
-        DYNAMIC_BACKGROUND_DIRECT_RETRY_MS,
-        DYNAMIC_BACKGROUND_NO_ART_CONFIRM_MS,
-    });
+    } = artwork;
 
     function mediaElementScore(element: HTMLMediaElement) {
         if (!element || !element.isConnected) {
@@ -2167,7 +1168,6 @@ export function installRenderer() {
     const { sourceTimelineTicks, chooseTimelineTicks, cueEndTicks, resetMotionHandoffs, syncStaticLineStates, updateLineHandoffs } =
         createPlaybackCoordinator({
             finiteNumber: (...args) => finiteNumber(...args),
-            TICKS_PER_SECOND,
             clampTimingOffsetSeconds: (...args) => clampTimingOffsetSeconds(...args),
             state,
             projectedMediaSeconds: (...args) => projectedMediaSeconds(...args),
@@ -2178,7 +1178,6 @@ export function installRenderer() {
             motionHandoffActive: (...args) => motionHandoffActive(...args),
             setStaticWordState: (...args) => setStaticWordState(...args),
             resetWordMotion: (...args) => resetWordMotion(...args),
-            LINE_CLASS_NEIGHBORHOOD,
             motionContinuityGain: (...args) => motionContinuityGain(...args),
             updateMotionGlyphs: (...args) => updateMotionGlyphs(...args),
             updateWholeMotion: (...args) => updateWholeMotion(...args),
@@ -2360,7 +1359,7 @@ export function installRenderer() {
             }
 
             if (type === "loadedmetadata" || type === "playing" || type === "canplay" || type === "emptied") {
-                state.atmosphereLastCheck = 0;
+                artwork.requestRefresh();
                 scheduleDynamicBackgroundProbeBurst(`media-${type}`);
             }
 
@@ -2522,7 +1521,7 @@ export function installRenderer() {
                 if ((activeLineChanged || returningFromInstrumental) && !instrumentalGap && activeLine >= 0) {
                     // During the break the upcoming line is only a fade anchor.
                     // It still needs a fresh scroll when singing resumes.
-                    if (returningFromInstrumental) state.lyricAutoFollowLastIndex = -1;
+                    if (returningFromInstrumental) autoFollow.invalidateTarget();
                     const generation = state.generation;
                     lifecycle.frame(() => {
                         if (generation !== state.generation || activeLine !== state.lastActiveLine || state.lyricViewHidden) return;
@@ -2727,7 +1726,7 @@ export function installRenderer() {
             }
 
             if (artworkChanged) {
-                state.atmosphereLastCheck = 0;
+                artwork.requestRefresh();
                 const media = getLocalMediaElement(true);
                 if (media) {
                     refreshAtmosphere(media, true).catch((error: unknown) => warn("Dynamic Background artwork mutation refresh failed:", error));
@@ -2798,20 +1797,16 @@ export function installRenderer() {
                 queueDecoration();
                 ensureRomanizationToggle();
                 ensureTimingControls();
-                state.atmosphereMediaKey = "";
+                artwork.resetMediaIdentity();
                 state.lastActiveLine = -999;
                 state.lastActiveLineSignature = "";
                 state.activeLineIndexes = [];
-                state.lyricAutoFollowSuspendedUntil = 0;
-                state.lyricAutoFollowLastIndex = -1;
+                autoFollow.reset("media-change");
                 wakeAnimationLoop();
             } else {
                 removeRomanizationToggle();
                 removeTimingControls();
-                if (state.lyricToolsHost && state.lyricToolsHost.parentNode) {
-                    state.lyricToolsHost.parentNode.removeChild(state.lyricToolsHost);
-                }
-                state.lyricToolsHost = null;
+                removeTools();
                 cancelDecorationRetry(true);
 
                 if (state.geometryTimer) {
@@ -2821,8 +1816,7 @@ export function installRenderer() {
 
                 invalidateAtmosphereLoads("route-leave");
                 stopAnimationLoop("route-leave");
-                clearDynamicProbeTimers();
-                state.atmosphereDynamicProbeToken += 1;
+                artwork.cancelProbes();
                 removeAtmosphereRoot("route-leave");
             }
         });
@@ -2878,7 +1872,7 @@ export function installRenderer() {
 
                 resetPlaybackClock(getLocalMediaElement(true), performance.now());
                 wakeAnimationLoop();
-                if (state.atmosphereMode === "dynamic") startDynamicBackgroundRenderer();
+                startDynamicBackgroundRenderer();
             },
             { passive: true },
         );
@@ -2889,8 +1883,7 @@ export function installRenderer() {
             () => {
                 cancelDecorationRetry(true);
                 invalidateAtmosphereLoads("pagehide");
-                clearDynamicProbeTimers();
-                state.atmosphereDynamicProbeToken += 1;
+                artwork.cancelProbes();
                 stopAnimationLoop("pagehide");
                 stopDynamicBackgroundRenderer("pagehide");
             },
@@ -2904,7 +1897,7 @@ export function installRenderer() {
                 if (state.lyrics && isLyricsPage()) {
                     queueDecoration();
                     wakeAnimationLoop();
-                    if (state.atmosphereMode === "dynamic") startDynamicBackgroundRenderer();
+                    startDynamicBackgroundRenderer();
                 }
             },
             { passive: true },
@@ -2915,7 +1908,6 @@ export function installRenderer() {
      * LyricBridge is loaded first and passes accepted rich lyric models to this
      * renderer. Transport interception and response ordering belong to the bridge.
      */
-    state.atmosphereMode = readAtmosphereMode();
 
     state.performanceMode = readPerformanceMode();
 
@@ -2931,8 +1923,8 @@ export function installRenderer() {
             if (!eventElement(event)?.matches?.(".lyricPage")) return;
             state.lyricViewHidden = true;
             invalidateAtmosphereLoads("lyrics-view-hidden");
-            clearDynamicProbeTimers();
-            state.atmosphereDynamicProbeToken += 1;
+            artwork.cancelProbes();
+            artwork.cancelProbes();
             stopAnimationLoop("lyrics-view-hidden");
             stopDynamicBackgroundRenderer("lyrics-view-hidden");
         },
@@ -2961,87 +1953,14 @@ export function installRenderer() {
     installReducedMotionHook();
     installLyricVisualWatchdog();
 
-    function rendererFingerprint() {
-        const words: RenderWord[] = [];
-
-        state.lineData.forEach((line) => {
-            (line.words || []).forEach((word) => words.push(word));
-        });
-
-        const geometry = {
-            words: words.length,
-            perGlyphWords: 0,
-            rangeWords: 0,
-            canvasFallbackWords: 0,
-            wholeScriptWords: 0,
-            wholeFallbackWords: 0,
-        };
-
-        words.forEach((word) => {
-            const source = word.geometrySource || "unprepared";
-
-            if (word.motionGlyphs && word.motionGlyphs.length) {
-                geometry.perGlyphWords += 1;
-            }
-
-            if (source === "range") geometry.rangeWords += 1;
-            else if (source === "canvas-fallback") {
-                geometry.canvasFallbackWords += 1;
-            } else if (source === "whole-joining-or-profile") {
-                geometry.wholeScriptWords += 1;
-            } else if (source.indexOf("whole-") === 0) {
-                geometry.wholeFallbackWords += 1;
-            }
-        });
-
-        const reducedMotionRequested = prefersReducedMotion();
-
-        const currentWords: {
-            text: string;
-            motionMode: string;
-            paintMode: string;
-            geometrySource: string | undefined;
-            motionGlyphCount: number;
-            glowLayersPerGlyph: number;
-        }[] = [];
-
-        state.lineData.forEach((line) => {
-            if (!line.element.classList.contains("ak-current") && !line.element.classList.contains("ak-overlap-current")) {
-                return;
-            }
-
-            (line.words || []).forEach((word) => {
-                currentWords.push({
-                    text: word.text,
-                    motionMode: word.motionMode,
-                    paintMode: word.paintMode,
-                    geometrySource: word.geometrySource,
-                    motionGlyphCount: (word.motionGlyphs || []).length,
-                    glowLayersPerGlyph: word.motionGlyphs && word.motionGlyphs[0] ? (word.motionGlyphs[0].glowLayers || []).length : 0,
-                });
-            });
-        });
-
-        return {
-            version: VERSION,
-            visualSignature: UNIFIED_RENDERER_SIGNATURE,
-            requestedMode: state.performanceMode,
-            detectedProfile: state.performanceProfile,
-            fullQuality: state.performanceProfile === "desktop" || state.performanceProfile === "mobile",
-            targetFps: PERFORMANCE_TARGET_FPS[state.performanceProfile],
-            glowBuckets: glowBucketSteps(),
-            glowRenderer: "classic-bloom-prepainted-core+halo",
-            segmentSafeMotion: "per-grapheme-with-measured-fallback",
-            contextualScriptMotion: "grapheme-safe-akshara-bloom+whole-joining-fallback",
-            rtlSwipeDirection: "per-word-natural-reading-direction",
-            cueTokenization: "source-preserved-for-cjk-thai-lao-khmer-myanmar",
-            atmosphere: "kawarp-webgl:128px-preblur:domain-warp:260ms-godmode-transition",
-            reducedMotionRequested,
-            reducedMotionApplied: reducedMotionRequested,
-            geometry,
-            currentWords,
-        };
-    }
+    const { rendererFingerprint, performance: performanceDiagnostics } = createRendererDiagnostics({
+        artworkDiagnostics: () => artwork.diagnostics(),
+        state,
+        version: VERSION,
+        renderQuality: () => renderQuality,
+        prefersReducedMotion,
+        glowBucketSteps,
+    });
 
     const publicApi = Object.freeze({
         dispose() {
@@ -3053,7 +1972,7 @@ export function installRenderer() {
             removeRomanizationToggle();
             cancelDecorationRetry(true);
             invalidateAtmosphereLoads("dispose");
-            clearDynamicProbeTimers();
+            artwork.cancelProbes();
             stopAnimationLoop("dispose");
             removeAtmosphereRoot("dispose");
             lifecycle.dispose();
@@ -3103,6 +2022,7 @@ export function installRenderer() {
         renderQuality: () => renderQuality,
         setRomanization: setRomanizationMode,
         romanization() {
+            const interaction = controls.diagnostics();
             return {
                 mode: state.romanizationMode,
                 available: state.romanizationAvailable,
@@ -3111,7 +2031,7 @@ export function installRenderer() {
                 loadError: state.romanizationLoadError,
                 source: state.romanizationSource,
                 transformedLines: state.romanizationLineCount,
-                toggleCount: state.romanizationToggleCount,
+                toggleCount: interaction.romanizationToggleCount,
                 provider: "google-translate-dt-rm",
                 networkSources: true,
                 googleState: state.googleRomanizationState,
@@ -3142,6 +2062,8 @@ export function installRenderer() {
             return undoTimingOffset();
         },
         timing() {
+            const follow = autoFollow.diagnostics();
+            const interaction = controls.diagnostics();
             return {
                 seconds: state.timingOffsetSeconds,
                 sharedSeconds: state.sharedTimingOffsetSeconds,
@@ -3151,23 +2073,23 @@ export function installRenderer() {
                 stepSeconds: TIMING_OFFSET_STEP_SECONDS,
                 minSeconds: TIMING_OFFSET_MIN_SECONDS,
                 maxSeconds: TIMING_OFFSET_MAX_SECONDS,
-                changeCount: state.timingOffsetChangeCount,
-                syncPickActive: state.timingPickActive,
+                changeCount: interaction.timingOffsetChangeCount,
+                syncPickActive: controls.isTimingPickActive(),
                 correctedClickSeek: true,
                 autoFollow: {
-                    suspendedUntil: state.lyricAutoFollowSuspendedUntil,
-                    lastIndex: state.lyricAutoFollowLastIndex,
-                    lastAt: state.lyricAutoFollowLastAt,
-                    scrollCount: state.lyricAutoFollowScrollCount,
-                    manualScrollCount: state.lyricAutoFollowManualScrollCount,
-                    forceCount: state.lyricAutoFollowForceCount,
-                    lastReason: state.lyricAutoFollowLastReason,
-                    stockFollowerSuppressed: state.lyricStockAutoFollowSuppressCount > 0,
-                    stockSuppressCount: state.lyricStockAutoFollowSuppressCount,
-                    stockSuppressReason: state.lyricStockAutoFollowLastReason,
+                    suspendedUntil: autoFollow.suspendedUntil,
+                    lastIndex: follow.lyricAutoFollowLastIndex,
+                    lastAt: follow.lyricAutoFollowLastAt,
+                    scrollCount: follow.lyricAutoFollowScrollCount,
+                    manualScrollCount: follow.lyricAutoFollowManualScrollCount,
+                    forceCount: follow.lyricAutoFollowForceCount,
+                    lastReason: follow.lyricAutoFollowLastReason,
+                    stockFollowerSuppressed: follow.lyricStockAutoFollowSuppressCount > 0,
+                    stockSuppressCount: follow.lyricStockAutoFollowSuppressCount,
+                    stockSuppressReason: follow.lyricStockAutoFollowLastReason,
                 },
-                seekCount: state.lyricSeekCount,
-                lastSeekKind: state.lastLyricSeekKind,
+                seekCount: interaction.lyricSeekCount,
+                lastSeekKind: interaction.lastLyricSeekKind,
                 timelineFingerprint: timingTimelineFingerprint(),
                 songKey: state.songPreferenceKey,
             };
@@ -3175,111 +2097,12 @@ export function installRenderer() {
         backgroundVocals: inspectBackgroundVocals,
         instrumentalBreaks: inspectInstrumentalBreaks,
         rendererFingerprint,
-        performance() {
-            const current = state.lineData[state.lastActiveLine] || null;
-            return {
-                animationLoopErrors: state.animationLoopErrors,
-                animationLoopStarts: state.animationLoopStarts,
-                animationLoopStops: state.animationLoopStops,
-                lastAnimationLoopError: state.lastAnimationLoopError,
-                renderedFrameCount: state.renderedFrameCount,
-                mode: state.performanceMode,
-                profile: state.performanceProfile,
-                targetFps:
-                    state.timedCueCount > 0
-                        ? renderQuality === "low-power"
-                            ? 30
-                            : PERFORMANCE_TARGET_FPS[state.performanceProfile]
-                        : LRC_TARGET_FPS,
-                measuredFps: Number(state.measuredFps.toFixed(1)),
-                timedCueCount: state.timedCueCount,
-                perGlyphMotion: "multiscript-grapheme+whole-shaped",
-                playbackClock: "phase-locked-monotonic",
-                rafTargetGate: true,
-                skippedRafFrames: state.skippedRafFrames,
-                lyricVisualWatchdogMs: LYRIC_VISUAL_WATCHDOG_MS,
-                lyricFrameRecoveryMs: LYRIC_FRAME_RECOVERY_MS,
-                instrumentalSvg: "single-path-liquid-clip-v2",
-                lineTransitionCount: state.lineTransitionCount,
-                lastLineSyncCount: state.lastLineSyncCount,
-                maxLineSyncCount: state.maxLineSyncCount,
-                activeLineOnlyRendering: false,
-                activeSetOnlyRendering: true,
-                staticLinesUpdateOnlyOnLineChange: true,
-                normalLrcTargetFps: LRC_TARGET_FPS,
-                pausedTargetFps: PAUSED_TARGET_FPS,
-                adaptiveAlbumAtmosphere: true,
-                renderQuality,
-                atmosphereMode: "dynamic-only",
-                atmosphereArtwork: state.atmosphereArtwork,
-                atmosphereSource: state.atmosphereSource,
-                atmospherePendingKey: state.atmospherePendingKey,
-                atmospherePendingMs:
-                    state.atmospherePendingSince > 0 ? Number(Math.max(0, performance.now() - state.atmospherePendingSince).toFixed(1)) : 0,
-                atmosphereTimeoutCount: state.atmosphereTimeoutCount,
-                atmosphereDynamicPort: "chengggit-dynamic-background+kawarp-hardened+godmode-state-machine",
-                atmosphereDynamicSource: DYNAMIC_BACKGROUND_SOURCE,
-                atmosphereDynamicEngine: DYNAMIC_BACKGROUND_ENGINE,
-                atmosphereDynamicTransitionMs: DYNAMIC_BACKGROUND_TRANSITION_MS,
-                atmosphereColorExtraction: "none-direct-artwork-texture",
-                atmosphereVisualIdentity: "24x24-rgb+edge-perceptual-fingerprint",
-                atmosphereSameAlbumContinuity: true,
-                atmosphereLyricLifecycleIndependent: true,
-                atmosphereLatestMediaCommitOnly: true,
-                atmosphereDomFallbackStabilityDelayMs: DYNAMIC_BACKGROUND_DOM_STABLE_MS,
-                atmosphereUnboundDomConfirmMs: DYNAMIC_BACKGROUND_UNBOUND_DOM_CONFIRM_MS,
-                atmosphereInheritedDomStableMs: DYNAMIC_BACKGROUND_INHERITED_DOM_STABLE_MS,
-                atmosphereInheritedDomConfirmMs: DYNAMIC_BACKGROUND_INHERITED_DOM_CONFIRM_MS,
-                atmosphereDirectGraceMs: DYNAMIC_BACKGROUND_DIRECT_GRACE_MS,
-                atmosphereDirectLoadTimeoutMs: DYNAMIC_BACKGROUND_DIRECT_LOAD_TIMEOUT_MS,
-                atmosphereFastInheritedCommits: state.atmosphereDynamicFastInheritedCommits,
-                atmosphereWeakRecheckMs: DYNAMIC_BACKGROUND_WEAK_RECHECK_MS,
-                atmosphereNoArtConfirmMs: DYNAMIC_BACKGROUND_NO_ART_CONFIRM_MS,
-                atmosphereNoArtRetryMs: DYNAMIC_BACKGROUND_NO_ART_RETRY_MS,
-                atmosphereNoArtwork: state.atmosphereDynamicNoArtwork,
-                atmosphereWebglFailureCount: state.atmosphereDynamicWebglFailureCount,
-                atmosphereWebglRetryInMs: Math.max(0, state.atmosphereDynamicWebglRetryAt - performance.now()),
-                atmosphereAudioCoupled: false,
-                atmosphereRendering: state.atmosphereDynamicRenderer?.diagnostics() ?? null,
-                atmosphereLyricReactive: false,
-                atmosphereLiveCssBlur: false,
-                atmospherePrebakedBlur: true,
-                atmosphereStaleCommitDrops: state.atmosphereDynamicStaleCommitDrops,
-                atmosphereVisualDedupCount: state.atmosphereDynamicVisualDedupCount,
-                atmosphereFingerprintFailures: state.atmosphereDynamicFingerprintFailures,
-                atmosphereDirectLoadFailures: state.atmosphereDynamicDirectLoadFailures,
-                atmosphereDomFallbackCommits: state.atmosphereDynamicDomFallbackCommits,
-                atmosphereCrossfadeMs: DYNAMIC_BACKGROUND_TRANSITION_MS,
-                geometryAwareSwipe: true,
-                connectedScriptPaint: "shaped-spatial-wipe",
-                shapedWordCount: state.shapedWordCount,
-                scriptProfileCounts: Object.assign({}, state.scriptProfileCounts),
-                fontGeometryRefreshCount: state.fontGeometryRefreshCount,
-                wipeBaseEm: BASE_WIPE_GRADIENT_EM,
-                swipeSmoothingMs: WORD_PROGRESS_SMOOTH_TAU_MS,
-                currentMotionPlan: current
-                    ? (current.words || []).map((word) => ({
-                          word: word.text,
-                          motion: word.motionMode,
-                          glow: word.motionGlow,
-                          scriptProfile: word.scriptProfile,
-                          paintMode: word.paintMode,
-                          durationMs: Math.round(word.motionDurationMs),
-                          geometryReady: word.geometryReady,
-                          geometrySource: word.geometrySource,
-                          glyphOverlay: !!(word.motionGlyphs && word.motionGlyphs.length),
-                      }))
-                    : [],
-                graphemeSafeCueSplitting: true,
-                userToasts: false,
-            };
-        },
+        performance: performanceDiagnostics,
     });
 
     window.JellyfinLyricMotion = publicApi;
     const bridgeSnapshot = window.LyricBridge?.rendererSnapshot?.();
     if (bridgeSnapshot) publicApi.applyRichPayload(bridgeSnapshot.payload, bridgeSnapshot.itemId);
-    /* Maintained console alias; both globals own the same installation. */
 
     log(`v${VERSION} loaded`);
     return publicApi;

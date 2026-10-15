@@ -1,6 +1,6 @@
 /* This Source Code Form is subject to the Mozilla Public License, v. 2.0.
  * See https://mozilla.org/MPL/2.0/. Derived from the maintained LyricMotion fork. */
-import { nullableTick } from "./ticks.ts";
+import { finiteTick } from "./ticks.ts";
 export interface CueInput {
     [key: string]: unknown;
 }
@@ -25,7 +25,7 @@ export function orderedCuesBySourcePosition(cues: CueInput[] | null | undefined)
      * When positions are incomplete, provider array order is the only
      * stable ordering evidence we actually have.
      */
-    const positions = source.map((cue) => nullableTick(cueValue(cue, "Position", "position")));
+    const positions = source.map((cue) => finiteTick(cueValue(cue, "Position", "position")));
 
     if (positions.some((position) => position === null)) {
         return source.slice();
@@ -42,7 +42,7 @@ export function normalizedCueTextRanges(cues: CueInput[] | null | undefined, raw
     const textLength = Math.max(0, Number(rawTextLength) || 0);
     if (!source.length || !textLength) return [];
 
-    const positions = source.map((cue) => nullableTick(cueValue(cue, "Position", "position")));
+    const positions = source.map((cue) => finiteTick(cueValue(cue, "Position", "position")));
 
     /* Without source positions there is no reliable way to identify the
      * timed text. Rendering it as word karaoke creates transparent or
@@ -51,7 +51,7 @@ export function normalizedCueTextRanges(cues: CueInput[] | null | undefined, raw
 
     return source.reduce<CueRange[]>((ranges, cue, cueIndex) => {
         const rawStart = Math.max(0, Math.min(textLength, positions[cueIndex]!));
-        const explicitEnd = nullableTick(cueValue(cue, "EndPosition", "endPosition"));
+        const explicitEnd = finiteTick(cueValue(cue, "EndPosition", "endPosition"));
         let rawEnd = explicitEnd === null ? rawStart : Math.max(0, Math.min(textLength, explicitEnd));
 
         if (rawEnd <= rawStart) {
@@ -70,8 +70,14 @@ export function normalizedCueTextRanges(cues: CueInput[] | null | undefined, raw
                 return ranges;
             }
 
-            const nextPosition = positions.slice(cueIndex + 1).find((position) => position !== null && position > rawStart);
-            rawEnd = nextPosition === undefined ? textLength : Math.min(textLength, nextPosition!);
+            rawEnd = textLength;
+            for (let nextIndex = cueIndex + 1; nextIndex < positions.length; nextIndex++) {
+                const nextPosition = positions[nextIndex]!;
+                if (nextPosition !== null && nextPosition > rawStart) {
+                    rawEnd = Math.min(textLength, nextPosition);
+                    break;
+                }
+            }
         }
 
         if (rawEnd > rawStart) {

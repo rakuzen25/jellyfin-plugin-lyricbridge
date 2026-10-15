@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createPronunciationController } from "./pronunciation-controller.ts";
-import { RendererLifecycle } from "./lifecycle.ts";
+import { Lifecycle } from "../shared/lifecycle.ts";
 function fixture() {
     const state = {
         googleRomanizationCache: new Map<string, string>(),
@@ -18,17 +18,11 @@ function fixture() {
         romanizationLineCount: 0,
         romanizationAvailable: false,
     };
-    const lifecycle = new RendererLifecycle();
+    const lifecycle = new Lifecycle();
     return {
         ...createPronunciationController({
             state,
             lifecycle,
-            GOOGLE_ROMANIZATION_TIMEOUT_MS: 6000,
-            GOOGLE_ROMANIZATION_MAX_RETRIES: 3,
-            GOOGLE_ROMANIZATION_RETRY_DELAY_MS: 1000,
-            GOOGLE_ROMANIZATION_CACHE_MAX_ENTRIES: 1800,
-            GOOGLE_ROMANIZATION_MAX_TEXT_CHARS: 1500,
-            GOOGLE_ROMANIZATION_CONCURRENCY: 3,
             redecorateForRomanization: () => {},
             warn: () => {},
         }),

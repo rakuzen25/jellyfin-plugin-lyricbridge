@@ -1,6 +1,6 @@
 # Lyric matching and ranking
 
-Discovery, scheduled/native retrieval, explicit Search again, and manual search use `MatchingSession`. No ranking migration or background refresh is performed. Existing selections and local files stay immediate; administrators can deliberately select a conflicting result.
+Discovery, scheduled/native retrieval, explicit Search again, and manual search use `MatchingSession`. Existing selections and local files stay immediate; administrators can deliberately select a conflicting result.
 
 ## Recording eligibility
 

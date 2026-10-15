@@ -1,6 +1,6 @@
-# Shipped dependency and source review
+# Distribution licenses and source
 
-This review covers the locked shipped dependencies; renderer injection adds no new packaged dependency. `dependency-inventory.json` inside the plugin ZIP names every shipped assembly/dictionary file, its version, digest and notices. Artifact validation rejects unidentified binaries and missing material. The final hashes and executed gates belong to `dist/validation.json`.
+Distribute the locked shipped dependencies with their matching license and source material. `dependency-inventory.json` inside the plugin ZIP names every shipped assembly/dictionary file, its version, digest and notices. Artifact validation rejects unidentified binaries and missing material. The final hashes and executed gates belong to `dist/validation.json`.
 
 | Shipped component | Terms and corresponding material |
 | --- | --- |

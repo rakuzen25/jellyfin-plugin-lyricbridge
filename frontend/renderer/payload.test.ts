@@ -1,3 +1,4 @@
+import { normalizedCueTextRanges } from "./cue-ranges.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { lyricPayloadIdentity, normalizeLyricsPayload, lyricTextProfile, lyricTimingMode, usableWordCueRanges } from "./payload.ts";
@@ -79,4 +80,33 @@ test("original identity tracks cue boundaries and IDs without auxiliary metadata
     assert.equal(lyricPayloadIdentity([line]), lyricPayloadIdentity([{ ...line, translations: { en: "song" } }]));
     assert.notEqual(lyricPayloadIdentity([line]), lyricPayloadIdentity([{ ...line, Cues: [{ Position: 0, EndPosition: 1, Start: 1, End: 8 }] }]));
     assert.notEqual(lyricPayloadIdentity([line]), lyricPayloadIdentity([{ ...line, LyricBridgeId: "other" }]));
+});
+
+test("inferred cue ends retain empty markers, bounded positions and source order", () => {
+    const ranges = normalizedCueTextRanges([{ Position: 0 }, { Position: 0 }, { Position: 2 }, { Position: 1 }, { Position: 4 }], 5);
+    assert.deepEqual(
+        ranges.map(({ cueIndex, startPosition, endPosition }) => [cueIndex, startPosition, endPosition]),
+        [
+            [1, 0, 2],
+            [2, 2, 4],
+            [3, 1, 4],
+            [4, 4, 5],
+        ],
+    );
+    assert.deepEqual(normalizedCueTextRanges([{ Position: null }, { Position: 2 }], 5), []);
+    assert.deepEqual(normalizedCueTextRanges([{ Position: 6 }], 5), []);
+    assert.equal(normalizedCueTextRanges([{ Position: -1 }, { Position: 0 }, { Position: 2 }], 3)[0]?.endPosition, 2);
+});
+
+test("large cue rows preserve every adjacent text boundary", () => {
+    const count = 10000;
+    const ranges = normalizedCueTextRanges(
+        Array.from({ length: count }, (_, Position) => ({ Position })),
+        count,
+    );
+    assert.equal(ranges.length, count);
+    for (let index = 0; index < count; index++) {
+        assert.equal(ranges[index]?.startPosition, index);
+        assert.equal(ranges[index]?.endPosition, index + 1);
+    }
 });

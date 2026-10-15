@@ -111,5 +111,5 @@ public sealed class WorkflowConcurrencyTests : IDisposable
         Assert.False(store.CompleteGeneration(job, null));
         Assert.Null(store.GetJob(job.Id)); Assert.Null(store.GetDocument(lyrics.Hash));
     }
-    public void Dispose() { SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    public void Dispose() { TestHost.ClearDatabasePools(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
 }

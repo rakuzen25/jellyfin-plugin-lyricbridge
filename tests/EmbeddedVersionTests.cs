@@ -64,5 +64,5 @@ public sealed class EmbeddedVersionTests : IDisposable
         query.Build(item, user, true, new() { State = "ready", Lyrics = lyrics });
         Assert.Equal("queued", local.Status(lyrics, new()).State);
     }
-    public void Dispose() { SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    public void Dispose() { TestHost.ClearDatabasePools(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
 }

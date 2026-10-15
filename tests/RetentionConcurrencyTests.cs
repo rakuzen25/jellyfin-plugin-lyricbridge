@@ -83,6 +83,6 @@ public sealed class RetentionConcurrencyTests
             command.CommandText = "SELECT count(*) FROM record_references r WHERE NOT EXISTS(SELECT 1 FROM records d WHERE d.kind='document' AND d.id=r.hash)";
             Assert.Equal(0L, (long)command.ExecuteScalar()!);
         }
-        finally { SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+        finally { TestHost.ClearDatabasePools(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
 }

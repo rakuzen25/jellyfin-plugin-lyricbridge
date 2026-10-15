@@ -31,7 +31,7 @@ public sealed class SavedOriginalApiTests : IDisposable
         var preferences = new PreferenceService(store, () => new());
         var query = new LyricQueryService(null!, store, retrieval, discovery, preferences, local, languages, () => [], () => true);
         var maintenance = new ManagedLibraryMaintenance(store, discovery, generation, local, retrieval);
-        var controller = new Api(new(store, retrieval, discovery, null!, query), new(store), new(store), query, new(library), preferences, maintenance, generation, languages, discovery, local, null!);
+        var controller = new Api(new(store, retrieval, discovery, null!, query), new(store), new(store), query, new(library), preferences, maintenance, generation, languages, discovery, local, null!, new Lazy<Plugin>(() => TestHost.CreatePlugin(directory)));
         controller.ControllerContext = new() { HttpContext = new DefaultHttpContext() };
         var deniedSelect = Assert.IsType<JsonResult>(controller.SelectOriginal(item.Id, first.Hash)); Assert.Equal(403, deniedSelect.StatusCode);
         var deniedDelete = Assert.IsType<JsonResult>(controller.DeleteOriginal(item.Id, first.Hash, new(true, store.SavedOriginals(item.Id).Single(o => o.Hash == first.Hash).Revision))); Assert.Equal(403, deniedDelete.StatusCode);
@@ -66,5 +66,5 @@ public sealed class SavedOriginalApiTests : IDisposable
         store.SelectOriginal(item.Id, first); Assert.Equal(first, store.Selection(item.Id).Lyrics!.Hash);
     }
     private static string Snapshot(Store store) => Codec.Serialize(new { Documents = store.All<RichLyrics>("document"), Variants = store.All<Variant>("variant"), Originals = store.All<SavedOriginal>("saved-original"), Jobs = store.All<Job>("job"), Selections = store.All<RichLyrics>("selected"), Choices = store.All<AuxiliarySelection>("auxiliary-choice") });
-    public void Dispose() { SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    public void Dispose() { TestHost.ClearDatabasePools(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
 }

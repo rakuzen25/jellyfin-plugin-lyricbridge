@@ -1,6 +1,6 @@
 /* This Source Code Form is subject to the Mozilla Public License, v. 2.0.
  * See https://mozilla.org/MPL/2.0/. Derived shader notices: vendor/DYNAMIC-BACKGROUND-LICENSE and vendor/KAWARP-LICENSE. */
-import type { RendererLifecycle } from "./lifecycle.ts";
+import type { Lifecycle } from "../shared/lifecycle.ts";
 export interface BackgroundOptions {
     blurSize?: number;
     warpIntensity?: number;
@@ -18,11 +18,9 @@ export interface BackgroundOptions {
     maxFps?: number;
     onContextLost?: () => void;
     onContextRestored?: () => void;
-    onTransitionInterrupted?: (count: number) => void;
-    onTransitionComplete?: (count: number) => void;
 }
 export interface BackgroundEnvironment {
-    lifecycle: RendererLifecycle;
+    lifecycle: Lifecycle;
     isVisible(): boolean;
     isPaused(): boolean;
     reducedMotion(): boolean;
@@ -54,8 +52,6 @@ export class DynamicBackgroundRenderer {
     _onRestored: EventListener | null;
     onContextLost: (() => void) | null;
     onContextRestored: (() => void) | null;
-    onTransitionInterrupted: ((count: number) => void) | null;
-    onTransitionComplete: ((count: number) => void) | null;
     blurSize: number;
     warpIntensity: number;
     blurPasses: number;
@@ -194,8 +190,6 @@ export class DynamicBackgroundRenderer {
             1000 / (typeof options.maxFps === "number" && Number.isFinite(options.maxFps) ? Math.max(1, Math.min(60, options.maxFps)) : 30);
         this.onContextLost = typeof options.onContextLost === "function" ? options.onContextLost : null;
         this.onContextRestored = typeof options.onContextRestored === "function" ? options.onContextRestored : null;
-        this.onTransitionInterrupted = typeof options.onTransitionInterrupted === "function" ? options.onTransitionInterrupted : null;
-        this.onTransitionComplete = typeof options.onTransitionComplete === "function" ? options.onTransitionComplete : null;
 
         this.isPlaying = false;
         this.renderedFrames = 0;
@@ -709,7 +703,6 @@ export class DynamicBackgroundRenderer {
         this.snapshotAlbumFBO = oldNext;
         this.isTransitioning = false;
         this.interruptedTransitions += 1;
-        if (this.onTransitionInterrupted) this.onTransitionInterrupted(this.interruptedTransitions);
     }
 
     commitTransition() {
@@ -717,7 +710,6 @@ export class DynamicBackgroundRenderer {
         [this.currentAlbumFBO, this.nextAlbumFBO] = [this.nextAlbumFBO, this.currentAlbumFBO];
         this.isTransitioning = false;
         this.completedTransitions += 1;
-        if (this.onTransitionComplete) this.onTransitionComplete(this.completedTransitions);
     }
 
     loadImageElement(source: TexImageSource) {

@@ -1,13 +1,14 @@
+import { TICKS_PER_SECOND, TIMING_OFFSET_FINE_STEP_SECONDS } from "./settings.ts";
 /* This Source Code Form is subject to the Mozilla Public License, v. 2.0.
  * See https://mozilla.org/MPL/2.0/. */
 import { icon as createIcon, type IconName } from "../shared/icons.ts";
 import { requireValue } from "../shared/invariants.ts";
+import { Lifecycle } from "../shared/lifecycle.ts";
 import type {} from "../shared/runtime.ts";
+import type { createAutoFollow } from "./auto-follow.ts";
+import { elementHasLiveLayout, getCurrentLyricPage, isLyricsPage } from "./host.ts";
 import type { AnimatedWord } from "./karaoke-animation.ts";
-import { elementHasLiveLayout, getCurrentLyricPage, getCurrentLyricsContainer, isLyricsPage } from "./host.ts";
-import { RendererLifecycle } from "./lifecycle.ts";
 import type { LyricInput } from "./payload.ts";
-import { scrollGeometry } from "./scrolling.ts";
 import type { RendererState } from "./state.ts";
 function isFiniteNumber(value: unknown): value is number {
     return typeof value === "number" && Number.isFinite(value);
@@ -16,53 +17,41 @@ function eventElement(event: Event): HTMLElement | null {
     return event.target instanceof HTMLElement ? event.target : null;
 }
 
+interface OwnedState {
+    lyricToolsHost: HTMLElement | null;
+    lyricToolsBar: HTMLElement | null;
+    timingControls: HTMLElement | null;
+    timingPopover: HTMLElement | null;
+    timingPopoverDismissInstalled: boolean;
+    timingPickActive: boolean;
+    timingPickListenerInstalled: boolean;
+    lyricSeekInteractionInstalled: boolean;
+    romanizationToggle: HTMLButtonElement | null;
+    romanizationToggleCount: number;
+    timingOffsetChangeCount: number;
+    lyricSeekCount: number;
+    instrumentalSeekCount: number;
+    lastLyricSeekKind: string;
+    timingUndo: number | null;
+}
+
 interface Dependencies {
     state: Pick<
         RendererState,
-        | "lyricToolsHost"
-        | "lyricToolsBar"
-        | "timingPopover"
         | "lyrics"
         | "timingOffsetSeconds"
-        | "timingUndo"
         | "sharedTimingOffsetSeconds"
-        | "timingControls"
-        | "timingPickActive"
         | "lastActiveLine"
         | "lastActiveLineSignature"
         | "activeLineIndexes"
         | "forceNextFrame"
         | "lineData"
         | "songPreferenceKey"
-        | "timingOffsetChangeCount"
-        | "lyricSeekCount"
-        | "instrumentalSeekCount"
-        | "lastLyricSeekKind"
-        | "lastLyricSeekSourceTicks"
-        | "lastLyricSeekMediaSeconds"
-        | "lyricStockAutoFollowSuppressCount"
-        | "lyricStockAutoFollowLastReason"
         | "lyricTimingMode"
-        | "lyricAutoFollowSuspendedUntil"
-        | "lyricAutoFollowLastReason"
-        | "lyricAutoFollowManualScrollCount"
-        | "lyricAutoFollowLastIndex"
-        | "lyricAutoFollowScroller"
-        | "lyricAutoFollowTargetTop"
-        | "lyricAutoFollowBehavior"
-        | "lyricAutoFollowLastAt"
-        | "lyricAutoFollowScrollCount"
-        | "lyricAutoFollowForceCount"
-        | "lyricAutoFollowInstalled"
         | "instrumentalGaps"
-        | "lyricSeekInteractionInstalled"
-        | "timingPickListenerInstalled"
-        | "timingPopoverDismissInstalled"
-        | "romanizationToggle"
         | "romanizationMode"
         | "romanizationAvailable"
         | "romanizationLineCount"
-        | "romanizationToggleCount"
         | "googleRomanizationCache"
         | "googleRomanizationFragmentCache"
         | "googleRomanizationAttempted"
@@ -82,13 +71,11 @@ interface Dependencies {
     finiteNumber: (value: unknown, fallback?: number) => number;
     resetPlaybackClock: (media?: HTMLMediaElement | null, frameNow?: number) => void;
     chooseTimelineTicks: (media: HTMLMediaElement | null, frameNow: number) => number | null;
-    TICKS_PER_SECOND: 10000000;
     getLocalMediaElement: (forceProbe?: boolean) => HTMLMediaElement | null;
-    motion: { query: MediaQueryList | null };
-    lifecycle: RendererLifecycle;
+    autoFollow: ReturnType<typeof createAutoFollow>;
+    lifecycle: Lifecycle;
     warn: (...args: unknown[]) => void;
     sourceTimelineTicks: (media: HTMLMediaElement | null, frameNow: number, projectClock?: boolean) => number | null;
-    TIMING_OFFSET_FINE_STEP_SECONDS: 0.1;
     queueDecoration: () => boolean;
     requestGoogleRomanizationForLyrics: () => void;
     lyricsHaveNativeScript: (lyrics: LyricInput[] | null) => boolean;
@@ -104,40 +91,56 @@ export function createControlsPreferences(dependencies: Dependencies) {
         finiteNumber,
         resetPlaybackClock,
         chooseTimelineTicks,
-        TICKS_PER_SECOND,
         getLocalMediaElement,
-        motion,
+        autoFollow,
         lifecycle,
         warn,
         sourceTimelineTicks,
-        TIMING_OFFSET_FINE_STEP_SECONDS,
         queueDecoration,
         requestGoogleRomanizationForLyrics,
         lyricsHaveNativeScript,
         loadSongPreferences,
     } = dependencies;
+    const { lyricLineIndexForTarget, suppressJellyfinLyricAutoFollow, resumeLyricAutoFollow, focusLyricLineIndex } = autoFollow;
+    const owned: OwnedState = {
+        lyricToolsHost: null,
+        lyricToolsBar: null,
+        timingControls: null,
+        timingPopover: null,
+        timingPopoverDismissInstalled: false,
+        timingPickActive: false,
+        timingPickListenerInstalled: false,
+        lyricSeekInteractionInstalled: false,
+        romanizationToggle: null,
+        romanizationToggleCount: 0,
+        timingOffsetChangeCount: 0,
+        lyricSeekCount: 0,
+        instrumentalSeekCount: 0,
+        lastLyricSeekKind: "",
+        timingUndo: null,
+    };
     function removeLyricsToolsHostIfEmpty() {
-        const host = state.lyricToolsHost;
-        const bar = state.lyricToolsBar;
+        const host = owned.lyricToolsHost;
+        const bar = owned.lyricToolsBar;
 
         if (bar && (!bar.isConnected || !bar.childElementCount)) {
             if (bar.parentNode) bar.parentNode.removeChild(bar);
-            state.lyricToolsBar = null;
+            owned.lyricToolsBar = null;
         }
 
         if (!host || !host.isConnected) {
-            state.lyricToolsHost = null;
-            state.lyricToolsBar = null;
+            owned.lyricToolsHost = null;
+            owned.lyricToolsBar = null;
             return;
         }
 
-        const hasPopover = !!(state.timingPopover && state.timingPopover.isConnected);
-        const hasBar = !!(state.lyricToolsBar && state.lyricToolsBar.isConnected && state.lyricToolsBar.childElementCount);
+        const hasPopover = !!(owned.timingPopover && owned.timingPopover.isConnected);
+        const hasBar = !!(owned.lyricToolsBar && owned.lyricToolsBar.isConnected && owned.lyricToolsBar.childElementCount);
 
         if (!hasPopover && !hasBar && host.parentNode) {
             host.parentNode.removeChild(host);
-            state.lyricToolsHost = null;
-            state.lyricToolsBar = null;
+            owned.lyricToolsHost = null;
+            owned.lyricToolsBar = null;
         }
     }
 
@@ -146,7 +149,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
         const page = getCurrentLyricPage();
         if (!page) return null;
 
-        let host = state.lyricToolsHost;
+        let host = owned.lyricToolsHost;
         if (!host || !host.isConnected) {
             host = document.createElement("div");
             host.className = "ak-lyrics-tools";
@@ -154,8 +157,8 @@ export function createControlsPreferences(dependencies: Dependencies) {
             host.setAttribute("role", "group");
             host.setAttribute("aria-label", "Lyric display controls");
             page.appendChild(host);
-            state.lyricToolsHost = host;
-            state.lyricToolsBar = null;
+            owned.lyricToolsHost = host;
+            owned.lyricToolsBar = null;
         } else if (host.parentNode !== page) {
             page.appendChild(host);
         }
@@ -166,13 +169,13 @@ export function createControlsPreferences(dependencies: Dependencies) {
         const host = ensureLyricsToolsHost();
         if (!host) return null;
 
-        let bar = state.lyricToolsBar;
+        let bar = owned.lyricToolsBar;
         if (!bar || !bar.isConnected) {
             bar = document.createElement("div");
             bar.className = "ak-lyrics-tools-bar";
             bar.dataset.akOwned = "1";
             host.insertBefore(bar, host.firstChild || null);
-            state.lyricToolsBar = bar;
+            owned.lyricToolsBar = bar;
         } else if (bar.parentNode !== host) {
             host.insertBefore(bar, host.firstChild || null);
         }
@@ -188,11 +191,11 @@ export function createControlsPreferences(dependencies: Dependencies) {
     }
 
     function rememberTimingUndo() {
-        state.timingUndo = state.timingOffsetSeconds;
+        owned.timingUndo = state.timingOffsetSeconds;
     }
 
     function updateTimingControlsUi() {
-        const sharedLabel = state.timingPopover?.querySelector<HTMLElement>(".ak-timing-shared-value");
+        const sharedLabel = owned.timingPopover?.querySelector<HTMLElement>(".ak-timing-shared-value");
         if (sharedLabel)
             sharedLabel.textContent =
                 "Shared: " +
@@ -200,7 +203,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
                 " s · Total: " +
                 (state.sharedTimingOffsetSeconds + state.timingOffsetSeconds).toFixed(1) +
                 " s";
-        const controls = state.timingControls;
+        const controls = owned.timingControls;
         if (controls) {
             const valueNode = controls.querySelector<HTMLElement>(".ak-timing-chip-value");
             const value = clampTimingOffsetSeconds(state.timingOffsetSeconds);
@@ -210,11 +213,11 @@ export function createControlsPreferences(dependencies: Dependencies) {
             controls.dataset.akTimingOffset = value.toFixed(1);
             controls.dataset.akTimingActive = Math.abs(value) >= 0.0001 ? "true" : "false";
             controls.setAttribute("aria-label", `Lyrics timing ${formatTimingOffset(value)}`);
-            controls.setAttribute("aria-expanded", state.timingPopover && state.timingPopover.isConnected ? "true" : "false");
+            controls.setAttribute("aria-expanded", owned.timingPopover && owned.timingPopover.isConnected ? "true" : "false");
             controls.title = `Lyrics timing ${formatTimingOffset(value)}`;
         }
 
-        const popover = state.timingPopover;
+        const popover = owned.timingPopover;
         if (!popover) return;
 
         const current = popover.querySelector<HTMLElement>(".ak-timing-current-value");
@@ -225,9 +228,9 @@ export function createControlsPreferences(dependencies: Dependencies) {
 
         if (sync) {
             const label = sync.querySelector(".lb-action-label");
-            if (label) label.textContent = state.timingPickActive ? "Tap lyric to sync…" : "Sync lyric to now";
-            sync.setAttribute("aria-pressed", String(state.timingPickActive));
-            sync.dataset.akTimingActive = state.timingPickActive ? "true" : "false";
+            if (label) label.textContent = owned.timingPickActive ? "Tap lyric to sync…" : "Sync lyric to now";
+            sync.setAttribute("aria-pressed", String(owned.timingPickActive));
+            sync.dataset.akTimingActive = owned.timingPickActive ? "true" : "false";
         }
 
         if (reset) {
@@ -268,7 +271,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
         if (rememberUndo) rememberTimingUndo();
 
         state.timingOffsetSeconds = normalized;
-        state.timingOffsetChangeCount += 1;
+        owned.timingOffsetChangeCount += 1;
 
         /* Jellyfin follows the uncorrected source line on every timeupdate.
          * Once an offset is changed, make LyricMotion the sole scroll owner so
@@ -296,12 +299,12 @@ export function createControlsPreferences(dependencies: Dependencies) {
     }
 
     function undoTimingOffset() {
-        if (state.timingUndo === null) return null;
-        const previous = clampTimingOffsetSeconds(state.timingUndo);
+        if (owned.timingUndo === null) return null;
+        const previous = clampTimingOffsetSeconds(owned.timingUndo);
         const current = state.timingOffsetSeconds;
-        state.timingUndo = null;
+        owned.timingUndo = null;
         const result = setTimingOffsetSeconds(previous, true, false);
-        state.timingUndo = current;
+        owned.timingUndo = current;
         updateTimingControlsUi();
         return result;
     }
@@ -404,282 +407,13 @@ export function createControlsPreferences(dependencies: Dependencies) {
         state.lastActiveLineSignature = "";
         state.activeLineIndexes = [];
         state.forceNextFrame = true;
-        state.lyricSeekCount += 1;
+        owned.lyricSeekCount += 1;
         if (kind === "instrumental") {
-            state.instrumentalSeekCount += 1;
+            owned.instrumentalSeekCount += 1;
         }
-        state.lastLyricSeekKind = kind;
-        state.lastLyricSeekSourceTicks = timelineTicks;
-        state.lastLyricSeekMediaSeconds = targetSeconds;
+        owned.lastLyricSeekKind = kind;
         wakeAnimationLoop();
         return true;
-    }
-
-    function lyricLineIndexForTarget(target: EventTarget | null) {
-        if (!(target instanceof Element)) return -1;
-
-        const lineElement = (target instanceof Element ? target : null)?.closest<HTMLElement>(".ak-enhanced-line");
-        if (!lineElement) return -1;
-
-        const lineIndex = Number(lineElement.dataset.akTimingLineIndex);
-
-        return Number.isInteger(lineIndex) && lineIndex >= 0 && lineIndex < state.lineData.length ? lineIndex : -1;
-    }
-
-    function lyricAutoFollowReducedMotion() {
-        try {
-            if (!motion.query && window.matchMedia) {
-                motion.query = window.matchMedia("(prefers-reduced-motion: reduce)");
-            }
-            return !!(motion.query && motion.query.matches);
-        } catch {
-            return false;
-        }
-    }
-
-    function suppressJellyfinLyricAutoFollow(reason: string = "lyric-motion-follow") {
-        if (typeof document === "undefined" || !isLyricsPage()) {
-            return false;
-        }
-
-        /* Jellyfin's lyrics controller disables its private autoScroll state
-         * on wheel/touchmove. There is no public controller API for this. A
-         * zero-delta synthetic wheel uses that controller path while our own
-         * capture listener explicitly ignores the internal event. */
-        try {
-            const event = new Event("wheel", {
-                bubbles: true,
-                cancelable: false,
-            });
-            Object.defineProperty(event, "akLyricMotionInternal", {
-                value: true,
-            });
-            document.dispatchEvent(event);
-        } catch {
-            return false;
-        }
-
-        state.lyricStockAutoFollowSuppressCount += 1;
-        state.lyricStockAutoFollowLastReason = reason;
-        return true;
-    }
-
-    let lyricSyncButton: HTMLButtonElement | null = null;
-    function updateLyricSyncButton() {
-        const show =
-            isLyricsPage() &&
-            state.lyrics &&
-            state.lyrics.length &&
-            state.lyricTimingMode !== "plain" &&
-            state.lyricAutoFollowSuspendedUntil === Infinity;
-        if (!lyricSyncButton && show) {
-            lyricSyncButton = document.createElement("button");
-            lyricSyncButton.className = "lb-button lb-sync";
-            lyricSyncButton.type = "button";
-            const label = document.createElement("span");
-            label.className = "lb-action-label";
-            label.textContent = "Sync";
-            lyricSyncButton.append(createIcon("follow"), label);
-            lyricSyncButton.setAttribute("aria-label", "Resume following the playing lyric");
-            lyricSyncButton.onclick = () => {
-                resumeLyricAutoFollow("sync-button");
-                const index = state.activeLineIndexes[0] ?? state.lastActiveLine;
-                focusLyricLineIndex(index, {
-                    force: true,
-                    reason: "sync-button",
-                });
-            };
-            document.body.append(lyricSyncButton);
-        }
-        if (lyricSyncButton) lyricSyncButton.hidden = !show;
-    }
-    function resumeLyricAutoFollow(reason: string = "resume") {
-        state.lyricAutoFollowSuspendedUntil = 0;
-        state.lyricAutoFollowLastReason = reason;
-        updateLyricSyncButton();
-    }
-
-    function suspendLyricAutoFollow(reason: string = "manual-scroll", _frameNow: number = performance.now()) {
-        state.lyricAutoFollowSuspendedUntil = Infinity;
-        updateLyricSyncButton();
-        state.lyricAutoFollowManualScrollCount += 1;
-        state.lyricAutoFollowLastReason = reason;
-    }
-
-    function lyricPlaybackFollowIndex(lineIndex: number) {
-        const line = state.lineData[lineIndex];
-        const anchor = line && line.backgroundVocalAnchorLineIndex;
-        return line && line.isBackgroundVocal && isFiniteNumber(anchor) && Number.isInteger(anchor) && state.activeLineIndexes.includes(anchor)
-            ? anchor
-            : lineIndex;
-    }
-
-    function focusLyricLineIndex(
-        lineIndex: number,
-        { force = false, behavior = "smooth", reason = "playback" }: { force?: boolean; behavior?: ScrollBehavior; reason?: string } = {},
-    ) {
-        if (!Number.isInteger(lineIndex) || lineIndex < 0 || lineIndex >= state.lineData.length) {
-            return false;
-        }
-
-        const lineRecord = state.lineData[lineIndex];
-        const element = lineRecord && lineRecord.element;
-        if (!element || element.isConnected === false || typeof element.scrollIntoView !== "function") {
-            return false;
-        }
-
-        const now = performance.now();
-
-        if (!force && (state.timingPickActive || now < state.lyricAutoFollowSuspendedUntil)) {
-            return false;
-        }
-
-        if (!force && state.lyricAutoFollowLastIndex === lineIndex) {
-            return false;
-        }
-
-        const resolvedBehavior = lyricAutoFollowReducedMotion() ? "auto" : behavior;
-
-        try {
-            refreshLyricScrollSpace();
-            const bounds = lyricScrollGeometry(element);
-            const rect = element.getBoundingClientRect();
-            const delta = (rect.top + rect.bottom) / 2 - bounds.center;
-            const target = bounds.scroller.scrollTop + delta;
-            // Do not cancel an in-flight smooth scroll with the same destination.
-            if (
-                reason === "layout-refresh" &&
-                state.lyricAutoFollowLastIndex === lineIndex &&
-                state.lyricAutoFollowScroller === bounds.scroller &&
-                Math.abs(target - requireValue(state.lyricAutoFollowTargetTop)) <= 8 &&
-                (Math.abs(delta) <= 8 || (state.lyricAutoFollowBehavior === "smooth" && now - state.lyricAutoFollowLastAt < 800))
-            )
-                return false;
-            bounds.scroller.scrollBy({
-                top: delta,
-                behavior: resolvedBehavior,
-            });
-            state.lyricAutoFollowScroller = bounds.scroller;
-            state.lyricAutoFollowTargetTop = target;
-            state.lyricAutoFollowBehavior = resolvedBehavior;
-        } catch {
-            return false;
-        }
-
-        state.lyricAutoFollowLastIndex = lineIndex;
-        state.lyricAutoFollowLastAt = now;
-        state.lyricAutoFollowScrollCount += 1;
-        state.lyricAutoFollowLastReason = reason;
-        if (force) state.lyricAutoFollowForceCount += 1;
-        return true;
-    }
-
-    const lyricScrollGeometry = (element: HTMLElement) =>
-        scrollGeometry(element, (element) => element instanceof HTMLElement && elementHasLiveLayout(element));
-    let scrollSpaceCache:
-        | {
-              container: HTMLElement;
-              records: typeof state.lineData;
-              width: number;
-              height: number;
-              firstHeight: number;
-              lastHeight: number;
-              picking: boolean;
-          }
-        | undefined;
-    function refreshLyricScrollSpace(force = false) {
-        const container = getCurrentLyricsContainer(true);
-        if (!container || !state.lineData.length) return;
-        const first = state.lineData.find((line) => !line.isBackgroundVocal)?.element;
-        const last = [...state.lineData].reverse().find((line) => !line.isBackgroundVocal)?.element;
-        if (!first || !last) return;
-        const firstHeight = first.getBoundingClientRect().height;
-        const lastHeight = last.getBoundingClientRect().height;
-        if (
-            !force &&
-            scrollSpaceCache?.container === container &&
-            scrollSpaceCache.records === state.lineData &&
-            scrollSpaceCache.width === innerWidth &&
-            scrollSpaceCache.height === innerHeight &&
-            scrollSpaceCache.firstHeight === firstHeight &&
-            scrollSpaceCache.lastHeight === lastHeight &&
-            scrollSpaceCache.picking === state.timingPickActive
-        )
-            return;
-        scrollSpaceCache = {
-            container,
-            records: state.lineData,
-            width: innerWidth,
-            height: innerHeight,
-            firstHeight,
-            lastHeight,
-            picking: state.timingPickActive,
-        };
-        const bounds = lyricScrollGeometry(first);
-        const head = Math.max(0, bounds.center - bounds.scrollTop - firstHeight / 2);
-        const tail = Math.max(24, bounds.scrollBottom - bounds.center - lastHeight / 2 + 24);
-        for (const [name, value] of [
-            ["--ak-scroll-head", head],
-            ["--ak-scroll-tail", tail],
-        ] satisfies [string, number][]) {
-            const text = Math.ceil(value) + "px";
-            if (container.style.getPropertyValue(name) !== text) container.style.setProperty(name, text);
-        }
-    }
-
-    function handleLyricManualScroll(event: Event) {
-        if (!isLyricsPage()) return;
-        if (event && "akLyricMotionInternal" in event && event.akLyricMotionInternal) return;
-
-        const page = getCurrentLyricPage();
-        const target = eventElement(event);
-        if (page && target && typeof page.contains === "function" && !(target instanceof Node && page.contains(target))) {
-            return;
-        }
-
-        suspendLyricAutoFollow(event && event.type ? `manual-${event.type}` : "manual-scroll");
-    }
-
-    function installLyricAutoFollowHooks() {
-        if (state.lyricAutoFollowInstalled || typeof document === "undefined") {
-            return;
-        }
-
-        lifecycle.on(
-            document,
-            "keydown",
-            (event) => {
-                if (
-                    ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key) &&
-                    !eventElement(event)?.closest<HTMLElement>("input,select,textarea,.lb-popup")
-                )
-                    handleLyricManualScroll(event);
-            },
-            { passive: true },
-        );
-        lifecycle.on(
-            document,
-            "pointerdown",
-            (event) => {
-                const container = getCurrentLyricsContainer(false);
-                if (
-                    container &&
-                    event.target === container &&
-                    (event instanceof MouseEvent ? event.clientX : 0) >= container.getBoundingClientRect().right - 20
-                )
-                    handleLyricManualScroll(event);
-            },
-            { passive: true },
-        );
-        lifecycle.on(document, "wheel", handleLyricManualScroll, {
-            capture: true,
-            passive: true,
-        });
-        lifecycle.on(document, "touchmove", handleLyricManualScroll, {
-            capture: true,
-            passive: true,
-        });
-        state.lyricAutoFollowInstalled = true;
     }
 
     function lyricLineSourceTicksForTarget(target: EventTarget | null) {
@@ -714,7 +448,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
     }
 
     function handleLyricSeekClick(event: MouseEvent) {
-        if (state.timingPickActive) return;
+        if (owned.timingPickActive) return;
 
         const target = eventElement(event);
         if (!(target instanceof Element)) return;
@@ -816,7 +550,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
                 return;
             }
         }
-        if (state.timingPickActive) return;
+        if (owned.timingPickActive) return;
 
         const key = String((event && event.key) || "");
 
@@ -849,7 +583,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
     }
 
     function installLyricSeekInteractionHooks() {
-        if (state.lyricSeekInteractionInstalled || typeof document === "undefined") {
+        if (owned.lyricSeekInteractionInstalled || typeof document === "undefined") {
             return;
         }
 
@@ -860,7 +594,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
          */
         lifecycle.on(document, "click", handleLyricSeekClick, true);
         lifecycle.on(document, "keydown", handleLyricSeekKeydown, true);
-        state.lyricSeekInteractionInstalled = true;
+        owned.lyricSeekInteractionInstalled = true;
     }
 
     function currentUnadjustedTimelineTicks() {
@@ -879,11 +613,11 @@ export function createControlsPreferences(dependencies: Dependencies) {
     }
 
     function stopTimingSyncMode() {
-        state.timingPickActive = false;
+        owned.timingPickActive = false;
 
-        if (state.timingPickListenerInstalled && typeof document !== "undefined") {
+        if (owned.timingPickListenerInstalled && typeof document !== "undefined") {
             lifecycle.off(document, "click", handleTimingPickClick, true);
-            state.timingPickListenerInstalled = false;
+            owned.timingPickListenerInstalled = false;
         }
 
         const page = getCurrentLyricPage();
@@ -920,7 +654,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
     }
 
     function handleTimingPickClick(event: Event) {
-        if (!state.timingPickActive) return;
+        if (!owned.timingPickActive) return;
 
         const target = eventElement(event);
         if (!(target instanceof Element)) return;
@@ -953,11 +687,11 @@ export function createControlsPreferences(dependencies: Dependencies) {
     }
 
     function beginTimingSyncMode() {
-        state.timingPickActive = true;
+        owned.timingPickActive = true;
 
-        if (!state.timingPickListenerInstalled && typeof document !== "undefined") {
+        if (!owned.timingPickListenerInstalled && typeof document !== "undefined") {
             lifecycle.on(document, "click", handleTimingPickClick, true);
-            state.timingPickListenerInstalled = true;
+            owned.timingPickListenerInstalled = true;
         }
 
         const page = getCurrentLyricPage();
@@ -972,11 +706,11 @@ export function createControlsPreferences(dependencies: Dependencies) {
         stopTimingSyncMode();
         removeTimingPopoverDismissListeners();
 
-        const popover = state.timingPopover;
+        const popover = owned.timingPopover;
         if (popover && popover.parentNode) {
             popover.parentNode.removeChild(popover);
         }
-        state.timingPopover = null;
+        owned.timingPopover = null;
         updateTimingControlsUi();
         removeLyricsToolsHostIfEmpty();
     }
@@ -1002,7 +736,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
     }
 
     function handleTimingPopoverDismissPointerDown(event: Event) {
-        if (!state.timingPopover || !state.timingPopover.isConnected) {
+        if (!owned.timingPopover || !owned.timingPopover.isConnected) {
             removeTimingPopoverDismissListeners();
             return;
         }
@@ -1020,7 +754,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
         );
 
         const timingPickTarget = !!(
-            state.timingPickActive &&
+            owned.timingPickActive &&
             target &&
             (target instanceof Element ? target : null)?.closest &&
             (target instanceof Element ? target : null)?.closest<HTMLElement>(".ak-word, .ak-enhanced-line")
@@ -1041,22 +775,22 @@ export function createControlsPreferences(dependencies: Dependencies) {
     }
 
     function installTimingPopoverDismissListeners() {
-        if (state.timingPopoverDismissInstalled) return;
+        if (owned.timingPopoverDismissInstalled) return;
         lifecycle.on(document, "pointerdown", handleTimingPopoverDismissPointerDown, true);
         lifecycle.on(document, "keydown", handleTimingPopoverDismissKeyDown, true);
-        state.timingPopoverDismissInstalled = true;
+        owned.timingPopoverDismissInstalled = true;
     }
 
     function removeTimingPopoverDismissListeners() {
-        if (!state.timingPopoverDismissInstalled) return;
+        if (!owned.timingPopoverDismissInstalled) return;
         lifecycle.off(document, "pointerdown", handleTimingPopoverDismissPointerDown, true);
         lifecycle.off(document, "keydown", handleTimingPopoverDismissKeyDown, true);
-        state.timingPopoverDismissInstalled = false;
+        owned.timingPopoverDismissInstalled = false;
     }
 
     function ensureTimingPopover() {
-        if (state.timingPopover && state.timingPopover.isConnected) {
-            return state.timingPopover;
+        if (owned.timingPopover && owned.timingPopover.isConnected) {
+            return owned.timingPopover;
         }
 
         const host = ensureLyricsToolsHost();
@@ -1116,7 +850,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
 
             if (action === "close") {
                 removeTimingPopover();
-                state.timingControls?.focus({ preventScroll: true });
+                owned.timingControls?.focus({ preventScroll: true });
                 return;
             } else if (action === "minus-fine") {
                 adjustTimingOffsetSeconds(-TIMING_OFFSET_FINE_STEP_SECONDS);
@@ -1132,7 +866,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
         });
 
         host.appendChild(popover);
-        state.timingPopover = popover;
+        owned.timingPopover = popover;
         document.dispatchEvent(new CustomEvent("lyricbridge:timing-panel", { detail: popover }));
         installTimingPopoverDismissListeners();
         updateTimingControlsUi();
@@ -1141,7 +875,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
     }
 
     function toggleTimingPopover() {
-        if (state.timingPopover && state.timingPopover.isConnected) {
+        if (owned.timingPopover && owned.timingPopover.isConnected) {
             removeTimingPopover();
             return null;
         }
@@ -1152,11 +886,11 @@ export function createControlsPreferences(dependencies: Dependencies) {
     function removeTimingControls() {
         removeTimingPopover();
 
-        const controls = state.timingControls;
+        const controls = owned.timingControls;
         if (controls && controls.parentNode) {
             controls.parentNode.removeChild(controls);
         }
-        state.timingControls = null;
+        owned.timingControls = null;
         removeLyricsToolsHostIfEmpty();
     }
 
@@ -1169,7 +903,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
         const bar = ensureLyricsToolsBar();
         if (!bar) return null;
 
-        let controls = state.timingControls instanceof HTMLButtonElement ? state.timingControls : null;
+        let controls = owned.timingControls instanceof HTMLButtonElement ? owned.timingControls : null;
 
         if (!controls || !controls.isConnected) {
             controls = document.createElement("button");
@@ -1202,7 +936,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
             });
 
             bar.appendChild(controls);
-            state.timingControls = controls;
+            owned.timingControls = controls;
         } else if (controls.parentNode !== bar) {
             bar.appendChild(controls);
         }
@@ -1212,16 +946,16 @@ export function createControlsPreferences(dependencies: Dependencies) {
     }
 
     function removeRomanizationToggle() {
-        const button = state.romanizationToggle;
+        const button = owned.romanizationToggle;
         if (button && button.parentNode) {
             button.parentNode.removeChild(button);
         }
-        state.romanizationToggle = null;
+        owned.romanizationToggle = null;
         removeLyricsToolsHostIfEmpty();
     }
 
     function updateRomanizationToggleUi() {
-        const button = state.romanizationToggle;
+        const button = owned.romanizationToggle;
         if (!button) return;
         const active = state.romanizationMode === "romanized";
         button.setAttribute("aria-pressed", active ? "true" : "false");
@@ -1243,7 +977,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
         const bar = ensureLyricsToolsBar();
         if (!bar) return null;
 
-        let button = state.romanizationToggle;
+        let button = owned.romanizationToggle;
         if (!button || !button.isConnected) {
             button = document.createElement("button");
             button.type = "button";
@@ -1267,7 +1001,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
             /* Romanization remains the leading desktop/mobile tool, but the
              * shared toolbar presents both controls as one compact glass bar. */
             bar.insertBefore(button, bar.firstChild || null);
-            state.romanizationToggle = button;
+            owned.romanizationToggle = button;
         } else if (button.parentNode !== bar) {
             bar.insertBefore(button, bar.firstChild || null);
         }
@@ -1280,7 +1014,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
         state.romanizationLineCount = 0;
         state.lastActiveLine = -999;
         state.lastActiveLineSignature = "";
-        state.lyricAutoFollowLastIndex = -1;
+        autoFollow.invalidateTarget();
         state.forceNextFrame = true;
 
         if (state.lyrics && isLyricsPage()) {
@@ -1301,7 +1035,7 @@ export function createControlsPreferences(dependencies: Dependencies) {
 
         if (state.romanizationMode !== normalized) {
             state.romanizationMode = normalized;
-            state.romanizationToggleCount += 1;
+            owned.romanizationToggleCount += 1;
             persistCurrentSongPreference();
             redecorateForRomanization();
             if (normalized === "romanized") {
@@ -1359,50 +1093,28 @@ export function createControlsPreferences(dependencies: Dependencies) {
 
     loadSongPreferences();
 
+    function resetTimingInteraction() {
+        owned.timingPickActive = false;
+        owned.timingUndo = null;
+    }
+    function removeTools() {
+        removeRomanizationToggle();
+        removeTimingControls();
+        owned.lyricToolsHost?.remove();
+        owned.lyricToolsHost = null;
+        owned.lyricToolsBar = null;
+    }
     return {
-        removeLyricsToolsHostIfEmpty,
-        ensureLyricsToolsHost,
-        ensureLyricsToolsBar,
         formatTimingOffset,
-        rememberTimingUndo,
         updateTimingControlsUi,
         invalidateTimingPaintState,
         setTimingOffsetSeconds,
         adjustTimingOffsetSeconds,
         resetTimingOffsetValue,
         undoTimingOffset,
-        timingSourceTicksForTarget,
-        mediaSeekSecondsForTimelineTicks,
-        seekMediaToTimelineTicks,
-        lyricLineIndexForTarget,
-        lyricAutoFollowReducedMotion,
-        suppressJellyfinLyricAutoFollow,
-        updateLyricSyncButton,
-        resumeLyricAutoFollow,
-        suspendLyricAutoFollow,
-        lyricPlaybackFollowIndex,
-        focusLyricLineIndex,
-        refreshLyricScrollSpace,
-        handleLyricManualScroll,
-        installLyricAutoFollowHooks,
-        lyricLineSourceTicksForTarget,
-        instrumentalSourceTicksForTarget,
-        handleLyricSeekClick,
-        handleLyricSeekKeydown,
-        installLyricSeekInteractionHooks,
-        currentUnadjustedTimelineTicks,
         stopTimingSyncMode,
-        captureTimingSync,
-        handleTimingPickClick,
         beginTimingSyncMode,
-        removeTimingPopover,
-        createTimingActionButton,
-        handleTimingPopoverDismissPointerDown,
-        handleTimingPopoverDismissKeyDown,
-        installTimingPopoverDismissListeners,
-        removeTimingPopoverDismissListeners,
-        ensureTimingPopover,
-        toggleTimingPopover,
+        installLyricSeekInteractionHooks,
         removeTimingControls,
         ensureTimingControls,
         removeRomanizationToggle,
@@ -1411,5 +1123,12 @@ export function createControlsPreferences(dependencies: Dependencies) {
         redecorateForRomanization,
         setRomanizationMode,
         prepareRomanizationForLyrics,
+        resetTimingInteraction,
+        removeTools,
+        get instrumentalSeekCount() {
+            return owned.instrumentalSeekCount;
+        },
+        isTimingPickActive: () => owned.timingPickActive,
+        diagnostics: () => ({ ...owned }),
     };
 }

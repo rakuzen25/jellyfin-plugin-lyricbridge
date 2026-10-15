@@ -1,11 +1,42 @@
 using System.Reflection;
 using LyricBridge;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
+[Collection("Host integration")]
 public sealed class WebRendererTests
 {
     private const string Revision = "0123456789abcdef";
+    [Fact]
+    public async Task RegistrationWaitsForHostInitializationAndRetainsItsCapturedPlugin()
+    {
+        var instance = typeof(Plugin).GetProperty(nameof(Plugin.Instance))!;
+        var previous = instance.GetValue(null);
+        try
+        {
+            instance.SetValue(null, null);
+            var services = new ServiceCollection().AddLogging();
+            new Registration().RegisterServices(services, null!);
+            services.AddSingleton<NativeProvider>();
+            await using var provider = services.BuildServiceProvider();
+            Assert.NotNull(provider.GetRequiredService<NativeProvider>());
+            Assert.Null(instance.GetValue(null));
+            await using var host = new TestHost();
+            Assert.Same(host.Plugin, provider.GetRequiredService<Lazy<Plugin>>().Value);
+            await using var other = new TestHost();
+            Assert.Same(host.Plugin, provider.GetRequiredService<Lazy<Plugin>>().Value);
+            Assert.Equal(host.Plugin.DataDirectory, provider.GetRequiredService<Store>().ActiveStoragePath);
+            host.Plugin.UpdateConfiguration(new Configuration { MinimumMatch = 83 });
+            Assert.Equal(83, provider.GetRequiredService<Lazy<Plugin>>().Value.Configuration.MinimumMatch);
+            Assert.NotSame(other.Plugin, provider.GetRequiredService<Lazy<Plugin>>().Value);
+            // Resolve the event-bound worker so provider disposal exercises detachment.
+            provider.GetRequiredService<Generation>();
+            await provider.DisposeAsync();
+        }
+        finally { instance.SetValue(null, previous); }
+    }
+
     [Fact]
     public async Task MissingIndexReportsErrorUnlessTransformationIsAvailable()
     {

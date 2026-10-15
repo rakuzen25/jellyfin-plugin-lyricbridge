@@ -1,13 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <AnalysisLevel>latest</AnalysisLevel>
-    <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Jellyfin.Plugin.LyricBridge</RootNamespace>
     <AssemblyName>Jellyfin.Plugin.LyricBridge</AssemblyName>
-    <Version>$(LyricBridgeVersion)</Version>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Core/**/*.cs;Infrastructure/**/*.cs" />

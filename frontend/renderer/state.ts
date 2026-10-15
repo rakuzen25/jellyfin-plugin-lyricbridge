@@ -1,8 +1,7 @@
 /* This Source Code Form is subject to the Mozilla Public License, v. 2.0.
  * See https://mozilla.org/MPL/2.0/. */
 import type {} from "../shared/runtime.ts";
-import { DynamicBackgroundRenderer } from "./background-engine.ts";
-import type { Accent, ArtworkFingerprint, RenderGap, RenderLine, SongPreference } from "./models.ts";
+import type { Accent, RenderGap, RenderLine, SongPreference } from "./models.ts";
 import type { LyricInput } from "./payload.ts";
 export interface RendererState {
     lyrics: LyricInput[] | null;
@@ -94,7 +93,6 @@ export interface RendererState {
     romanizationLoadState: string;
     romanizationLoadError: string;
     romanizationSource: string;
-    romanizationToggle: HTMLButtonElement | null;
     googleRomanizationCache: Map<string, string>;
     googleRomanizationFragmentCache: Map<string, string>;
     googleRomanizationAttempted: Set<string>;
@@ -103,81 +101,122 @@ export interface RendererState {
     googleRomanizationError: string;
     googleRomanizationLineCount: number;
     romanizationLineCount: number;
-    romanizationToggleCount: number;
     songPreferenceKey: string;
     songPreferences: Record<string, SongPreference>;
-    lyricToolsHost: HTMLElement | null;
-    lyricToolsBar: HTMLElement | null;
-    timingControls: HTMLElement | null;
-    timingPopover: HTMLElement | null;
-    timingPopoverDismissInstalled: boolean;
     timingOffsetSeconds: number;
     sharedTimingOffsetSeconds: number;
-    timingOffsetChangeCount: number;
-    timingPickActive: boolean;
-    timingUndo: number | null;
-    timingPickListenerInstalled: boolean;
-    lyricSeekInteractionInstalled: boolean;
-    lyricAutoFollowInstalled: boolean;
-    lyricAutoFollowSuspendedUntil: number;
-    lyricAutoFollowLastIndex: number;
-    lyricAutoFollowLastAt: number;
-    lyricAutoFollowScroller: Element | null;
-    lyricAutoFollowTargetTop: number | null;
-    lyricAutoFollowBehavior: ScrollBehavior | null;
-    lyricAutoFollowScrollCount: number;
-    lyricAutoFollowManualScrollCount: number;
-    lyricAutoFollowForceCount: number;
-    lyricAutoFollowLastReason: string;
-    lyricStockAutoFollowSuppressCount: number;
-    lyricStockAutoFollowLastReason: string;
-    lyricSeekCount: number;
-    instrumentalSeekCount: number;
-    lastLyricSeekKind: string;
-    lastLyricSeekSourceTicks: number | null;
-    lastLyricSeekMediaSeconds: number | null;
-    atmosphereMode: string;
-    atmosphereRoot: HTMLElement | null;
-    atmosphereMediaKey: string;
-    atmosphereArtwork: string;
-    atmosphereSource: string;
-    atmosphereLastCheck: number;
-    atmosphereLoadSeq: number;
-    atmospherePendingKey: string;
-    atmospherePendingSince: number;
-    atmosphereTimeoutCount: number;
-    atmosphereFailedKey: string;
-    atmosphereFailedAt: number;
-    atmosphereAnalysis: Record<string, string | number | boolean> | null;
-    atmosphereDynamicRenderer: DynamicBackgroundRenderer | null;
-    atmosphereDynamicCanvas: HTMLCanvasElement | null;
-    atmosphereDynamicBaseIndex: number;
-    atmosphereDynamicCurrentArtwork: string;
-    atmosphereDynamicCurrentFingerprint: ArtworkFingerprint | null;
-    atmosphereDynamicVisualDedupCount: number;
-    atmosphereDynamicFingerprintFailures: number;
-    atmosphereDynamicIdentityMethod: string;
-    atmosphereDynamicWebglAvailable: boolean | null;
-    atmosphereDynamicFallbackReason: string;
-    atmosphereDynamicContextLossCount: number;
-    atmosphereDynamicTransitionCount: number;
-    atmosphereDynamicInterruptedTransitions: number;
-    atmosphereDynamicResizeCount: number;
-    atmosphereDynamicStaleCommitDrops: number;
-    atmosphereDynamicDirectLoadFailures: number;
-    atmosphereDynamicDomFallbackCommits: number;
-    atmosphereDynamicDirectRetryAt: number;
-    atmosphereDynamicWeakSource: boolean;
-    atmosphereDynamicResolvedKey: string;
-    atmosphereDynamicResolvedAt: number;
-    atmosphereDynamicNoArtwork: boolean;
-    atmosphereDynamicNoArtFailures: number;
-    atmosphereDynamicDomBaseline: Set<string>;
-    atmosphereDynamicDomCandidateSinceByUrl: Map<string, number>;
-    atmosphereDynamicFastInheritedCommits: number;
-    atmosphereDynamicMediaStableSince: number;
-    atmosphereDynamicWebglFailureCount: number;
-    atmosphereDynamicWebglRetryAt: number;
-    atmosphereDynamicProbeToken: number;
-    atmosphereDynamicProbeTimers: number[];
+}
+
+/** Every installation owns fresh collections, counters and DOM references. */
+export function createRendererState(): RendererState {
+    return {
+        lyrics: null,
+        generation: 0,
+        decoratedGeneration: -1,
+        lyricsRequestSeq: 0,
+        lyricsRequestKey: "",
+        lyricsRequestKeys: new Map(),
+        lyricsAcceptedKey: "",
+        lyricsAcceptedSeq: 0,
+        lyricsStaleResponseDrops: 0,
+        lineData: [],
+        rafId: 0,
+        frameTimer: 0,
+        animationLoopRunning: false,
+        animationLoopStarts: 0,
+        animationLoopStops: 0,
+        animationLoopErrors: 0,
+        animationLoopRecoveries: 0,
+        animationWatchdogRecoveries: 0,
+        animationWatchdogTimer: 0,
+        lastAnimationLoopError: "",
+        lastMediaWarning: 0,
+        geometryTimer: 0,
+        backgroundAnchorTimer: 0,
+        decorationRetryStartedAt: 0,
+        decorationRetryCount: 0,
+        decorationRetryExpiredCount: 0,
+        lastActiveLine: -999,
+        lastActiveLineSignature: "",
+        activeLineIndexes: [],
+        activeLineScratch: [],
+        handoffLineIndexes: new Set(),
+        retiredLineElements: [],
+        lineEndPrefix: [],
+        instrumentalGaps: [],
+        activeInstrumentalGapIndex: -1,
+        instrumentalPhaseActiveIndex: -1,
+        instrumentalPastCount: 0,
+        instrumentalGapRenderCount: 0,
+        instrumentalGapMaxDurationTicks: 0,
+        mediaElement: null,
+        mediaProbeAt: 0,
+        mediaSwitchCount: 0,
+        staleMediaEventDrops: 0,
+        timedCueCount: 0,
+        lyricTimingMode: "none",
+        backgroundVocalCount: 0,
+        overlapFrameCount: 0,
+        maxSimultaneousLines: 1,
+
+        performanceMode: "auto",
+        performanceProfile: "desktop",
+        performanceFrameCount: 0,
+        performanceWindowStart: 0,
+        measuredFps: 0,
+        lastRenderedFrameAt: 0,
+        forceNextFrame: false,
+        pausedSettleUntil: 0,
+        lyricViewHidden: false,
+        renderedFrameCount: 0,
+        watchdogLineCursor: 0,
+        skippedRafFrames: 0,
+        lineTransitionCount: 0,
+        lastLineSyncCount: 0,
+        maxLineSyncCount: 0,
+        playbackClockMedia: null,
+        playbackClockSeconds: 0,
+        playbackClockRawSeconds: 0,
+        playbackClockFrameNow: 0,
+        playbackClockCorrectionMs: 0,
+        playbackClockHardSnaps: 0,
+        playbackClockSuspended: false,
+        mediaStartOffsetSource: "",
+        mediaStartOffsetTicks: 0,
+
+        accentMode: "shuffle",
+        accent: null,
+        accentSignature: "",
+        accentHistory: [],
+        accentBag: [],
+        accentRandomSource: "math-random",
+        accentSelectionReason: "initial",
+        accentReplayArmed: false,
+
+        shapedWordCount: 0,
+        scriptProfileCounts: {},
+        fontGeometryRefreshCount: 0,
+
+        romanizationMode: "native",
+        romanizationAvailable: false,
+        romanizationCandidate: false,
+        romanizationLoadState: "idle",
+        romanizationLoadError: "",
+        romanizationSource: "none",
+        googleRomanizationCache: new Map(),
+        googleRomanizationFragmentCache: new Map(),
+        googleRomanizationAttempted: new Set(),
+        googleRomanizationRequest: null,
+        googleRomanizationState: "idle",
+        googleRomanizationError: "",
+        googleRomanizationLineCount: 0,
+        romanizationLineCount: 0,
+
+        songPreferenceKey: "",
+        songPreferences: Object.create(null),
+        timingOffsetSeconds: 0,
+        sharedTimingOffsetSeconds: 0,
+
+        // Dynamic Background state. This build intentionally has one atmosphere engine.
+    };
 }

@@ -9,7 +9,6 @@
     "scripts": {
         "build": "pnpm --dir frontend run build",
         "typecheck": "pnpm --dir frontend run typecheck",
-        "typecheck:legacy": "pnpm --dir frontend run typecheck:legacy",
         "test": "pnpm --dir frontend test",
         "test:browser": "sh scripts/test-browser.sh",
         "check:python": "sh scripts/check-python.sh",

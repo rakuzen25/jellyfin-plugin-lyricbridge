@@ -1,3 +1,4 @@
+import { TICKS_PER_SECOND, DECORATION_RETRY_WINDOW_MS, DECORATION_RETRY_MS } from "./settings.ts";
 /* This Source Code Form is subject to the Mozilla Public License, v. 2.0.
  * See https://mozilla.org/MPL/2.0/. */
 import { requireValue } from "../shared/invariants.ts";
@@ -6,13 +7,13 @@ import type { CueInput } from "./cue-ranges.ts";
 import { orderedCuesBySourcePosition } from "./cue-ranges.ts";
 import { replaceChildren } from "./dom.ts";
 import { getCurrentLyricsContainer, isLyricsPage } from "./host.ts";
-import { RendererLifecycle } from "./lifecycle.ts";
+import { Lifecycle } from "../shared/lifecycle.ts";
 import type { CueRecord, RenderGap, RenderLine, RenderWord } from "./models.ts";
 import type { LyricInput } from "./payload.ts";
 import { cueValue, hasUsableWordTiming, lyricTextProfile, usableWordCueRanges } from "./payload.ts";
 import type { RendererState } from "./state.ts";
 import { detectScriptProfile, firstStrongDirection, getGraphemeBoundaries, snapBoundary } from "./text-processing.ts";
-import { nullableTick } from "./ticks.ts";
+import { finiteTick } from "./ticks.ts";
 function isFiniteNumber(value: unknown): value is number {
     return typeof value === "number" && Number.isFinite(value);
 }
@@ -39,7 +40,6 @@ interface Dependencies {
         | "shapedWordCount"
         | "scriptProfileCounts"
         | "romanizationLineCount"
-        | "lyricAutoFollowLastIndex"
         | "decorationRetryStartedAt"
         | "decorationRetryCount"
         | "decorationRetryExpiredCount"
@@ -56,11 +56,11 @@ interface Dependencies {
     buildWordRecords: (text: string, lineIndex: number, cueRecords: CueRecord[]) => RenderWord[];
     classifyWordMotion: (words: RenderWord[]) => void;
     createWordSpan: (word: RenderWord) => HTMLSpanElement;
-    lifecycle: RendererLifecycle;
-    TICKS_PER_SECOND: 10000000;
+    lifecycle: Lifecycle;
     stableHash: (input: string) => number;
     removeInstrumentalGapRows: (container?: HTMLElement | null) => void;
     resetMotionHandoffs: () => void;
+    invalidateFollowTarget: () => void;
     removeRomanizationToggle: () => void;
     removeTimingControls: () => void;
     stopAnimationLoop: (reason?: string) => string;
@@ -74,8 +74,6 @@ interface Dependencies {
     queueMotionGeometryRefresh: () => boolean;
     ensureAnimationLoop: () => boolean;
     warn: (...args: unknown[]) => void;
-    DECORATION_RETRY_WINDOW_MS: 6000;
-    DECORATION_RETRY_MS: 120;
 }
 export function createLyricView(dependencies: Dependencies) {
     const {
@@ -88,10 +86,10 @@ export function createLyricView(dependencies: Dependencies) {
         classifyWordMotion,
         createWordSpan,
         lifecycle,
-        TICKS_PER_SECOND,
         stableHash,
         removeInstrumentalGapRows,
         resetMotionHandoffs,
+        invalidateFollowTarget,
         removeRomanizationToggle,
         removeTimingControls,
         stopAnimationLoop,
@@ -105,8 +103,6 @@ export function createLyricView(dependencies: Dependencies) {
         queueMotionGeometryRefresh,
         ensureAnimationLoop,
         warn,
-        DECORATION_RETRY_WINDOW_MS,
-        DECORATION_RETRY_MS,
     } = dependencies;
     function decorateLine(lineElement: HTMLElement, lyric: LyricInput, lineIndex: number): RenderLine {
         const displayLyric = displayLyricForCurrentMode(lyric);
@@ -232,7 +228,7 @@ export function createLyricView(dependencies: Dependencies) {
 
             endPos = Math.max(startPos, endPos - positionOffset);
 
-            const start = nullableTick(cueValue(cue, "Start", "start")) ?? 0;
+            const start = finiteTick(cueValue(cue, "Start", "start")) ?? 0;
 
             /* Keep the complete source-ordered cue list here. In particular,
              * the converter intentionally emits a final empty cue at
@@ -954,7 +950,7 @@ export function createLyricView(dependencies: Dependencies) {
         state.lastActiveLineSignature = "";
         state.activeLineIndexes = [];
         resetMotionHandoffs();
-        state.lyricAutoFollowLastIndex = -1;
+        invalidateFollowTarget();
 
         container.classList.add("ak-karaoke-container");
         ensureRomanizationToggle();

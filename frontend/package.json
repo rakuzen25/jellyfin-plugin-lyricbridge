@@ -4,7 +4,6 @@
     "type": "module",
     "scripts": {
         "typecheck": "pnpm run check:boundaries && tsc --noEmit",
-        "typecheck:legacy": "pnpm run check:boundaries && tsc6 --noEmit --stableTypeOrdering",
         "build": "pnpm run typecheck && node build.mjs",
         "test": "node --experimental-strip-types --test bridge/*.test.ts renderer/*.test.ts",
         "check:boundaries": "node check-boundaries.mjs"

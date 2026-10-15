@@ -5,12 +5,12 @@ using MediaBrowser.Model.Lyrics;
 using MediaBrowser.Model.Providers;
 namespace LyricBridge;
 
-public sealed class NativeProvider(Retrieval retrieval, Store store) : ILyricProvider
+public sealed class NativeProvider(Retrieval retrieval, Store store, Lazy<Plugin> plugin) : ILyricProvider
 {
     public string Name => "LyricBridge";
     public async Task<IEnumerable<RemoteLyricInfo>> SearchAsync(LyricSearchRequest request, CancellationToken token)
     {
-        if (request.IsAutomated && !Plugin.Instance.Configuration.ScheduledRetrieval) return [];
+        if (request.IsAutomated && !plugin.Value.Configuration.ScheduledRetrieval) return [];
         var track = new TrackMultiArtistMetadata { Title = request.SongName, Artists = request.ArtistNames?.ToList() ?? [], Album = request.AlbumName, AlbumArtists = request.AlbumArtistsNames?.ToList() ?? [], DurationMs = request.Duration is long d ? (int)(d / 10000) : null };
         var candidates = await retrieval.Candidates(track, token, !request.IsAutomated);
         var results = new List<RemoteLyricInfo>();

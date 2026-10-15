@@ -2,14 +2,6 @@ using System.Text.RegularExpressions;
 
 namespace LyricBridge;
 
-public interface IPreferenceRepository
-{
-    Preferences? AccountPreferences(Guid user);
-    void SaveAccountPreferences(Guid user, Preferences preferences);
-    SongLanguagePreferences SongPreferences(Guid user, Guid item);
-    void SaveSongPreferences(Guid user, Guid item, SongLanguagePreferences? preferences);
-}
-
 public sealed class PreferenceService(IPreferenceRepository repository, Func<Preferences> defaults)
 {
     public Preferences Account(Guid user) => repository.AccountPreferences(user) ?? Codec.Deserialize<Preferences>(Codec.Serialize(defaults()))!;

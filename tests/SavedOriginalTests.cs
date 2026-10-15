@@ -293,5 +293,5 @@ public sealed class SavedOriginalTests : IDisposable
         cmd.CommandText = "SELECT count(*) FROM record_references r WHERE NOT EXISTS(SELECT 1 FROM records d WHERE d.kind='document' AND d.id=r.hash)";
         Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
     }
-    public void Dispose() { SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    public void Dispose() { TestHost.ClearDatabasePools(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
 }

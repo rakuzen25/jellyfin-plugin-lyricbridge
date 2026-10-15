@@ -4,19 +4,19 @@ LyricBridge targets Jellyfin 12.2 / .NET 10 on Linux x64. Release readiness belo
 
 ## Storage
 
-0.1.0 requires fresh LyricBridge storage. Unsupported databases are
+The plugin uses storage schema 5. Unsupported databases are
 rejected without deletion or migration. Stop Jellyfin, back up the complete
 LyricBridge storage directory, and select a new empty absolute storage directory
-before testing this revision. Keep backups outside the new directory. Never
+before starting the plugin. Keep backups outside the new directory. Never
 remove media or overwrite a production database to satisfy this requirement.
 
 ## Automated GitHub releases
 
-See [RELEASING.md](RELEASING.md) for release-token setup, the first `0.1.0` release PR, draft artifact verification, publication and shared-catalog updates. Local build commands below remain available for development.
+See [RELEASING.md](RELEASING.md) for release credentials, draft artifact verification, publication and shared-catalog updates. Local build commands below remain available for development.
 
 ## Build and artifacts
 
-Install the SDK selected by `global.json`, the Node.js version selected by `.node-version`, pnpm 10.33.4 (pinned in the root `package.json`), Python 3, and Docker. Both JavaScript projects share the root `pnpm-lock.yaml`; run the frozen install from the repository root. Run:
+Install the SDK selected by `global.json`, the Node.js version selected by `.node-version`, pnpm selected by `package.json`, Python selected by `.python-version`, and Docker. Both JavaScript projects share the root `pnpm-lock.yaml`; run the frozen install from the repository root. Run:
 
 ```sh
 pnpm install --frozen-lockfile
@@ -52,7 +52,7 @@ pronunciation dictionaries, restricted libraries, rejection preservation, reset
 boundaries, read-only media, disable and uninstall. It also checks separate web
 asset install/uninstall under a Jellyfin base URL. ARM64 remains experimental; no native test host is available.
 
-## Automatic web renderer (0.1.1 and later)
+## Automatic web renderer
 
 Install the plugin and restart Jellyfin. **Enable web renderer** defaults to on.
 The plugin serves its embedded JS/CSS and injects ordered, content-versioned tags
@@ -87,7 +87,7 @@ The original index backup is retained, never restored over unrelated updates.
 Already loaded browser sessions must reload to stop running the renderer.
 
 Native apps are unaffected. Independently hosted Jellyfin Web clients require the
-separate installation below. The 0.1.0 release also requires that separate setup.
+separate installation below.
 
 ## Separate web renderer
 
@@ -120,16 +120,10 @@ Each plugin has its own source repository, GUID and version. LyricBridge's autho
 
 ```sh
 LYRICBRIDGE_REPOSITORY_URL=https://github.com/OWNER/lyricbridge \
-LYRICBRIDGE_DOWNLOAD_BASE_URL=https://github.com/OWNER/lyricbridge/releases/download/v0.1.0 \
+LYRICBRIDGE_DOWNLOAD_BASE_URL=https://github.com/OWNER/lyricbridge/releases/download/vVERSION \
   scripts/package.sh --release
 ```
 
 Replace OWNER/repository paths with your real repository. The validation workflow uploads candidate artifacts; it does not publish a release or change the shared catalog. Upload all three archives, notices contained in them, and SHA256SUMS to the corresponding release. Consumers install using the shared catalog URL, not a source-code ZIP. Web enhancement remains a separate install.
 
 Catalog management lives in the separate [jellyfin-plugin-manifest repository](https://github.com/rakuzen25/jellyfin-plugin-manifest). Stable publication triggers its verified update flow. Use that repository's Actions for withdrawals and restoration; see [LyricBridge integration](CATALOG.md) for credentials and notification retries. LyricBridge continues to publish its per-release manifest and validation receipt, which the shared catalog verifies.
-
-## Fresh baseline after removing a preview installation
-
-Stop Jellyfin before backing up or deleting LyricBridge data. Back up the complete plugin directory, its configuration XML and storage directory, including WAL/SHM files, outside active storage. Remove only identified LyricBridge paths. An image or startup script that copies the plugin on boot must be replaced first, or it will reinstall the old build. Remove the old optional web injection too. Restart twice and confirm the plugin, API and assets are absent before a fresh catalog installation. Keep the backup private; never restore it automatically into the new installation.
-
-Browser preferences belong to each browser and cannot be erased by server cleanup. Before the new installation, remove only these LyricBridge keys using browser developer tools: localStorage `appleKaraokePerformanceMode`, `appleKaraokeSongPreferencesV2`, `appleKaraokePremiumAccent`, `appleKaraokeRecentAccents`, and any `lyricbridge.renderer.*` keys; sessionStorage `appleKaraokeAccentBag` and `lyricbridge.renderer.accentBag`. Do not clear Jellyfin authentication or unrelated site storage. The new renderer does not read or migrate preview keys.

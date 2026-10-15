@@ -16,6 +16,17 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <PathMap>$(MSBuildThisFileDirectory)=/_/</PathMap>
   </PropertyGroup>
+  <!-- Shared maintained-project policy; the upstream helper owns its own target/version. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' != 'Lyricify.Lyrics.Helper'">
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Version>$(LyricBridgeVersion)</Version>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' != 'Lyricify.Lyrics.Helper' and '$(MSBuildProjectName)' != 'StorageTests'">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest</AnalysisLevel>
+  </PropertyGroup>
   <ItemGroup>
     <AssemblyMetadata Include="LyricBridgeGuid" Value="$(LyricBridgeGuid)" />
     <AssemblyMetadata Include="LyricBridgeName" Value="$(LyricBridgeName)" />

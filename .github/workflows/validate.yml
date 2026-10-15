@@ -109,12 +109,10 @@ jobs:
           -v "$PWD/renovate.json:/tmp/renovate.json:ro"
           ghcr.io/renovatebot/renovate:44.134.1@sha256:79138db6b794ea9e00b52f3012e3d3912653214f3166bea537689196e5e91e21
           --strict /tmp/renovate.json 2>&1 | tee -a dist/evidence/metadata.log
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - uses: ./.github/actions/evidence
         if: always()
         with:
           name: evidence-metadata
-          path: dist/evidence/
-          if-no-files-found: warn
   frontend:
     needs: impact
     if: needs.impact.outputs.web == 'true'
@@ -141,17 +139,10 @@ jobs:
             dist/web/
             dist/web-build.json
           if-no-files-found: error
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - uses: ./.github/actions/evidence
         if: always()
         with:
           name: evidence-frontend
-          path: |
-            dist/evidence/
-            dist/reproducibility-*.log
-            browser-tests/results/
-            browser-tests/results-report/
-            browser-tests/results-run.*/
-          if-no-files-found: warn
   backend:
     env:
       TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
@@ -178,17 +169,10 @@ jobs:
       - run: python3 scripts/ci.py web-verify
       - run: dotnet restore tests/StorageTests.csproj --locked-mode -m:1 -p:NuGetAudit=false
       - run: dotnet test --project tests/StorageTests.csproj --no-restore --results-directory dist/evidence --report-xunit-trx --report-xunit-trx-filename backend.trx --minimum-expected-tests 1 2>&1 | tee dist/evidence/backend.log
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - uses: ./.github/actions/evidence
         if: always()
         with:
           name: evidence-backend
-          path: |
-            dist/evidence/
-            dist/reproducibility-*.log
-            browser-tests/results/
-            browser-tests/results-report/
-            browser-tests/results-run.*/
-          if-no-files-found: warn
   tooling:
     needs: impact
     if: needs.impact.outputs.tooling == 'true'
@@ -205,17 +189,10 @@ jobs:
       - run: mkdir -p dist/evidence
       - run: LYRICBRIDGE_PYTHON=python sh scripts/check-python.sh 2>&1 | tee dist/evidence/tooling.log
       - run: (python3 tests/CiPolicy.py && python3 tests/ReleaseBoundaries.py && python3 tests/ReleaseAutomation.py && python3 tests/LocalJellyfin.py) 2>&1 | tee -a dist/evidence/tooling.log
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - uses: ./.github/actions/evidence
         if: always()
         with:
           name: evidence-tooling
-          path: |
-            dist/evidence/
-            dist/reproducibility-*.log
-            browser-tests/results/
-            browser-tests/results-report/
-            browser-tests/results-run.*/
-          if-no-files-found: warn
   workflow:
     needs: [impact, frontend]
     if: needs.impact.outputs.workflow == 'true'
@@ -236,17 +213,10 @@ jobs:
           path: dist
       - run: python3 scripts/ci.py web-verify
       - run: CI_BROWSER_GROUP=workflow scripts/test-browser.sh --project workflow-chromium --workers=2 2>&1 | tee dist/evidence/browser.log
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - uses: ./.github/actions/evidence
         if: always()
         with:
           name: evidence-workflow
-          path: |
-            dist/evidence/
-            dist/reproducibility-*.log
-            browser-tests/results/
-            browser-tests/results-report/
-            browser-tests/results-run.*/
-          if-no-files-found: warn
   rendering:
     needs: [impact, frontend]
     if: needs.impact.outputs.rendering == 'true'
@@ -271,17 +241,10 @@ jobs:
           path: dist
       - run: python3 scripts/ci.py web-verify
       - run: CI_BROWSER_GROUP=rendering scripts/test-browser.sh --project "${{ matrix.project }}" --workers=2 2>&1 | tee dist/evidence/browser.log
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - uses: ./.github/actions/evidence
         if: always()
         with:
           name: evidence-rendering${{ matrix.project }}
-          path: |
-            dist/evidence/
-            dist/reproducibility-*.log
-            browser-tests/results/
-            browser-tests/results-report/
-            browser-tests/results-run.*/
-          if-no-files-found: warn
   performance:
     needs: [impact, frontend]
     if: needs.impact.outputs.performance == 'true'
@@ -306,17 +269,10 @@ jobs:
           path: dist
       - run: python3 scripts/ci.py web-verify
       - run: CI_BROWSER_GROUP=performance scripts/test-browser.sh --project "${{ matrix.project }}" --workers=1 2>&1 | tee dist/evidence/browser.log
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - uses: ./.github/actions/evidence
         if: always()
         with:
           name: evidence-performance${{ matrix.project }}
-          path: |
-            dist/evidence/
-            dist/reproducibility-*.log
-            browser-tests/results/
-            browser-tests/results-report/
-            browser-tests/results-run.*/
-          if-no-files-found: warn
   package:
     needs: [impact, frontend]
     if: needs.impact.outputs.artifacts == 'true'
@@ -354,17 +310,10 @@ jobs:
             dist/SHA256SUMS
             dist/clean-build.json
           if-no-files-found: error
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - uses: ./.github/actions/evidence
         if: always()
         with:
           name: evidence-package
-          path: |
-            dist/evidence/
-            dist/reproducibility-*.log
-            browser-tests/results/
-            browser-tests/results-report/
-            browser-tests/results-run.*/
-          if-no-files-found: warn
   installation:
     needs: [impact, package]
     if: needs.impact.outputs.artifacts == 'true'
@@ -384,17 +333,10 @@ jobs:
           name: candidate-unverified
           path: dist
       - run: python3 tests/PackageInstallation.py 2>&1 | tee dist/evidence/installation.log
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - uses: ./.github/actions/evidence
         if: always()
         with:
           name: evidence-installation
-          path: |
-            dist/evidence/
-            dist/reproducibility-*.log
-            browser-tests/results/
-            browser-tests/results-report/
-            browser-tests/results-run.*/
-          if-no-files-found: warn
   reproducibility:
     needs: [impact, package]
     if: needs.impact.outputs.artifacts == 'true'
@@ -417,17 +359,10 @@ jobs:
           path: dist
       - run: python3 scripts/release.py prepare --repository "$REPOSITORY" --tag "$RELEASE_TAG" --environment "$GITHUB_ENV"
       - run: python3 tests/ReproducibleBuild.py 2>&1 | tee dist/evidence/reproducibility.log
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - uses: ./.github/actions/evidence
         if: always()
         with:
           name: evidence-reproducibility
-          path: |
-            dist/evidence/
-            dist/reproducibility-*.log
-            browser-tests/results/
-            browser-tests/results-report/
-            browser-tests/results-run.*/
-          if-no-files-found: warn
   advisories:
     needs: impact
     if: needs.impact.outputs.artifacts == 'true'
@@ -446,17 +381,10 @@ jobs:
       - run: mkdir -p dist/evidence
       - run: pnpm audit 2>&1 | tee dist/evidence/pnpm-audit.log
       - run: dotnet restore tests/StorageTests.csproj --locked-mode -m:1 --force-evaluate -p:NuGetAuditMode=all -p:WarningsAsErrors=NU1900%3BNU1901%3BNU1902%3BNU1903%3BNU1904%3BNU1905 2>&1 | tee dist/evidence/nuget-audit.log
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - uses: ./.github/actions/evidence
         if: always()
         with:
           name: evidence-advisories
-          path: |
-            dist/evidence/
-            dist/reproducibility-*.log
-            browser-tests/results/
-            browser-tests/results-report/
-            browser-tests/results-run.*/
-          if-no-files-found: warn
   validate:
     needs: [impact, metadata, frontend, backend, tooling, workflow, rendering, performance, package, installation, reproducibility, advisories]
     if: always()

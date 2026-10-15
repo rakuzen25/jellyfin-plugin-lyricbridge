@@ -24,14 +24,9 @@ Warnings contain `code`, `message`, and an optional `location`; they do not part
 
 Changing encoding or format invalidates the old preview and aborts its request. Closing a preview disposes its request; late results cannot replace a newer draft or another song/account. Final Import blocks Cancel, close and Escape until its result is known. Failures retain the dialog with local feedback; success closes it and refreshes the applicable song. Navigation still disposes the view and rejects late UI updates.
 
-Original file bytes, filename, selected encoding and format interpretation are retained in existing raw provenance. No database migration or provider-retrieval normalization change is required.
+Original file bytes, filename, selected encoding and format interpretation are retained in existing raw provenance.
 
 ## Validation
 
 Backend coverage is in `LyricImportTests`, `ImportGuardrailTests` and `ImportWorkflowTests`. Browser import workflow/layout coverage is in `browser-tests/import-lyrics.spec.cjs`. The expansion fixture intentionally accepts 200 repeated timestamps plus 2,000 ASCII text characters: 4,000 input bytes produce 400,000 lyric text characters. It records permitted expansion rather than enforcing a new size or duration threshold.
 
-Local implementation verification: all 184 maintained backend cases passed after locked restoration, with console totals matching `/tmp/lyricbridge-import-final-evidence/backend.trx`. A disposable check of the supplied YRC verified every sung word and timestamp and the three expanded line envelopes; its report remains in `backend-with-attachment.trx`, and its temporary test source was removed. All 19 frontend test files, strict TypeScript/boundaries, ESLint, Prettier, Knip, .NET formatting and web bundling passed.
-
-Import workflows passed nine Chromium cases (`browser-tests/results-run.DSBVRQ/report/results.json`). Four-project import layout coverage passed eight cases (`results-run.Q5UkuP`); preview disposal passed four (`results-run.Fkn7UF`); the final glass warning surface passed four (`results-run.qXhEq7`). Eight existing preview/focus regressions also passed (`results-run.tsWY2n`). Desktop/mobile warning screenshots were reviewed; existing golden screenshots were not regenerated.
-
-Initial checks caught dropped structured diagnostics in the shared display adapter, a fixture that asserted decorative karaoke copies as ordinary text, and an ambiguous-script language fixture. The display adapter was corrected; the fixtures now check accessible text/untimed fragments and explicitly declared Japanese language. The card surface was centralized through the shared glass host factory, with the markup boundary tightened to its adapter. No hosted CI, installation, release or deployment evidence is claimed.

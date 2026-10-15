@@ -32,11 +32,12 @@ public sealed class WebRendererIntegration : BackgroundService
     private static readonly Regex Block = new(Regex.Escape(StartMarker) + ".*?" + Regex.Escape(EndMarker) + "\\r?\\n?", RegexOptions.Singleline | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly Regex Head = new("</head\\s*>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
-    public WebRendererIntegration(IApplicationPaths paths, ILogger<WebRendererIntegration> logger)
-        : this(paths.WebPath, () => Plugin.Instance.Configuration.EnableWebRenderer, logger, AssetRevision())
+    public WebRendererIntegration(IApplicationPaths paths, Lazy<Plugin> plugin, ILogger<WebRendererIntegration> logger)
+        : this(paths.WebPath, () => plugin.Value.Configuration.EnableWebRenderer, logger, AssetRevision())
     {
-        Plugin.Instance.ConfigurationUpdated += Changed;
-        detach = () => Plugin.Instance.ConfigurationUpdated -= Changed;
+        var owner = plugin.Value;
+        owner.ConfigurationUpdated += Changed;
+        detach = () => owner.ConfigurationUpdated -= Changed;
     }
 
     public WebRendererIntegration(string webRoot, Func<bool> enabled, ILogger<WebRendererIntegration> logger, string revision, Func<bool>? register = null)

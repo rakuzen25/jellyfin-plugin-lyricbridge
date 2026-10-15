@@ -26,7 +26,7 @@ public sealed class ImportWorkflowTests : IDisposable
         var service = new SelectionService(store, retrieval, discovery, null!, query);
         var library = DispatchProxy.Create<ILibraryManager, OriginalLibraryProxy>(); ((OriginalLibraryProxy)(object)library).Item = item;
         var maintenance = new ManagedLibraryMaintenance(store, discovery, generation, local, retrieval);
-        var controller = new Api(service, new(store), new(store), query, new(library), preferences, maintenance, generation, languages, discovery, local, null!);
+        var controller = new Api(service, new(store), new(store), query, new(library), preferences, maintenance, generation, languages, discovery, local, null!, new Lazy<Plugin>(() => TestHost.CreatePlugin(directory)));
         controller.ControllerContext = new() { HttpContext = new DefaultHttpContext() };
         var bytes = Encoding.UTF8.GetBytes("[offset:2000]\n[00:01.00]日本語の歌");
         var input = new ImportLyricsInput(FileName: "original.lrc", FileBytes: Convert.ToBase64String(bytes), Format: "lrc");
@@ -60,5 +60,5 @@ public sealed class ImportWorkflowTests : IDisposable
         Assert.Equal("lrc", provenance.GetProperty("formatChoice").GetString());
     }
     private static string Snapshot(Store store) => Codec.Serialize(new { Documents = store.All<RichLyrics>("document"), Raw = store.All<RawLyrics>("raw"), Originals = store.All<SavedOriginal>("saved-original"), Variants = store.All<Variant>("variant"), Jobs = store.All<Job>("job"), Selections = store.All<RichLyrics>("selected"), Instrumental = store.All<InstrumentalEvidence>("instrumental") });
-    public void Dispose() { SqliteConnection.ClearAllPools(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    public void Dispose() { TestHost.ClearDatabasePools(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
 }

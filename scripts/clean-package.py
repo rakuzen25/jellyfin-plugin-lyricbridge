@@ -7,8 +7,18 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-from ci import artifact_hashes, digest
+from ci_policy import artifact_hashes, digest
 from source_inventory import source_files
+
+
+def preserve_previous_archives(output: Path, current: set[str]) -> None:
+    previous = [path for path in output.glob("*.zip") if path.name not in current]
+    if not previous:
+        return
+    archive = Path(tempfile.mkdtemp(prefix="previous-", dir=output))
+    for path in previous:
+        shutil.move(path, archive / path.name)
+    print(f"Preserved {len(previous)} previous archives in {archive}")
 
 
 def main():
@@ -58,7 +68,9 @@ def main():
         )
         out = repository / "dist"
         out.mkdir(exist_ok=True)
-        for name in artifact_hashes(root):
+        artifacts = artifact_hashes(root)
+        preserve_previous_archives(out, set(artifacts))
+        for name in artifacts:
             shutil.copy2(root / "dist" / name, out / name)
         # A local standalone clean build also supplies the assets inspected by tests.
         if not args.prepared_web:

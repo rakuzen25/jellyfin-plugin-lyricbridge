@@ -1,7 +1,7 @@
 /* This Source Code Form is subject to the Mozilla Public License, v. 2.0.
  * See https://mozilla.org/MPL/2.0/. */
-/** Resources owned by one renderer installation. Disposal is idempotent. */
-export class RendererLifecycle {
+/** Resources owned by one bridge or renderer installation. Disposal is idempotent. */
+export class Lifecycle {
     private readonly cleanups = new Set<() => void>();
     private readonly frames = new Set<number>();
     private readonly timers = new Set<number>();

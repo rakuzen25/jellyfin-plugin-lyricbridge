@@ -1,3 +1,4 @@
+import { ACCENT_STORAGE_KEY, PREMIUM_ACCENTS, ACCENT_HISTORY_STORAGE_KEY, NEUTRAL_ACCENT } from "./settings.ts";
 /* This Source Code Form is subject to the Mozilla Public License, v. 2.0.
  * See https://mozilla.org/MPL/2.0/. */
 import { requireValue } from "../shared/invariants.ts";
@@ -7,15 +8,6 @@ import type { LyricInput } from "./payload.ts";
 import type { RendererState } from "./state.ts";
 
 interface Dependencies {
-    ACCENT_STORAGE_KEY: "lyricbridge.renderer.accent";
-    PREMIUM_ACCENTS: readonly {
-        id: string;
-        name: string;
-        rgb: string;
-        secondaryRgb: string;
-        tertiaryRgb: string;
-        gain: number;
-    }[];
     state: Pick<
         RendererState,
         | "accentRandomSource"
@@ -30,22 +22,12 @@ interface Dependencies {
         | "accentSelectionReason"
         | "lyrics"
     >;
-    ACCENT_HISTORY_STORAGE_KEY: "lyricbridge.renderer.recentAccents";
-    NEUTRAL_ACCENT: Readonly<{
-        id: "neutral-fallback";
-        name: "Neutral Fallback";
-        rgb: "214, 226, 255";
-        secondaryRgb: "196, 180, 255";
-        tertiaryRgb: "255, 214, 238";
-        gain: 0.72;
-    }>;
     stableHash: (input: string) => number;
     lyricSignature: (lyrics: LyricInput[]) => string;
     wakeAnimationLoop: () => void;
 }
 export function createAccentController(dependencies: Dependencies) {
-    const { ACCENT_STORAGE_KEY, PREMIUM_ACCENTS, state, ACCENT_HISTORY_STORAGE_KEY, NEUTRAL_ACCENT, stableHash, lyricSignature, wakeAnimationLoop } =
-        dependencies;
+    const { state, stableHash, lyricSignature, wakeAnimationLoop } = dependencies;
     function readAccentMode() {
         try {
             const stored = localStorage.getItem(ACCENT_STORAGE_KEY);
