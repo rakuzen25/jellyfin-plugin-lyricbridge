@@ -1,129 +1,111 @@
-# Operating LyricBridge
+# Install and operate LyricBridge
 
-LyricBridge targets Jellyfin 12.2 / .NET 10 on Linux x64. Release readiness belongs to the exact tested release artifacts and their workflow evidence, not to a build succeeding alone. ARM64 remains experimental and unverified; it does not block x64 acceptance. Publication and installation of this candidate are separate actions.
+Use this guide to install, maintain, and remove LyricBridge on Jellyfin 12.2 / .NET 10
+on Linux x64. ARM64 is experimental and unverified. Release acceptance applies to the
+exact artifacts verified by the release workflow.
 
-## Storage
+## Install from the catalog
 
-The plugin uses storage schema 5. Unsupported databases are
-rejected without deletion or migration. Stop Jellyfin, back up the complete
-LyricBridge storage directory, and select a new empty absolute storage directory
-before starting the plugin. Keep backups outside the new directory. Never
-remove media or overwrite a production database to satisfy this requirement.
+Install the plugin using Jellyfin's administrator dashboard:
 
-## Automated GitHub releases
+1. In **Dashboard → Plugins → Repositories**, add
+   `https://raw.githubusercontent.com/rakuzen25/jellyfin-plugin-manifest/main/manifest.json`.
+2. Install **LyricBridge** from the catalog and restart Jellyfin.
+3. Check **Dashboard → Plugins → LyricBridge → General** for the active storage path
+   and web renderer status.
+4. Play a sample track and open its lyrics view before enabling scheduled retrieval.
 
-See [RELEASING.md](RELEASING.md) for release credentials, draft artifact verification, publication and shared-catalog updates. Local build commands below remain available for development.
+The plugin ZIP includes dependencies, pronunciation dictionaries, notices, and the
+embedded web renderer. No custom server image is required. Scheduled retrieval starts
+disabled; after sample validation, enable it and configure or run
+**LyricBridge: retrieve missing lyrics** in **Scheduled Tasks**.
 
-## Build and artifacts
+## Configure and back up storage
 
-Install the SDK selected by `global.json`, the Node.js version selected by `.node-version`, pnpm selected by `package.json`, Python selected by `.python-version`, and Docker. Both JavaScript projects share the root `pnpm-lock.yaml`; run the frozen install from the repository root. Run:
+LyricBridge stores retrieved and generated content in a `LyricBridge` directory inside
+Jellyfin's data directory by default. **Lyric storage directory** accepts another
+writable absolute path and requires a server restart. Keep media-library mounts
+read-only and use a filesystem that supports SQLite locking.
 
-```sh
-pnpm install --frozen-lockfile
-pnpm build
-pnpm test
-pnpm check
-scripts/bootstrap-references.sh
-dotnet restore tests/StorageTests.csproj --locked-mode -m:1
-dotnet test tests/StorageTests.csproj --no-restore -m:1
-scripts/test-browser.sh
-python3 tests/ReleaseBoundaries.py
-scripts/package.sh
-python3 tests/PackageArtifacts.py
-python3 tests/ReproducibleBuild.py
-python3 tests/PackageInstallation.py
-```
+For Docker, bind a host directory such as `/srv/jellyfin-lyrics` to `/lyrics`, then
+set the plugin path to `/lyrics`. The directory must be writable by Jellyfin's
+container user. Entering an unmounted host path does not create a bind mount.
 
-The bootstrap extracts compile references from a pinned official Jellyfin image;
-it does not start a server. Override `JellyfinReferenceDir` through MSBuild for an
-existing reference directory. Tests and the plugin use the same property.
+The directory contains a SQLite index with original provider responses, rich lyric
+documents, selections, language versions, preferences, and generation requests.
+Back up the complete directory alongside Jellyfin's configuration. To relocate it:
 
-`dist` contains plugin, separate web, and editable-source ZIPs, SHA-256 checksums,
-and a catalog manifest. The default catalog points to a loopback test server.
-For a release-mode artifact build, set `LYRICBRIDGE_REPOSITORY_URL` and
-`LYRICBRIDGE_DOWNLOAD_BASE_URL` to the intended HTTPS locations and pass
-`--release` to `scripts/package.sh`. This builds files; it does not publish them.
+1. Stop Jellyfin.
+2. Copy the complete directory, including SQLite WAL files if present.
+3. Change the configured path or Docker mount.
+4. Restart Jellyfin and confirm the active path in administrator settings.
 
-The package integration check requires Docker and creates its own official Linux
-x64 server, synthetic accounts, local catalog and temporary storage. It never
-accepts an existing server URL. It checks installation/restart, authentication,
-account preference isolation, administrator restrictions, native lyrics, packaged
-pronunciation dictionaries, restricted libraries, rejection preservation, reset
-boundaries, read-only media, disable and uninstall. It also checks separate web
-asset install/uninstall under a Jellyfin base URL. ARM64 remains experimental; no native test host is available.
+Storage schema 5 is supported. Unsupported schemas are rejected without changes or
+migration. Back up the existing directory outside the replacement location and
+configure new empty storage; do not overwrite the old database.
 
-## Automatic web renderer
+Jellyfin's standard lyric downloader controls its own save location. Disable
+**Save lyrics into media folders** in the music library settings to use Jellyfin's
+internal metadata directory for standard LRC files. LyricBridge's rich retrieval and
+generation always use separate plugin storage.
 
-Install the plugin and restart Jellyfin. **Enable web renderer** defaults to on.
-The plugin serves its embedded JS/CSS and injects ordered, content-versioned tags
-into the Jellyfin-hosted web client. Base URLs are preserved. File Transformation
-is preferred when installed and its registration interface is available; otherwise
-the configured Jellyfin web root must be writable by the server process.
+## Repair the automatic web renderer
 
-Dashboard → Plugins → LyricBridge → General shows the actual web root, mechanism
-and latest result. **Repair web renderer** retries registration and reconciles the
-index using the saved settings. Save the enabled setting before repairing. Reload
-browser clients after changes. Injection failure leaves backend/native lyrics
-available and does not stop Jellyfin startup.
+**Enable web renderer** defaults to on. LyricBridge serves embedded JS/CSS and injects
+ordered, content-versioned tags into Jellyfin-hosted Web, preserving base URLs.
+File Transformation is preferred when its registration interface is available;
+otherwise Jellyfin's configured web root must be writable by the server process.
 
-File Transformation is an optional separately installed plugin, not downloaded or
-bundled by LyricBridge. Its catalog is
-`https://www.iamparadox.dev/jellyfin/plugins/manifest.json`. Use only a build compatible
-with your server. At implementation review, upstream lists targets through 12.1;
-actual File Transformation integration on 12.2 remains unverified. Contract-fixture
-coverage is not installed-plugin validation. Read-only Docker web roots cannot use
-direct injection; do not change server permissions automatically to work around it.
+In **Dashboard → Plugins → LyricBridge → General**, inspect the web root, mechanism,
+and latest result. Save **Enable web renderer**, select **Repair web renderer**,
+then reload browser clients. Injection failure leaves backend/native lyrics available
+and does not stop Jellyfin startup.
+
+File Transformation is an optional, separately installed plugin. Its
+[catalog](https://www.iamparadox.dev/jellyfin/plugins/manifest.json) must provide a build
+compatible with your server. Installed File Transformation integration on Jellyfin
+12.2 remains unverified; contract fixtures do not establish installed compatibility.
+A read-only web root requires compatible File Transformation or a separately hosted
+web installation.
 
 Direct injection backs up `index.html` once and replaces only the LyricBridge marker
-block, preserving other injections and file permissions. It recognizes the current
-manual installer block. Repair/restart reinstalls the block if a web upgrade replaced
-it. Changes inside a Docker container do not survive container recreation; startup
-reapplies them when its web root is writable.
+block, preserving unrelated injections and permissions. It recognizes the manual
+installer block. Repair or restart reinstalls tags after a web upgrade or container
+recreation when the web root is writable. The backup is retained rather than restored
+over unrelated changes.
 
-Before disabling/removing the plugin, save **Enable web renderer = off**, confirm the
-status and reload. Disabling the plugin alone cannot run cleanup after restart;
-remove leftover marked tags with the scoped uninstall command below if necessary.
-The original index backup is retained, never restored over unrelated updates.
-Already loaded browser sessions must reload to stop running the renderer.
+## Install a separately hosted web renderer
 
-Native apps are unaffected. Independently hosted Jellyfin Web clients require the
-separate installation below.
-
-## Separate web renderer
-
-Back up the chosen Jellyfin web root. With appropriate filesystem permissions:
+For an independently hosted Jellyfin Web client, extract the web ZIP and back up the
+chosen web root. From the source checkout, run with permission to update that root:
 
 ```sh
 python3 scripts/web-assets.py --web-root /path/to/jellyfin-web --assets /path/to/web-assets
+```
+
+Replace `/path/to/jellyfin-web` with the installed web root and `/path/to/web-assets`
+with the extracted web ZIP directory. The installer copies assets, saves the original
+index, and inserts relative, content-versioned URLs. Reinstall after web upgrades that
+replace these files. Native apps do not use this renderer.
+
+## Disable or uninstall
+
+Before disabling or removing the plugin, save **Enable web renderer = off**, confirm
+the status, and reload browsers. Then disable or uninstall through Jellyfin's plugin
+controls and restart. A disabled plugin cannot clean up tags after restart.
+
+To remove a separate installation or leftover marked tags, run against that web root:
+
+```sh
 python3 scripts/web-assets.py --web-root /path/to/jellyfin-web --uninstall
 ```
 
-Use the extracted web ZIP as the assets directory. The installer saves the
-original index, inserts ordered, content-versioned asset tags, and uses relative
-URLs for Jellyfin base-URL installations. Uninstall removes only its marked tags
-and managed assets, retaining the index backup and unrelated index edits.
-Jellyfin web upgrades can replace these assets; reinstall after an upgrade.
+Replace `/path/to/jellyfin-web` with the web root being cleaned. Uninstall removes only
+managed tags/assets, retaining the index backup and unrelated edits. Preserve plugin
+storage unless you explicitly intend to reset saved data.
 
-Disable the plugin through Jellyfin's plugin controls and restart before removing
-its plugin directory. Remove the optional web renderer separately. Disabling or
-uninstalling does not authorize deleting the LyricBridge data directory.
+## Next steps
 
-Frontend source is in `frontend`; the administrator page is generated from
-`frontend/admin/config.html` and its typed controller. Edit sources there, then run the build;
-`dist/web/lyricbridge.js` is a generated artifact. Typed modules are checked with
-`tsc --noEmit` before esbuild runs. All maintained application code, including
-the bridge and renderer entrypoints, is covered by strict TypeScript checking.
-
-## Independent releases and the shared catalog
-
-Each plugin has its own source repository, GUID and version. LyricBridge's authoritative identity and release information live in `Directory.Build.props`; the helper's upstream version is independent. Configure actual public URLs before preparing publishable artifacts:
-
-```sh
-LYRICBRIDGE_REPOSITORY_URL=https://github.com/OWNER/lyricbridge \
-LYRICBRIDGE_DOWNLOAD_BASE_URL=https://github.com/OWNER/lyricbridge/releases/download/vVERSION \
-  scripts/package.sh --release
-```
-
-Replace OWNER/repository paths with your real repository. The validation workflow uploads candidate artifacts; it does not publish a release or change the shared catalog. Upload all three archives, notices contained in them, and SHA256SUMS to the corresponding release. Consumers install using the shared catalog URL, not a source-code ZIP. Web enhancement remains a separate install.
-
-Catalog management lives in the separate [jellyfin-plugin-manifest repository](https://github.com/rakuzen25/jellyfin-plugin-manifest). Stable publication triggers its verified update flow. Use that repository's Actions for withdrawals and restoration; see [LyricBridge integration](CATALOG.md) for credentials and notification retries. LyricBridge continues to publish its per-release manifest and validation receipt, which the shared catalog verifies.
+- [Configure sources and languages](SETUP.md) and learn version/reset behavior.
+- [Develop locally](DEVELOPMENT.md) or [validate built packages](CI.md) in disposable fixtures.
+- [Prepare a release](RELEASING.md) and publish verified assets to the shared catalog.

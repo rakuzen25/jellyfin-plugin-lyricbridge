@@ -1,153 +1,282 @@
-# Source and translation setup
-
-Open Dashboard → Plugins → LyricBridge. Setup instructions are also shown beside each source/service. Changes take effect after **Save settings**. Connection tests use synthetic text; they do not generate lyrics for your library. Connection feedback stays beside the service, while loading/saving feedback applies to the whole settings page.
-
-Sources that require missing credentials have disabled, unchecked enable controls. Enter the required credential to enable the control. Connection tests for translation services stay disabled until their required fields are filled. Save changes to that service before testing; unsaved changes elsewhere do not block its test. Configured status means required fields are present; a successful synthetic connection test is reported separately.
-
-## Lyric sources
-
-QQ Music, NetEase, Kugou, Soda Music, and LRCLIB need no credentials or endpoint configuration. Enable the sources you want, choose their order, and save. Musixmatch can obtain a token automatically; leave its credential blank unless you already have a valid Musixmatch `usertoken` from your own client. That optional token is not a Musixmatch developer API key.
-
-For Spotify, sign into <https://open.spotify.com> in your browser. Open Developer Tools → Application (Storage in some browsers) → Cookies → open.spotify.com. Copy just the `sp_dc` value into Spotify’s Credential field, without `sp_dc=` or other cookies. Enable the source and save. A developer client ID or OAuth access token is not accepted by this adapter.
-
-For Apple Music, sign into <https://music.apple.com> with your own account. In Developer Tools → Network, inspect an authenticated Apple Music API request. Copy its `media-user-token` request header value into the Credential field, enable AppleMusic, and save. This is different from an Apple developer token. If your account does not send such a header, leave the source disabled.
-
-Session credentials can expire. Replace them if the source reports an authentication failure. Keep these values private. These adapters use the [Lyricify helper](https://github.com/WXRIW/Lyricify-Lyrics-Helper); account/region restrictions and changes to provider interfaces can affect availability. “Ready” on a source means configuration is present, not that live access has been verified.
-
-To check retrieval, play a track, open Lyrics settings → Versions → Find versions, and filter to the source you configured. Search a known title/artist and preview the returned lyrics. No match does not by itself mean the source is misconfigured. A provider error gives details and retry availability. Applying a selection is administrator-only.
-
-## Translation and pronunciation
-
-| Service | Endpoint to enter | Credentials/model |
-| --- | --- | --- |
-| Google | Built in; no editable endpoint | No credentials |
-| DeepL API Free | Blank, or `https://api-free.deepl.com/v2/translate` | DeepL API key |
-| DeepL API Pro | `https://api.deepl.com/v2/translate` | DeepL API key |
-| AI compatible | Your API base URL, e.g. `https://your-provider.example/v1` | Exact model ID; API key if required |
-| LibreTranslate | Server base URL, e.g. `http://libretranslate:5000` | API key if the instance requires one |
-
-Google translation works without setup. Local Kawazu Japanese romaji is bundled and automatic when pronunciation and Japanese romaji are enabled. Google pronunciation and AI generation are explicit alternatives; their availability depends on the service/language. Google web endpoints are unofficial and may be rate-limited.
-
-For DeepL, create a **DeepL API** account, then copy a key from the account’s API Keys tab. A normal translator subscription alone does not configure API access. Enter the complete translation URL for a paid API account; the plugin’s blank default is the Free endpoint. See [DeepL authentication and endpoint documentation](https://developers.deepl.com/docs/getting-started/auth).
-
-For an AI-compatible service, use its Chat Completions compatible API base URL. The plugin appends `/chat/completions`, so do not include that suffix in the field. Paste the API key without the `Bearer` prefix and enter the exact model ID. The model must support JSON-object output and return every lyric line ID in order. Incorrect mappings are rejected.
-
-AI **Thinking level** defaults to **Provider default**, which omits `reasoning_effort`. Explicit None, Minimal, Low, Medium, High, or Extra high send the matching Chat Completions value and omit temperature. Select a level supported by your endpoint/model; unsupported settings produce a visible configuration error. HTTP timeout is configurable per service from 5–600 seconds (default 15). Higher thinking levels often need a longer timeout; running jobs retain their submitted timeout. New requests and Retry use the latest saved timeout. New jobs snapshot the chosen level, and cached variants are separated by level; existing working rows are preserved. See the [Chat Completions parameter reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).
-
-For LibreTranslate, [install your own server or use a hosted instance](https://docs.libretranslate.com/). The plugin appends `/translate` to the base URL; do not include that suffix. [API keys](https://docs.libretranslate.com/guides/manage_api_keys/) depend on the instance. Install the language models you need on the server.
-
-Local service addresses must be reachable **from Jellyfin’s container**. `localhost` refers to that container, not your browser or a different container. On a shared Docker network, use the service’s container/network name, such as `http://libretranslate:5000`. Keep the scheme, port, and any API-root path specified by the service.
-
-After entering values, **Save settings**, then **Test connection** for that service. A successful test confirms a synthetic English-to-Chinese request, not every language or pronunciation capability. A failure appears beside the service and stays in that tab; fix the configuration, save, and use Test connection again. DeepL and LibreTranslate provide translation only.
-
-To use a service, play a track and open Lyrics settings → Versions. Choose a translation/pronunciation service and explicitly request generation. Song text is sent to that service. Existing supplied rows remain preferred. Ordinary-user external requests are disabled by default; administrators can configure approvals and quotas on the Requests tab.
-
-## Translation context
-
-Google, DeepL, and LibreTranslate each have **Translation context (optional)** controls under Language services → Advanced generation settings. Set **Lines before** and **Lines after** independently from 0 to 10, then save. Both default to 0. Try a small window, such as one line on either side, before increasing it. More context can help ambiguity but is not guaranteed to improve a lyric translation.
-
-DeepL receives neighboring original text through its [dedicated context parameter](https://developers.deepl.com/api-reference/translate/request-translation), keeping the target text separate. Google and LibreTranslate receive a target surrounded by markers and nearby original lines. LyricBridge accepts only the text between exactly two surviving markers; missing/duplicated markers fail the generation rather than attach neighboring lyrics to a line. This is a heuristic, not a native Google/LibreTranslate context feature.
-
-The AI adapter sends the entire song as indexed structured input, so it already has whole-song context. No context-window fields apply to AI or pronunciation. External text generation remains explicit. A job captures the configured window when submitted, and different windows use separate cache identities. Existing rows remain usable until a new result succeeds; new matching results take priority. Generated-row provenance shows its context window when nonzero.
-
-## Diagnostics
-
-Jellyfin’s Dashboard → Logs and the server’s configured log directory contain safe retrieval warnings, connection-test failures, and generation start/completion/failure entries. Generation failures include job ID, service, elapsed time, error code, and diagnostic ID. Model and thinking level appear on the start entry. The Requests tab shows the safe failure and diagnostic ID; old failures retain their original message and cannot acquire historical log entries. Credentials, endpoint URLs, lyric text, and raw provider responses are not included in these entries.
-
-HTTP diagnostics show the destination host, sending/waiting/response phases, timeout, status, transport failure category, and safe provider request/generation IDs when supplied. A generation job ID is used as the HTTP log reference. Waiting entries appear every ten seconds; non-streaming AI remains at 0% until the complete response is received and validated. These logs do not include headers, keys, prompts, responses, or full URLs. OpenRouter generation IDs can be matched against its [Activity dashboard](https://openrouter.ai/activity).
-
-AI translation and pronunciation use separate instructions. Translation output must contain only the target-language translation, while pronunciation output must contain only romanization. AI cache keys include a prompt version: changes to these instructions allow a fresh generation while earlier rows remain usable until a replacement succeeds. This format guidance does not guarantee correct readings or idiomatic translation; model quality and the source lyric text still matter.
-
-## Saved language versions
-
-Lyrics settings → Versions includes **Saved originals** as well as saved translation and pronunciation versions. Selected provider originals (including automatic selections), upgrades and imports are saved; provider previews stay temporary. Identical imports reuse the saved entry. Everyone with access to the song can preview a saved original without changing its selection or starting generation. Administrators can select it for the library or delete it after confirmation. Switching originals restores the matching translations, pronunciation, personal auxiliary choices and shared timing correction; generated rows are never remapped between originals.
-
-Deleting a saved original removes that song’s association and its timing correction. A deleted current original is replaced by the newest remaining saved original. If no saved originals remain, current lyrics are cleared and automatic discovery pauses until an explicit retry, import or selection. Shared documents and their dependent versions remain when another song, selection, composition/donor, improvement offer or unaffected active job requires them. Affected jobs are cancelled transactionally; retained history identifies deleted output and cannot retry it. Media and external lyric files are never deleted.
-
-Storage uses schema 5. Unsupported databases are rejected without changes. Back up the complete storage directory and configure new empty storage when the schema is unsupported.
-
-Saved translation and pronunciation versions are listed separately. Each lists its service, model, thinking level, and generation time when available. Choose Preview, then Use to save the selection for your account and this original lyric content. Translation choices are separate for each target language. Automatic prefers supplied rows; Provider supplied only excludes generated rows.
-
-Generate creates a new saved version, retains earlier outputs and your current displayed choice, and is subject to the usual external-generation permissions, approval, and quotas. Version choices do not alter other users or the administrator’s original-lyric selection. Changing the original lyric version exposes only matching generated outputs; older outputs remain stored with their original content.
-
-## Feedback lifetime
-
-Success confirmations clear after four seconds; successful connection tests clear after four. Loading/progress stays until completion, while errors remain until dismissed or resolved. Pending approvals, instrumental/no-lyrics outcomes, configuration availability, and request history do not expire. Better timing offers can be dismissed for the current viewing session. Newer feedback replaces earlier feedback and cancels its timer; leaving the lyric/config view clears pending timers.
-
-## Shared lyric timing
-
-LyricMotion’s timing controls remain personal to the current browser. In Lyrics settings → Song → Shared timing, administrators can use **Save timing for everyone** to save the shared correction plus their current personal adjustment for that track and original lyric version. The personal adjustment is then reset to zero to avoid double application. **Reset shared timing** saves zero for that version without changing other browsers’ personal adjustments. Shared corrections live in plugin storage and are checked against the lyric timeline fingerprint. Changing pronunciation or translation retains timing; selecting another original version loads that version’s correction, and returning to the previous version restores its correction. These corrections affect LyricMotion web playback; native-client lyric files remain unchanged.
-
-## Wrong matches, imports and combined sources
-
-In **Lyrics settings → Versions**, administrators can choose **Remove lyrics** to clear the current selection and suspend automatic matching for that track. This is not an instrumental classification. **Search again** clears the shared rejection only for administrators; ordinary users may search and preview without changing it; scheduled discovery leaves rejected tracks alone. **Use Jellyfin lyrics** selects lyrics already available through Jellyfin; **Import lyrics** accepts a text lyric file up to 1 MB and stores it under the plugin’s writable storage, without touching the media mount. Manual imports remain available as saved original versions.
-
-Under Pronunciation or Translation, **Choose … from another source** searches for a donor version. Review the original-to-donor mappings, adjust unmatched lines, and save with **Use mapped …**. Automatic suggestions use normalized original text, sequence, and timing to resolve repeated lines; ambiguous lines remain unmatched. Saves reject duplicate or reordered mappings. Unmatched rows stay absent. Donor rows keep the current original lyric version’s activation windows and word timing, and shared timing corrections remain attached to the unchanged original version. Donor documents and raw provider responses remain available in plugin storage; the resulting supplied rows appear as a separate saved auxiliary version.
-
-### Reset managed lyric library
-
-Administrators can open **General → Maintenance → Reset managed lyric library**. Type `RESET`, then select **Delete managed lyric library**. This deletes all LyricBridge-managed original/raw lyrics, saved and generated language versions, preview caches, timing corrections, selections, instrumental/rejected-match classifications, and generation request history. Active discovery/generation is stopped first. Deleted SQLite pages are cleared and compacted.
-
-Plugin settings, credentials, and user display preferences are retained. Music and sidecar files in the source library, Jellyfin's own lyric storage, and other plugins' data are preserved. LyricBridge currently keeps its managed payloads inside its configured SQLite database, with no separate managed sidecar files. Opening lyrics again can retrieve a fresh version; scheduled retrieval can also refill the cache if enabled. This action is irreversible; take a storage backup first if you want to restore the saved versions later.
-
-## Playback settings and song languages
-
-Lyrics settings opens on **Song**. The desktop side panel and mobile bottom sheet leave playback controls accessible. **Song** contains current-source summaries, the existing timing control, and language overrides. **Display** contains account-wide visibility, languages, typography and layout. **Versions** contains original selection/import, saved pronunciation and translations, temporary previews, and generation under each corresponding section.
-
-Song languages default to **Use account default** and display the inherited value. Original language also has explicit **Auto-detect**, which can override an account language. Overrides sync for your Jellyfin user and song, survive lyric-version changes, and do not trigger external generation. **Reset song language overrides** restores inheritance. Chinese original script and Japanese romanization remain account-wide. Managed lyric resets keep account preferences and song language overrides.
-
-**Automatic** is a selection policy, separate from an individual saved version. Its description shows which service currently supplies the rows. Preview does not save a choice; **Use** saves an auxiliary choice for your account. Playback previews hide comparison panels and provide Return, Cancel and authorized Use actions. Cancel restores lyrics and the previous playback position. Original library selections and maintenance remain administrator-only.
-
-Progress details stay with the affected operation. Success messages clear after four seconds. Failures offer Retry or Dismiss; dismissing a running notification does not cancel the job. Routine ready and cached-lookup notifications are suppressed.
-
-## Administrator tabs
-
-- **General:** writable storage, scheduled retrieval, and Advanced maintenance.
-- **Sources:** provider order, setup, credentials, and advanced matching.
-- **Language services:** local Kawazu, service capabilities, setup and synthetic tests.
-- **Display defaults:** the same grouping as account Display preferences.
-- **Requests:** permissions, conditional approval/quotas, and approval queue.
-
-One persistent **Save settings** footer applies configuration edits. Switching tabs preserves edits. Failed saves retain values. Connection-test results remain beside their service.
-
-## Matching and comparing recordings
-
-The automatic minimum defaults to 70 in Sources → Advanced matching. Recording compatibility still applies: incompatible editions, absent title matches, artist disagreements and excessive duration differences cannot be selected automatically. Artist aliases are not yet resolved.
-
-Find versions keeps all displayed candidates stable while checking their lyrics. Expand Match details for server-computed field results, recording/duration warnings and verified lead-line word coverage. Recommended identifies the best eligible verified recording. Sort by best match deliberately reorders the existing rows; it does not select or save anything. Administrators can preview and manually use a conflicting result when its warnings reflect metadata problems.
-
-Cached lyrics do not search again whenever the view opens. Search again explicitly looks for improved recordings or timing. Offers only appear for a higher match tier, or a higher timing category within the same tier; small score/coverage differences do not cause repeated prompts. Preview before applying and select a saved original in Versions to restore it. See RANKING.md for all limits.
-
-### Musixmatch verification failures
-
-Musixmatch can challenge automatic token acquisition with CAPTCHA/verification, even while other requests from the server succeed. This is a provider verification failure, not evidence that a song has no lyrics. LyricBridge shows `provider_verification_required`, logs its diagnostic reference without tokens or response bodies, and backs off for five minutes. Other sources remain available. Retry after the indicated time, review the optional token setup, or disable Musixmatch in Sources if you prefer to avoid these failures. A supplied token is not guaranteed to remove a provider challenge. Do not repeatedly retry or attempt to automate verification bypass.
-
-### Compact controls and help
-
-In playback settings, expand a pronunciation or translation version to reveal Preview, Use and Delete. Expanding a row only browses it; it does not change playback or the saved choice. Generation stays under the relevant section. New versions appear without reopening the panel.
-
-Setup instructions, advanced generation settings and diagnostic details are expandable. Routine instructions are omitted; sharing scope, external-service consent and destructive consequences remain visible. Dismiss hides a failed job across the notification and its Versions details for the current track session; Retry makes subsequent outcomes visible again.
-
-Playback task groups use subtle inset surfaces for generation, maintenance, expanded versions and search previews. Advanced options remain within their task; opening a version still only browses it. Ordinary display settings remain lightweight, and administrator configuration retains native Jellyfin styling.
-
-Search results identify sources supplying your selected original, pronunciation and translation separately. A source may carry multiple usage badges; selected auxiliary rows hidden in Display are labeled “selected · hidden”. Recommendations and preview selection are independent. Google/AI/Kawazu-generated text does not mark a lyric provider as its source. Mixed supplied rows retain explicit donor provenance.
-
-Title matching ignores recognized featured-artist clauses, including those preceding a named remix qualifier. Recording/edition checks still reject different named remixes. Search uses Needs review for automatically excluded candidates rather than displaying a strong aggregate score as an endorsement; recording/title details remain available for manual review.
-
-Administrator settings use five compact native Jellyfin tabs. Sources retain enabled order and inline credential setup; Language services show capabilities and configured status, with tests using saved settings. Display defaults apply to accounts without their own saved preferences. Storage-change instructions and destructive maintenance are disclosed beside their actions. Save settings remains visible, preserves edits after failure, and becomes available only after settings load successfully. Failed loads offer Retry.
-
-Language services list their roles and language limitations: Kawazu provides local Japanese romaji; Google provides translation and pronunciation for the supported languages listed in its row; AI capabilities depend on the configured model; DeepL and LibreTranslate provide translation only, with provider/server language support. Display defaults use the same Original/Pronunciation/Translation controls as the playback Display tab. Chinese translation script is selected through Chinese (Simplified) or Chinese (Traditional); Chinese original text has its own script choice. Auto-detect keeps language-specific defaults in a disclosure, and selecting a language reveals its relevant controls without discarding hidden settings.
-
-## Browser rendering quality
-
-For reduced rendering load, open Lyrics settings → Display → Text sizes and layout and choose **Low power** under Rendering quality. Artwork becomes stationary and glyph lift/glow is disabled; timed highlighting remains. Standard remains the default. The selection is saved in this browser, not server configuration. See [performance validation](PERFORMANCE.md) for measurement limits.
-
-### Song actions and restoration
-
-Settings tabs are **Song → Versions → Display**. The original-lyrics section in
-Versions owns search, import, Jellyfin selection, rejection and instrumental
-classification. Shared changes remain administrator-only and classification changes
-require confirmation. Search keeps provider track ID in an Advanced disclosure in the search form, which collapses into the query summary; it does not duplicate these actions.
-
-Restore lyrics by choosing a saved original; change rejected/instrumental classification explicitly. Deleting the current original selects the newest remaining
-saved original, retaining that version's timing and auxiliary choices.
+# Configure sources, languages, and saved versions
+
+After [installation](DEPLOYMENT.md), open **Dashboard → Plugins → LyricBridge**.
+Save configuration before testing services. Playback choices live under
+**Lyrics settings → Song / Versions / Display**.
+
+## Configure administrator settings
+
+The five tabs group configuration by task:
+
+| Tab               | Settings                                                                |
+| ----------------- | ----------------------------------------------------------------------- |
+| General           | Writable storage, scheduled retrieval, web renderer, maintenance        |
+| Sources           | Provider order, credentials, advanced matching                          |
+| Language services | Kawazu, external service capabilities/setup, synthetic connection tests |
+| Display defaults  | Defaults for accounts without saved preferences                         |
+| Requests          | User permissions, approvals, quotas, request history                    |
+
+**Save settings** applies configuration edits across tabs. Switching tabs preserves
+edits; failed saves retain values. Failed initial loads offer **Retry**.
+Connection tests use saved settings and synthetic text; they do not generate library
+lyrics. Results stay beside the service. Configured/Ready status indicates required
+fields are present, separately from successful live access.
+
+## Configure lyric sources
+
+Default order is QQ Music, NetEase, Kugou, Soda Music, Musixmatch, Spotify, Apple Music,
+then LRCLIB. Reorder or disable providers in **Sources**.
+
+QQ Music, NetEase, Kugou, Soda Music, and LRCLIB need no credentials.
+Musixmatch can obtain a token automatically; optionally supply a valid `usertoken`
+from your own client, rather than a developer API key.
+
+For Spotify:
+
+1. Sign into [Spotify Web](https://open.spotify.com).
+2. In browser Developer Tools, open **Application/Storage → Cookies → open.spotify.com**.
+3. Copy only the `sp_dc` value into **Credential**, enable Spotify, and save.
+
+For Apple Music:
+
+1. Sign into [Apple Music Web](https://music.apple.com).
+2. In Developer Tools → **Network**, inspect an authenticated Apple Music API request.
+3. Copy its `media-user-token` header value into **Credential**, enable Apple Music,
+   and save. If no such header is available, leave the source disabled.
+
+Spotify OAuth/developer credentials and Apple developer tokens are not accepted.
+These sources are skipped when unconfigured; required credentials unlock their enable
+controls. Keep session tokens private and replace expired credentials.
+Account/region restrictions and provider API changes can affect availability.
+
+To check retrieval, play a known track and open
+**Lyrics settings → Versions → Search versions**. Filter to the configured source and
+preview a result. No match alone does not establish a configuration failure.
+Only administrators can save original selections, apply offers, reject matches, or
+mark instrumentals. Provider IDs are under **Advanced**; QQ overrides use numeric
+song IDs, while search candidates also retain song MIDs for line-lyrics fallback.
+
+Musixmatch verification challenges report `provider_verification_required` and back
+off for five minutes. Other providers remain available. Wait for the retry time,
+review the optional token, or disable that source. A supplied token does not guarantee
+removal of a challenge; do not automate verification bypass.
+
+## Configure translation and pronunciation
+
+Enter endpoints and required fields under **Language services**:
+
+| Service        | Endpoint                                                  | Required configuration                             |
+| -------------- | --------------------------------------------------------- | -------------------------------------------------- |
+| Google         | Built in                                                  | None; unofficial web endpoints may be rate-limited |
+| DeepL API Free | Blank or `https://api-free.deepl.com/v2/translate`        | DeepL API key                                      |
+| DeepL API Pro  | `https://api.deepl.com/v2/translate`                      | DeepL API key                                      |
+| AI compatible  | API root, for example `https://your-provider.example/v1`  | Exact model ID; API key if required                |
+| LibreTranslate | Server base URL, for example `http://libretranslate:5000` | Installed language models; API key if required     |
+
+DeepL requires an API account; a translator subscription alone does not provide API
+access. See [DeepL authentication](https://developers.deepl.com/docs/getting-started/auth).
+For [LibreTranslate](https://docs.libretranslate.com/), install the needed language
+models and configure [API keys](https://docs.libretranslate.com/guides/manage_api_keys/)
+as required by your instance. DeepL and LibreTranslate provide translation only.
+Google pronunciation is limited to its supported scripts; AI capabilities depend on
+the chosen model.
+
+The AI adapter appends `/chat/completions` to its base URL; LibreTranslate appends
+`/translate`. Omit these suffixes from those fields. Paste API keys without `Bearer`.
+AI models must support JSON-object output and return every lyric line ID in order;
+invalid mappings are rejected.
+
+Local endpoints must be reachable from Jellyfin's container. `localhost` refers to
+that container. On a shared Docker network, use the service name and port,
+such as `http://libretranslate:5000`.
+
+After configuring a service:
+
+1. Select **Save settings**.
+2. Select **Test connection** beside the service.
+3. If it fails, inspect the local diagnostic, correct settings, save, and retry.
+
+A successful test confirms synthetic English-to-Chinese translation, not every
+language or pronunciation capability. Tests remain disabled until required fields
+are present; unsaved changes to that service must be saved first.
+
+In **Versions**, explicitly request generation under pronunciation or translation.
+External services receive song text. User requests and automatic approval default
+to off; default limits are five new jobs per rolling 24 hours and three active
+requests. Cache hits consume no new request. Administrators manage approval,
+rejection, cancellation, and retry under **Requests**.
+
+### Choose AI settings and translation context
+
+AI **Thinking level** defaults to **Provider default**, which omits
+`reasoning_effort`. Explicit None, Minimal, Low, Medium, High, and Extra high send the
+matching value and omit temperature. Use a level supported by your endpoint/model.
+Service HTTP timeouts range from 5–600 seconds, defaulting to 15; higher thinking
+levels may need longer timeouts.
+
+For Google, DeepL, and LibreTranslate, **Advanced generation settings → Translation
+context** provides independent **Lines before/after** values from 0–10, both defaulting
+to zero. Start with a small window. DeepL uses its
+[context parameter](https://developers.deepl.com/api-reference/translate/request-translation);
+Google/LibreTranslate use markers and reject missing/duplicated markers rather than
+attach neighboring text. This heuristic does not guarantee better translations.
+AI already receives whole-song indexed input; context windows do not apply to
+AI or pronunciation.
+
+Jobs snapshot submitted settings. New jobs/retries use the latest saved settings;
+cache identity includes model, thinking level, context, and prompt version.
+Existing outputs remain usable until replacements succeed. Generation validates line
+identities; auxiliary rows inherit original line windows without invented word timing.
+
+### Use local Japanese romaji
+
+Bundled Kawazu prepares missing Japanese romaji, including background vocals, when
+pronunciation is enabled. Originals display while it runs. Hepburn is the default;
+Passport and Nippon are available. Supplied pronunciation takes priority.
+Local work has no external approval or quota.
+
+Administrators can disable **Language services → Kawazu → Automatically generate
+missing Japanese pronunciation**. This stops new automatic scheduling; saved rows and
+manual generation remain available, and queued work may finish.
+Disabling pronunciation also stops new automatic local scheduling.
+
+## Choose playback languages and display
+
+**Song** opens by default and contains source/timing summaries and song language
+overrides. **Versions** contains originals, imports, previews, and language versions.
+**Display** contains account languages, visibility, order, typography, and layout.
+Changes save immediately with retryable failure feedback.
+
+Song overrides default to **Use account default**; explicit **Auto-detect** can override
+an account original language. Overrides sync per Jellyfin user/song, survive version
+changes, and do not trigger external generation. **Reset song language overrides**
+restores inheritance.
+
+Japanese romanization and Chinese original script are account-wide. Chinese translation
+script follows the selected **Chinese (Simplified)** or **Chinese (Traditional)**
+translation language. Mixed-language lyrics expose relevant controls; Auto-detect
+groups possible options in a disclosure. Hidden preferences remain saved. Conversion
+preserves original stored text and cue boundaries.
+
+Manual scrolling suspends following. **Sync** recentres and resumes following without
+seeking or changing timing. Seeking or changing tracks also resumes following.
+For reduced rendering load, choose **Display → Text sizes and layout → Rendering
+quality → Low power**. Artwork becomes stationary and glyph lift/glow stops, while
+timed highlighting continues. Standard is the default; quality is saved in this
+browser. See [performance limits](PERFORMANCE.md).
+
+## Select and restore lyric versions
+
+In **Versions**, expand a version to browse its actions; expansion does not change
+playback. **Preview** is temporary; cancellation restores previous lyrics and playback
+position. **Use** saves the applicable choice. Supplied rows remain attached to their
+original and cannot be deleted independently.
+
+**Saved originals** retains selected providers, upgrades, and imports; identical
+imports reuse an entry. Jellyfin lyrics are retained automatically, with one latest
+automatic copy per track. Explicitly choosing/importing that copy preserves it across
+local lyric changes. Deleting an automatic copy can be followed by a new automatic
+save while Jellyfin still supplies it. Manual selections take precedence.
+
+Everyone with song access can preview saved originals. Administrators select originals
+for the library or delete them after confirmation. Changing originals restores matching
+language versions, personal auxiliary choices, and shared timing; generated rows are
+never remapped between originals.
+
+Translation/pronunciation versions show service, model, thinking level, and time where
+available. **Use** saves an auxiliary choice for your account and original content;
+translation choices are separate per target language. **Automatic** prefers supplied
+rows and fills gaps from available versions, marking contributing versions
+**In use · Automatic**. Choosing a supplied version uses only its rows.
+**Provider supplied only** excludes generated rows. Hidden selected rows retain usage
+badges. Generated text does not mark a lyric provider as its source.
+
+**Generate** saves another version without discarding previous outputs or changing
+your current explicit choice. User auxiliary choices do not change anyone else's
+display or the administrator's original selection.
+
+### Delete an original
+
+Deleting removes that song's association and shared timing. The newest remaining
+original replaces a deleted current original. If none remain, lyrics clear and
+automatic discovery pauses until explicit retry, import, or selection.
+
+Shared documents remain while other songs, selections, donors/compositions, improvement
+offers, or unaffected active jobs need them. Affected jobs are cancelled; retained
+history identifies deleted output and cannot retry it. Media/sidecar files remain intact.
+
+### Correct matches or combine sources
+
+Original actions live in **Versions**. **Remove lyrics** clears selection and suspends
+automatic matching; it does not mark the track instrumental. Administrator
+**Search again** clears rejection; ordinary users can search/preview without changing
+it. Scheduled discovery skips rejected tracks.
+
+**Use Jellyfin lyrics** selects the native version. **Import lyrics** validates an
+uploaded file and retains it in plugin storage; see [supported formats](IMPORT.md).
+For provider search, inspect **Match details** and **Recommended**, then preview before
+saving. **Sort by best match** explicitly reorders results. Cached opening does not
+rediscover providers; improvements are offered without replacing displayed selections.
+See [ranking and offer rules](RANKING.md) for eligibility and limits.
+
+Under pronunciation/translation, **Choose … from another source** searches for a donor.
+Review mappings, adjust unmatched lines, and save with **Use mapped …**.
+Suggestions use normalized text, sequence, and timing; ambiguous rows stay unmatched.
+Duplicate/reordered mappings are rejected. Donor rows inherit current original timing,
+retain donor provenance, and appear as a separate supplied auxiliary version.
+
+Instrumental detection requires an explicit provider flag or exact single-line notice;
+empty searches and errors do not qualify. Instrumentals have no fake sung rows,
+auxiliary generation, or Sync button. Provider classifications expire after seven days;
+**Search again** bypasses classification caches while respecting backoff.
+Administrator marks persist until cleared. Actual lyrics take precedence over
+conflicting provider classifications.
+
+## Save shared timing
+
+Browser timing adjustments are personal. In **Song → Shared timing**, administrators
+can select **Save timing for everyone** to add their personal adjustment to the shared
+correction and reset that personal adjustment to zero. **Reset shared timing** saves
+zero without changing other browsers' personal adjustments.
+
+Corrections belong to a track/original timeline fingerprint. Auxiliary changes retain
+timing; switching originals loads that version's correction, including when restored.
+Shared corrections affect web playback, leaving native-client lyric files unchanged.
+
+## Reset the managed lyric library
+
+Back up [plugin storage](DEPLOYMENT.md#configure-and-back-up-storage) before this
+irreversible operation. In **General → Maintenance → Reset managed lyric library**,
+type `RESET`, then select **Delete managed lyric library**.
+
+Reset stops active discovery/generation and deletes managed originals/raw lyrics,
+language versions, preview caches, timing, selections, classifications, and request
+history. Deleted SQLite pages are cleared and compacted. Plugin settings, credentials,
+account/song preferences, music/sidecar files, Jellyfin storage, and other plugins'
+data remain. Opening lyrics or enabled scheduled retrieval can refill storage.
+
+## Diagnose requests and feedback
+
+Success confirmations expire after four seconds. Progress stays until completion;
+errors persist until dismissed/resolved. Dismiss does not cancel work.
+Pending approvals, classifications, configuration availability, and history persist.
+Improvement dismissal and failed-job dismissal apply to the current viewing session.
+Monitoring failures offer **Retry status check**; confirmed generation failures offer
+**Retry generation**.
+
+Use **Dashboard → Logs** or Jellyfin's configured log directory for retrieval,
+connection-test, and generation diagnostics. Generation entries include job ID,
+service, elapsed time, error code, and diagnostic ID; start entries include model and
+thinking level. HTTP entries show destination host, phase, timeout/status, transport
+category, and safe provider IDs, with waiting entries every ten seconds.
+
+Non-streaming AI stays at 0% until its complete response is validated. Logs exclude
+credentials, headers, full endpoint URLs, lyrics/prompts, and raw responses.
+Match safe OpenRouter generation IDs in its [Activity dashboard](https://openrouter.ai/activity).
+Model quality and source text still determine translation/readings despite valid format.
+
+## Next steps
+
+- [Review import formats](IMPORT.md) before importing structured or encrypted lyrics.
+- [Understand matching](RANKING.md) when investigating recording conflicts or upgrade offers.
+- [Maintain storage and web integration](DEPLOYMENT.md) for backups, repair, and uninstall.

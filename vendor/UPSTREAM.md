@@ -1,28 +1,64 @@
 # Upstream components
 
-- Lyricify-Lyrics-Helper: <https://github.com/WXRIW/Lyricify-Lyrics-Helper>, revision `e875781e2e889d97c3c518fe388decd14805a56f`. Apache 2.0 notice: `LYRICIFY-LICENSE`.
-- LyricMotion 3.3: <https://github.com/ThisIsTeddyBear/Jellyfin-LyricMotion>. Source revision `81aba587140563461fe18f85a43cd73ebb7a74e1`; notice: `LYRICMOTION-LICENSE`.
+This record identifies pinned sources, notices, and local modifications.
+[Distribution requirements](../docs/LICENSES.md) describe the matching archives and
+corresponding-source obligations.
 
-Local helper changes retain QQ provider romanization and route Soda, Spotify, and Musixmatch traffic through the plugin's shared cancellable HTTP transport. LyricMotion changes add auxiliary-row decoration hooks, exclude auxiliary rows from its DOM ownership checks, and hide its alternate romanization mode when LyricBridge supplies rows. Timing and karaoke motion remain upstream behavior.
+## Lyricify helper
 
-- Kawazu 1.1.4: <https://github.com/Watertrans/Kawazu>, MIT (`KAWAZU-LICENSE`).
-- LibNMeCab 0.10.1: <https://github.com/komutan/NMeCab/tree/v0.10.1>. LGPL 2.1-or-later or GPL 2.0-or-later; dynamically linked. License and corresponding source: `LIBNMECAB-LICENSE`, `LIBNMECAB-SOURCE.tar.gz`. Consult the source archive for its authoritative revision.
-- IpaDicBin 0.10.0 dictionary: distributed with Kawazu; dictionary COPYING/AUTHORS remain beside the data files and COPYING is packaged as `IPADIC-COPYING`.
+[Lyricify-Lyrics-Helper](https://github.com/WXRIW/Lyricify-Lyrics-Helper) revision
+`e875781e2e889d97c3c518fe388decd14805a56f` uses Apache 2.0 (`LYRICIFY-LICENSE`).
 
-Additional LyricMotion changes retain its renderer and add persistent user-controlled following/Sync, coalesced geometry refreshes, and auxiliary-row ownership checks.
+Local modifications retain QQ romanization; route Soda, Spotify, and Musixmatch through
+cancellable plugin transport; and give provider instances their own credentials and
+Spotify/Apple token caches. Searchers accept those instances; global proxy mutation
+is removed, and transport errors/cancellation reach sanitized plugin diagnostics.
+Matching exposes prepared normalization, skips Chinese conversion for ASCII names,
+and calculates each fuzzy similarity once while preserving field scores/buckets.
+Recording eligibility and ranking belong to LyricBridge.
+KRC/QRC overloads accept bytes, bound decompression, validate containers, and preserve
+non-BOM first characters.
 
-Matching-specific helper changes expose prepared name normalization, accept already normalized fields, skip Chinese conversion for ASCII-only names, and calculate each fuzzy similarity once before selecting its bucket. Field comparisons and score buckets are preserved. Recording/timing eligibility and ranking live in LyricBridge rather than the helper.
+## LyricMotion renderer
 
-Provider API instances now own credentials and Spotify/Apple token caches. The plugin injects its owned HTTP client into each instance; searchers accept those instances. The unused global proxy mutation helper was removed. Transport failures and cancellation propagate to sanitized plugin diagnostics. The renderer consumes bridge lifecycle events instead of installing another transport interceptor. Editable renderer source and MPL notices are shipped in the source archive.
+[LyricMotion 3.3](https://github.com/ThisIsTeddyBear/Jellyfin-LyricMotion) revision
+`81aba587140563461fe18f85a43cd73ebb7a74e1` supplies the MPL-2.0 renderer
+(`LYRICMOTION-LICENSE`). Local modifications include typed ownership/lifecycle modules,
+bridge events instead of another transport interceptor, auxiliary-row decoration/DOM
+boundaries, pronunciation-mode suppression when bridge rows exist, following/Sync,
+geometry coalescing, and rendering-quality controls. Editable source and MPL notices
+ship in the source archive.
 
-Renderer third-party attribution and the Dynamic Background/Kawarp MIT notices
-are copied from the pinned LyricMotion revision above: `THIRD_PARTY_NOTICES.md`,
-`licenses/DYNAMIC-BACKGROUND-MIT.txt` and `licenses/KAWARP-MIT.txt`. Their local
-copies are `LYRICMOTION-THIRD-PARTY-NOTICES.md`, `DYNAMIC-BACKGROUND-LICENSE` and
-`KAWARP-LICENSE`; all are shipped with plugin and web artifacts. This preserves
-the notices associated with the actual renderer source rather than substituting
-licenses from a newer dependency revision.
+[Third-party attribution](LYRICMOTION-THIRD-PARTY-NOTICES.md) and
+`DYNAMIC-BACKGROUND-LICENSE` / `KAWARP-LICENSE` come from that pinned revision's
+`THIRD_PARTY_NOTICES.md`, `licenses/DYNAMIC-BACKGROUND-MIT.txt`, and
+`licenses/KAWARP-MIT.txt`. Preserve these matching MIT notices in plugin/web archives.
 
-- OpenccNetLib 1.7.0: <https://github.com/laisuk/OpenccNet>, source commit `01f23ccd4feda86e7607cc1dd92ba93a44252e61` from the published package metadata. MIT code notice: `OPENCC-LICENSE`; the package's dictionary LICENSE is preserved byte-for-byte as `OPENCC-DATA-LICENSE`. The corresponding pinned `OpenccNetLib/THIRD_PARTY_NOTICES.md` is `OPENCC-THIRD-PARTY-NOTICES.md`, including OpenCC contributor attribution and compiled-pack licensing. The pinned source tree has no separate dictionary NOTICE or CHANGES file. LyricBridge uses the unmodified shipped converter and embedded dictionary resources.
+## Pronunciation and dictionaries
 
-- Desktop QRC uploads: QMC1 envelope-mask adaptation from <https://github.com/Presburger/qmc-decoder/blob/master/src/seed.hpp> (MIT, `QMC-LICENSE`). The shared Lyricify decoder handles the enclosed QRC payload. Local KRC/QRC helper overloads accept bytes, bound decompressed output, validate container lengths and preserve non-BOM first characters.
+[Kawazu 1.1.4](https://github.com/Cutano/Kawazu) uses MIT (`KAWAZU-LICENSE`).
+[LibNMeCab 0.10.1](https://github.com/komutan/NMeCab/tree/v0.10.1) is dynamically linked
+under LGPL-2.1-or-later; upstream also offers GPL-2.0-or-later. Notices/source are
+`LIBNMECAB-LICENSE`, `LIBNMECAB-LGPL-LICENSE`, and `LIBNMECAB-SOURCE.tar.gz`;
+the archive is authoritative for the source revision.
+
+IpaDicBin 0.10.0 ships with Kawazu. Dictionary COPYING/AUTHORS remain beside data;
+COPYING is also packaged as `IPADIC-COPYING`.
+
+## OpenCC conversion
+
+[OpenccNetLib 1.7.0](https://github.com/laisuk/OpenccNet) uses source commit
+`01f23ccd4feda86e7607cc1dd92ba93a44252e61` from its published package metadata.
+MIT code notice is `OPENCC-LICENSE`; the package dictionary LICENSE is preserved
+byte-for-byte as `OPENCC-DATA-LICENSE` under Apache 2.0.
+
+The pinned `OpenccNetLib/THIRD_PARTY_NOTICES.md` is
+[OpenCC third-party notices](OPENCC-THIRD-PARTY-NOTICES.md), retaining contributor
+attribution and compiled-pack licensing. The source has no separate dictionary
+NOTICE/CHANGES file. LyricBridge uses the shipped converter/resources unmodified.
+
+## Desktop QRC decoding
+
+The QMC1 envelope-mask adaptation comes from
+[qmc-decoder's seed.hpp](https://github.com/Presburger/qmc-decoder/blob/master/src/seed.hpp)
+under MIT (`QMC-LICENSE`). The Lyricify decoder handles the enclosed QRC payload.
