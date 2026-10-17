@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace LyricBridge;
 
-public sealed class TransientMaintenance(Store store, Retrieval retrieval, ILogger<TransientMaintenance> logger, TimeProvider? timeProvider = null) : BackgroundService
+public sealed class TransientMaintenance(Store store, Retrieval retrieval, ILogger<TransientMaintenance> logger, TimeProvider? timeProvider = null, IAudioPreparation? audio = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -21,7 +21,9 @@ public sealed class TransientMaintenance(Store store, Retrieval retrieval, ILogg
             nextStorageCleanup = now.AddDays(1);
             try
             {
-                var count = store.ExpireTransientData();
+                audio?.Cleanup();
+                foreach (var job in store.ExpireJobHistory(now).Where(j => j.TaskKind == "transcription")) audio?.Release(job);
+                var count = store.ExpireTransientData(now);
                 if (count > 0)
                     logger.LogInformation("LyricBridge removed {Count} expired temporary records", count);
             }

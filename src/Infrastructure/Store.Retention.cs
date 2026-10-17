@@ -34,6 +34,16 @@ public sealed partial class Store
     {
         using var command = connection.CreateCommand();
         command.CommandText = """
+            UPDATE records SET payload=json_set(payload,'$.terminalAt',strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE kind='job' AND json_extract(payload,'$.state') IN ('complete','failed','cancelled','rejected','settings_changed') AND json_extract(payload,'$.terminalAt') IS NULL;
+            INSERT OR IGNORE INTO records SELECT 'job-admission',id,json_object('userId',json_extract(payload,'$.userId'),'created',json_extract(payload,'$.created')) FROM records WHERE kind='job' AND json_extract(payload,'$.created')>strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day');
+            CREATE TABLE IF NOT EXISTS managed_migrations(id TEXT PRIMARY KEY NOT NULL);
+            CREATE INDEX IF NOT EXISTS admissions_user_created ON records(json_extract(payload,'$.userId'),json_extract(payload,'$.created')) WHERE kind='job-admission';
+            CREATE INDEX IF NOT EXISTS review_results ON records(json_extract(payload,'$.transcriptId')) WHERE kind='boundary-review-result';
+            CREATE INDEX IF NOT EXISTS review_checkpoints ON records(json_extract(payload,'$.jobId')) WHERE kind='review-checkpoint';
+            CREATE INDEX IF NOT EXISTS transcripts_song ON records(json_extract(payload,'$.itemId'),json_extract(payload,'$.created')) WHERE kind='transcript';
+            CREATE INDEX IF NOT EXISTS transcript_boundaries ON records(json_extract(payload,'$.transcriptId'),json_extract(payload,'$.created')) WHERE kind='boundary-version';
+            CREATE INDEX IF NOT EXISTS transcript_chunks ON records(json_extract(payload,'$.jobId')) WHERE kind='transcript-chunk';
+            CREATE INDEX IF NOT EXISTS transcript_originals ON records(json_extract(payload,'$.transcriptId')) WHERE kind='transcript-original';
             CREATE INDEX IF NOT EXISTS originals_song ON records(json_extract(payload,'$.itemId'),json_extract(payload,'$.savedAt')) WHERE kind='saved-original';
             CREATE TABLE IF NOT EXISTS deletion_clock(id INTEGER PRIMARY KEY CHECK(id=1),revision INTEGER NOT NULL);
             INSERT OR IGNORE INTO deletion_clock VALUES(1,0);
@@ -60,6 +70,33 @@ public sealed partial class Store
             END;
             """;
         command.ExecuteNonQuery();
+        MigrateSavedBoundaryEntries(connection);
+    }
+
+    private static void MigrateSavedBoundaryEntries(SqliteConnection connection)
+    {
+        using var tx = connection.BeginTransaction();
+        using var migration = connection.CreateCommand(); migration.Transaction = tx;
+        migration.CommandText = "SELECT COUNT(*) FROM managed_migrations WHERE id='saved-boundary-entries/1'";
+        if (Convert.ToInt32(migration.ExecuteScalar()) != 0) return;
+        var records = ReadRecords(connection, tx);
+        var versions = records.Where(r => r.Kind == "boundary-version").Select(r => Codec.Deserialize<BoundaryVersion>(r.Payload)!).ToDictionary(v => v.Id);
+        var results = records.Where(r => r.Kind == "boundary-review-result").Select(r => Codec.Deserialize<BoundaryReviewResult>(r.Payload)!).ToList();
+        foreach (var v in versions.Values)
+        {
+            if (v.Origin == "AI" && results.Any(r => r.VersionId == v.Id)) continue;
+            var source = ReadRecord<Transcript>(connection, tx, "transcript", v.TranscriptId);
+            if (source == null) continue;
+            var id = EntryIdentity(source, v);
+            WriteUnchecked(connection, tx, "saved-boundary-entry", id, new SavedBoundaryEntry(id, v.TranscriptId, v.Id, v.Origin, v.Settings, v.Created, v.Algorithm, v.Profile, v.OptionName, v.SeamTokenIds));
+        }
+        foreach (var r in results)
+        {
+            if (!versions.TryGetValue(r.VersionId, out var v)) continue;
+            var id = "review:" + r.Id;
+            WriteUnchecked(connection, tx, "saved-boundary-entry", id, new SavedBoundaryEntry(id, r.TranscriptId, r.VersionId, "AI", r.Settings ?? v.Settings, r.Created, v.Algorithm, r.Profile, r.OptionName, r.SeamTokenIds));
+        }
+        migration.CommandText = "INSERT INTO managed_migrations VALUES('saved-boundary-entries/1')"; migration.ExecuteNonQuery(); tx.Commit();
     }
 
     public void CachePreview(Verification verification, DateTimeOffset? accessed = null)

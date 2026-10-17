@@ -1,3 +1,6 @@
+import { settingsActionGroup, settingsRowHeader } from "./settings-row.ts";
+import { adminButton as button } from "./controls.ts";
+import { renderServices } from "./services-panel.ts";
 import { FeedbackScope } from "../shared/feedback.ts";
 import { materialFeedback } from "./feedback.ts";
 import { icon } from "../shared/icons.ts";
@@ -57,6 +60,61 @@ import { hostFailure } from "./contracts.ts";
         loaded = false,
         loading = false;
     const saveButton = query(".lb-config-footer .button-submit");
+    let activeEditor: "source" | "service" | null = null;
+    let sourceDraft: { name: string; credential: string } | null = null;
+    function editing(owner: "source" | "service", value: boolean, resume?: () => void) {
+        if (value && activeEditor !== null) {
+            const previousOwner = activeEditor;
+            const current = page.querySelector<HTMLElement>((activeEditor === "source" ? "#lb-sources" : "#lb-services") + " .lb-service-editor");
+            if (!current) return false;
+            let prompt = current.querySelector<HTMLElement>(".lb-editor-switch");
+            if (!prompt) {
+                prompt = node("div");
+                prompt.className = "lb-editor-switch";
+                current.prepend(prompt);
+            }
+            const switchEditor = (label: string) => {
+                const control = Array.from(current?.querySelectorAll<HTMLButtonElement>(".lb-actions > button") || []).find(
+                    (candidate) => candidate.textContent?.trim() === label,
+                );
+                control?.click();
+                if (activeEditor === null) {
+                    activateTab(owner === "source" ? 1 : 2);
+                    resume?.();
+                } else {
+                    activateTab(previousOwner === "source" ? 1 : 2);
+                    current?.scrollIntoView({ block: "center" });
+                }
+            };
+            feedbackScope.update(prompt, {
+                message: "You have an unfinished edit. Apply or discard it before switching rows.",
+                severity: "warning",
+                actions: [
+                    { label: "Apply and switch", run: () => switchEditor("Apply") },
+                    { label: "Discard and switch", run: () => switchEditor("Cancel") },
+                    {
+                        label: "Keep editing",
+                        run: () => {
+                            prompt.remove();
+                            notice(status, "Apply or cancel editor changes before saving.");
+                            activateTab(previousOwner === "source" ? 1 : 2);
+                            current?.querySelector<HTMLInputElement>("input")?.focus();
+                        },
+                    },
+                ],
+            });
+            activateTab(previousOwner === "source" ? 1 : 2);
+            const disclosure = current.closest("details");
+            if (disclosure) disclosure.open = true;
+            prompt.scrollIntoView({ block: "center" });
+            prompt.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+            return false;
+        }
+        activeEditor = value ? owner : null;
+        saveButton.disabled = value || !loaded;
+        notice(status, value ? "Apply or cancel editor changes before saving." : dirty ? "Unsaved changes" : "");
+        return true;
+    }
     const names: Record<string, string> = {
         TranslationLanguage: "Translation language",
         SourceLanguage: "Original language",
@@ -110,6 +168,7 @@ import { hostFailure } from "./contracts.ts";
     }
     page.addEventListener("viewhide", () => {
         feedbackVisible = false;
+        queueRevision++;
         window.removeEventListener("resize", positionFooter);
         feedbackScope.dispose();
     });
@@ -136,31 +195,6 @@ import { hostFailure } from "./contracts.ts";
             "Sign in to music.apple.com with your own account. In Developer Tools → Network, inspect an authenticated Apple Music API request and copy the media-user-token request-header value. Paste only that value into Credential, enable AppleMusic, and save settings. This is not an Apple developer token. If your account sends no such header, leave this source disabled.",
         ],
     };
-    const serviceHelp: Record<string, { steps: string[]; link?: string[] }> = {
-        DeepL: {
-            steps: [
-                "Create a DeepL API account and copy a key from the account’s API Keys tab. Paste the key below; a normal translator subscription alone does not configure API access.",
-                "For API Free, leave Endpoint blank or use https://api-free.deepl.com/v2/translate. For API Pro, use https://api.deepl.com/v2/translate. Enter the complete translation URL, including /v2/translate.",
-                "Save settings, then Test connection. DeepL supplies translations only.",
-            ],
-            link: ["DeepL API setup", "https://developers.deepl.com/docs/getting-started/auth"],
-        },
-        AI: {
-            steps: [
-                "Use a service exposing a Chat Completions compatible API. Enter its API base URL, for example https://your-provider.example/v1. LyricBridge adds /chat/completions; do not include that suffix yourself.",
-                "Enter the provider’s API key (without Bearer) if required and the exact model ID supported by that endpoint. The model must support JSON-object output with preserved line IDs.",
-                "For a local server, use an address reachable from the Jellyfin container; localhost refers to Jellyfin’s container. Save settings, then Test connection. Translation and pronunciation can be requested explicitly.",
-            ],
-        },
-        LibreTranslate: {
-            steps: [
-                "Run a LibreTranslate server or use a hosted instance. Enter its base URL, for example http://libretranslate:5000 on a shared Docker network. LyricBridge adds /translate; do not include that suffix yourself.",
-                "Enter an API key if that instance requires one; otherwise leave it blank. Use a container-reachable address rather than your browser’s localhost. The server must have the requested language models installed.",
-                "Save settings, then Test connection. LibreTranslate supplies translations only.",
-            ],
-            link: ["LibreTranslate installation and API keys", "https://docs.libretranslate.com/"],
-        },
-    };
     function guidance(parent: HTMLElement, steps: string[], link?: string[]) {
         const list = node("ol");
         list.className = "fieldDescription lb-setup-guide";
@@ -175,15 +209,6 @@ import { hostFailure } from "./contracts.ts";
             parent.append(a);
         }
     }
-    function feedback(parent: HTMLElement) {
-        const n = node("div");
-        n.className = "fieldDescription lb-action-status";
-        n.setAttribute("role", "status");
-        n.setAttribute("aria-live", "polite");
-        parent.append(n);
-        return n;
-    }
-
     function field<T extends string | number | boolean>(
         parent: HTMLElement,
         label: string | undefined,
@@ -250,15 +275,6 @@ import { hostFailure } from "./contracts.ts";
         parent.append(wrap);
         return input;
     }
-    function button(label: string, action: (event: MouseEvent) => void) {
-        const b = document.createElement("button");
-        b.setAttribute("is", "emby-button");
-        b.className = "raised emby-button";
-        b.type = "button";
-        b.append(node("span", label));
-        b.onclick = action;
-        return b;
-    }
     async function call<T = unknown>(path: string, method = "GET", data?: unknown): Promise<T> {
         try {
             return (await ApiClient.ajax({
@@ -295,24 +311,28 @@ import { hostFailure } from "./contracts.ts";
         config.Sources.forEach((s, index) => {
             const row = node("div");
             row.dataset.source = s.Name;
-            row.className = "lb-source-row";
-            const header = node("div");
-            header.className = "flex align-items-center lb-provider-heading";
-            row.append(header);
+            row.className = "lb-source-row lb-settings-row";
+            const header = settingsRowHeader(s.Name, "", "");
+            row.append(header.root);
             const requiresCredential = ["Spotify", "AppleMusic"].includes(s.Name);
-            const checkbox = check(header, s.Name, s.Enabled, (v) => {
+            const checkbox = check(header.actions, "Enabled", s.Enabled, (v) => {
                 s.Enabled = v;
                 refreshSourceState();
             });
-            const sourceLabel = checkbox.parentElement!.lastElementChild!;
+            checkbox.setAttribute("aria-label", "Enable " + s.Name);
             function refreshSourceState() {
                 const missing = requiresCredential && !s.Credential?.trim();
                 checkbox.disabled = missing;
                 checkbox.checked = !!s.Enabled && !missing;
-                const badge = node("span", missing ? "Needs credentials" : s.Enabled ? "Ready" : "Disabled");
-                badge.className = "lb-config-badge";
-                sourceLabel.replaceChildren(node("span", s.Name + " "), badge);
-                checkbox.title = missing ? "Set up credentials below to enable this source." : "";
+                const badge = header.title.querySelector<HTMLElement>(".lb-config-badge")!;
+                badge.textContent = missing ? "Needs setup" : s.Credential?.trim() ? "Configured" : "Built in";
+                const enabledLabel = checkbox.closest<HTMLElement>("label")!;
+                enabledLabel.title = missing ? "Choose Edit to configure credentials before enabling this source." : "";
+                if (missing) {
+                    checkbox.setAttribute("aria-description", "Setup required");
+                } else {
+                    checkbox.removeAttribute("aria-description");
+                }
             }
             refreshSourceState();
             const move = (delta: number) => {
@@ -322,46 +342,79 @@ import { hostFailure } from "./contracts.ts";
                 sources();
                 changed();
             };
+            const ordering = settingsActionGroup("Reorder " + s.Name);
+            ordering.classList.add("lb-settings-row-ordering");
+            header.root.classList.add("lb-settings-row-orderable");
+            header.root.prepend(ordering);
             for (const [delta, glyph, label] of [
                 [-1, "up", "Move up"],
                 [1, "down", "Move down"],
             ] as const) {
-                const b = button(label, () => move(delta));
-                b.className = "paper-icon-button-light";
+                const b = button(label, () => move(delta), "quiet");
+                b.classList.add("paper-icon-button-light", "lb-settings-icon-action");
                 b.setAttribute("aria-label", label + " " + s.Name);
                 b.title = label;
                 b.dataset.tooltip = label;
                 b.disabled = index + delta < 0 || index + delta >= config.Sources.length;
                 b.replaceChildren(icon(glyph));
-                header.append(b);
+                ordering.append(b);
             }
             if (["Spotify", "AppleMusic", "Musixmatch"].includes(s.Name)) {
-                const details = node("details");
-                details.open = ["Spotify", "AppleMusic"].includes(s.Name) && !s.Credential;
-                const instructions = node("details");
-                instructions.append(node("summary", "Setup instructions"));
-                guidance(instructions, sourceHelp[s.Name] || []);
-                details.append(
-                    node(
-                        "summary",
-                        s.Name === "Spotify"
-                            ? "Set up Spotify cookie"
-                            : s.Name === "AppleMusic"
-                              ? "Set up media-user token"
-                              : "Optional Musixmatch token",
+                header.description.textContent =
+                    s.Name === "Spotify" ? "Spotify cookie" : s.Name === "AppleMusic" ? "Media-user token" : "Optional token";
+                header.description.hidden = false;
+                header.actions.append(
+                    button(
+                        "Edit",
+                        function openSourceEditor() {
+                            if (!editing("source", true, openSourceEditor)) return;
+                            sourceDraft = { name: s.Name, credential: s.Credential || "" };
+                            sources();
+                            target.querySelector<HTMLInputElement>("[data-config-transient] input")?.focus();
+                        },
+                        "quiet",
                     ),
                 );
-                details.prepend(details.querySelector("summary")!);
-                field(details, "Credential", s.Credential, "password", (v) => {
-                    s.Credential = v;
-                    refreshSourceState();
-                });
-                details.append(instructions);
-                row.append(details);
+                if (sourceDraft?.name === s.Name) {
+                    const draft = sourceDraft;
+                    const form = node("div");
+                    form.className = "lb-service-editor";
+                    form.dataset.configTransient = "true";
+                    const title = node("h4", "Edit " + s.Name);
+                    title.className = "lb-settings-editor-title";
+                    form.append(title);
+                    field(form, "Credential", draft.credential, "password", (value) => {
+                        draft.credential = value;
+                    });
+                    const instructions = node("details");
+                    instructions.append(node("summary", "Setup instructions"));
+                    guidance(instructions, sourceHelp[s.Name] || []);
+                    const actions = node("div");
+                    actions.className = "lb-actions";
+                    const close = () => {
+                        sourceDraft = null;
+                        editing("source", false);
+                        sources();
+                    };
+                    actions.append(
+                        button("Apply", () => {
+                            s.Credential = draft.credential;
+                            changed();
+                            close();
+                        }),
+                        button("Cancel", close),
+                    );
+                    form.append(instructions, actions);
+                    row.append(form);
+                }
             } else if (s.Name === "Soda") {
-                const help = node("p", "Availability varies by region.");
-                help.className = "fieldDescription";
-                row.append(help);
+                header.description.textContent = "Availability varies by region.";
+                header.description.hidden = false;
+            }
+            if (!["Spotify", "AppleMusic", "Musixmatch"].includes(s.Name)) {
+                const edit = button("Edit", null, "quiet");
+                edit.title = "This source has no editable settings.";
+                header.actions.append(edit);
             }
             target.append(row);
         });
@@ -514,171 +567,30 @@ import { hostFailure } from "./contracts.ts";
             field(grid, names[key], config.Defaults[key], "number", (v) => (config.Defaults[key] = v));
         refreshDependentControls();
         sources();
-        const serviceTarget = query("#lb-services");
-        serviceTarget.replaceChildren();
-        config.Services.forEach((s) => {
-            const row = node("div");
-            const card = node("details");
-            card.className = "lb-service";
-            card.dataset.service = s.Name;
-            row.className = "lb-service-body";
-            const isConfigured = () =>
-                s.Name === "Google" ||
-                (s.Name === "DeepL" ? !!s.ApiKey?.trim() : s.Name === "AI" ? !!s.Endpoint?.trim() && !!s.Model?.trim() : !!s.Endpoint?.trim());
-            const configured = isConfigured();
-            const advanced = node("details");
-            advanced.append(node("summary", "Advanced generation settings"));
-            const heading = node(
-                "summary",
-                s.Name + " — " + (s.Name === "Google" ? "Ready · No setup required" : configured ? "Configured · Test connection" : "Needs setup"),
-            );
-            heading.className = "lb-service-heading";
-            const badge = node("span", configured ? "Configured" : "Needs setup");
-            badge.className = "lb-config-badge";
-            const capabilityText: Record<string, string> = {
-                Google: "Translation · Pronunciation: Japanese, Korean, Chinese, Russian, Arabic, Hindi, Thai, Greek",
-                DeepL: "Translation only · Languages supported by DeepL",
-                AI: "Translation · Pronunciation · Languages depend on the model",
-                LibreTranslate: "Translation only · Languages installed on your server",
-            };
-            const capability = node("span", capabilityText[s.Name] || "Translation");
-            capability.className = "fieldDescription lb-service-capability";
-            const setupLabel = node("span", configured ? "Options" : "Set up");
-            const main = node("span");
-            main.className = "lb-service-main";
-            main.append(node("span", s.Name), badge, capability);
-            heading.replaceChildren(main, setupLabel);
-            card.append(heading, row);
-            card.open = false;
-            if (s.Name !== "Google") {
-                const details = node("div");
-                details.className = "lb-connection-settings";
-                const help = node("details");
-                help.append(node("summary", "How to set up " + s.Name));
-                guidance(help, serviceHelp[s.Name]?.steps || [], serviceHelp[s.Name]?.link);
-                const endpoint = field(
-                    details,
-                    s.Name === "DeepL" ? "Translation endpoint (optional for API Free)" : "API base URL",
-                    s.Endpoint,
-                    "url",
-                    (v) => (s.Endpoint = v),
+        renderServices({
+            target: query("#lb-services"),
+            setup: config.ServiceSetup,
+            localPolicy: page.querySelector<HTMLElement>("#lb-local-pronunciation")!,
+            changed,
+            active: () => feedbackVisible,
+            editing: (value, resume) => editing("service", value, resume),
+            modelLimits: async (connection, model) => {
+                const result = await call<{ available: boolean; contextWindow: number | null; completionLimit: number | null }>(
+                    "service-options/model-limits",
+                    "POST",
+                    { endpoint: connection.Endpoint, apiKey: connection.ApiKey, connectionId: connection.Id, model },
                 );
-                endpoint.placeholder =
-                    s.Name === "DeepL"
-                        ? "https://api-free.deepl.com/v2/translate"
-                        : s.Name === "AI"
-                          ? "https://your-provider.example/v1"
-                          : "http://libretranslate:5000";
-                field(details, "API key" + (s.Name === "DeepL" ? "" : " (if required)"), s.ApiKey, "password", (v) => (s.ApiKey = v));
-                if (s.Name === "AI") {
-                    field(details, "Model ID", s.Model, "text", (v) => (s.Model = v));
-                    select(
-                        advanced,
-                        "Thinking level",
-                        s.ReasoningEffort || "",
-                        [
-                            ["", "Provider default"],
-                            ["none", "None"],
-                            ["minimal", "Minimal"],
-                            ["low", "Low"],
-                            ["medium", "Medium"],
-                            ["high", "High"],
-                            ["xhigh", "Extra high"],
-                        ],
-                        (v) => (s.ReasoningEffort = v),
-                    );
-                    const note = node(
-                        "p",
-                        "Supported thinking levels depend on the endpoint and model. Use Provider default if unsupported; higher levels may need a longer timeout.",
-                    );
-                    note.className = "fieldDescription";
-                    advanced.append(note);
-                }
-                details.append(help);
-                row.append(details);
-            } else {
-                const help = node("p", "Requests use Google’s web service; availability and rate limits can vary.");
-                help.className = "fieldDescription";
-                row.append(help);
-            }
-            if (s.Name !== "AI") {
-                const context = node("details");
-                context.append(node("summary", "Translation context (optional)"));
-                const help = node(
-                    "p",
-                    s.Name === "DeepL"
-                        ? "Nearby original lines are sent through DeepL’s context field; only the target line is translated."
-                        : "Nearby original lines surround a marked target line. Results are rejected if the target markers are lost. Extra context may change accuracy and increase request size.",
-                );
-                help.className = "fieldDescription";
-                context.append(help);
-                for (const [key, label] of [
-                    ["ContextBefore", "Lines before"],
-                    ["ContextAfter", "Lines after"],
-                ] as const) {
-                    const input = field(context, label, s[key] || 0, "number", (v) => (s[key] = v));
-                    input.min = "0";
-                    input.max = "10";
-                    input.step = "1";
-                    input.required = true;
-                }
-                const note = node("p", "0 disables context on that side; maximum 10. Applies to new translations only.");
-                note.className = "fieldDescription";
-                context.append(note);
-                advanced.append(context);
-            } else {
-                const help = node("p", "AI receives the complete song as context.");
-                help.className = "fieldDescription";
-                row.append(help);
-            }
-            const timeout = field(advanced, "HTTP timeout (seconds)", s.TimeoutSeconds ?? 15, "number", (v) => (s.TimeoutSeconds = v));
-            timeout.min = "5";
-            timeout.max = "600";
-            timeout.step = "1";
-            timeout.required = true;
-            row.append(advanced);
-
-            const result = feedback(row);
-            const testButton = button("Test connection", async () => {
-                if (JSON.stringify(s) !== JSON.stringify(savedConfig.Services.find((v) => v.Name === s.Name))) {
-                    notice(result, "Save settings before testing this connection.");
-                    query(".lb-config-footer .button-submit").focus();
-                    return;
-                }
-                result.dataset.state = "loading";
-                result.setAttribute("role", "status");
-                notice(result, "Testing with synthetic text…");
-                testButton.disabled = true;
-                try {
-                    await call("services/" + s.Name + "/test", "POST");
-                    result.dataset.state = "success";
-                    notice(result, s.Name + ": connection succeeded.", 4000);
-                } catch (caught) {
-                    const error = hostFailure(caught);
-                    failure(
-                        result,
-                        s.Name + " connection failed: " + error.message + " Use Test connection to retry.",
-                        error.details?.diagnosticId ? ["Diagnostic ID: " + error.details.diagnosticId] : [],
-                    );
-                } finally {
-                    testButton.disabled = !isConfigured();
-                }
-            });
-            testButton.disabled = !configured;
-            testButton.title = configured ? "" : "Complete this service’s setup before testing.";
-            row.append(testButton, result);
-            row.addEventListener("input", () => {
-                badge.textContent = isConfigured() ? "Configured" : "Needs setup";
-                setupLabel.textContent = isConfigured() ? "Options" : "Set up";
-                const edited = JSON.stringify(s) !== JSON.stringify(savedConfig.Services.find((v) => v.Name === s.Name));
-                if (edited) notice(result, "Save settings before testing.");
-                testButton.disabled = !isConfigured();
-                testButton.title = isConfigured() ? "Save settings before testing." : "Complete this service’s setup before testing.";
-            });
-            serviceTarget.append(card);
+                if (!feedbackVisible) throw new Error("Settings view closed.");
+                return result;
+            },
+            test: async (optionId) => {
+                if (JSON.stringify(config.ServiceSetup) !== JSON.stringify(savedConfig.ServiceSetup))
+                    throw new Error("Save settings before testing.");
+                await call("service-options/" + optionId + "/test", "POST");
+            },
+            feedback: (target, text, error) => (error ? failure(target, text) : notice(target, text)),
         });
     }
-
     const resetOpen = query("#lb-reset-open"),
         resetConfirm = query("#lb-reset-confirm"),
         resetWord = query("#lb-reset-word"),
@@ -722,7 +634,7 @@ import { hostFailure } from "./contracts.ts";
         }
     };
     const tabs = query("#lb-config-tabs");
-    const tabNames = ["General", "Sources", "Language services", "Display defaults", "Requests"];
+    const tabNames = ["General", "Sources", "Services", "Display defaults", "Requests"];
     function activateTab(index: number, focus = false) {
         if (typeof tabs.selectedIndex === "function") tabs.selectedIndex(index, false);
         page.querySelectorAll<HTMLElement>("[data-tab]").forEach((panel, i) => (panel.hidden = i !== index));
@@ -732,6 +644,7 @@ import { hostFailure } from "./contracts.ts";
             tab.tabIndex = i === index ? 0 : -1;
             if (i === index && focus) tab.focus();
         });
+        if (index === 4 && loaded && feedbackVisible) void loadRequests();
     }
     tabs.replaceChildren(
         ...tabNames.map((name, i) => {
@@ -788,12 +701,35 @@ import { hostFailure } from "./contracts.ts";
         notice(status, "Loading settings…");
         try {
             config = await ApiClient.getPluginConfiguration(id);
+            config.Transcription ??= {
+                Enabled: false,
+                Endpoint: "https://api.groq.com/openai/v1",
+                Model: "whisper-large-v3",
+                ApiKey: "",
+                UploadFormat: "opus",
+                MaxUploadMb: 25,
+                MaxInputMb: 256,
+                TimeoutSeconds: 120,
+                ReviewUsesAiService: true,
+                Review: {
+                    Name: "AI",
+                    Enabled: true,
+                    Endpoint: "",
+                    Model: "",
+                    ApiKey: "",
+                    TimeoutSeconds: 120,
+                    ContextBefore: 0,
+                    ContextAfter: 0,
+                    ReasoningEffort: "",
+                },
+            };
             savedConfig = JSON.parse(JSON.stringify(config));
             storageRuntime = await call<typeof storageRuntime>("admin/runtime").catch(() => ({}));
             rendererRuntime = await call<WebRendererStatus>("admin/web-renderer").catch(() => undefined);
             render();
             dirty = false;
             loaded = true;
+            if (feedbackVisible && !page.querySelector<HTMLElement>('[data-tab="Requests"]')!.hidden) void loadRequests();
             saveButton.disabled = false;
             notice(status, "");
         } catch (caught) {
@@ -813,6 +749,7 @@ import { hostFailure } from "./contracts.ts";
         else {
             refreshDependentControls();
             notice(status, dirty ? "Unsaved changes" : "");
+            if (!page.querySelector<HTMLElement>('[data-tab="Requests"]')!.hidden) void loadRequests();
         }
     });
     query("form").addEventListener("input", changed);
@@ -857,18 +794,98 @@ import { hostFailure } from "./contracts.ts";
     };
     const queueStatus = query("#lb-queue-status");
     let queueOffset = 0;
-    query("#lb-refresh").onclick = async () => {
+    let queueRevision = 0;
+    async function loadRequests() {
+        const revision = ++queueRevision;
+        const current = () => feedbackVisible && revision === queueRevision;
+        query("#lb-refresh").setAttribute("aria-busy", "true");
         notice(queueStatus, "Loading requests…");
         try {
             const jobs = await call<JobSummary[]>("jobs?offset=" + queueOffset + "&limit=50");
+            if (!current()) return;
             notice(queueStatus, "");
             const target = query("#lb-queue");
             target.replaceChildren();
-            if (!jobs.length) target.append(node("p", "No requests"));
+            const retention = node("p", "Finished requests are kept for 30 days.");
+            retention.className = "fieldDescription";
+            const cleanup = node("div");
+            cleanup.className = "lb-actions";
+            const cleanupStatus = node("div");
+            let removing = false;
+            const remove = async (ids: string[]) => {
+                if (removing || !feedbackVisible) return;
+                removing = true;
+                const controls = Array.from(target.querySelectorAll<HTMLButtonElement>("button")).map((control) => ({
+                    control,
+                    disabled: control.disabled,
+                }));
+                controls.forEach(({ control }) => {
+                    control.disabled = true;
+                });
+                notice(cleanupStatus, "Removing finished requests…");
+                cleanupStatus.setAttribute("aria-busy", "true");
+                try {
+                    for (let first = 0; first < ids.length; first += 500) {
+                        if (!feedbackVisible) return;
+                        await call("jobs/history/remove", "POST", { ids: ids.slice(first, first + 500) });
+                    }
+                    if (!feedbackVisible || !target.isConnected) return;
+                    queueOffset = 0;
+                    query("#lb-refresh").click();
+                } catch (error) {
+                    failure(cleanupStatus, hostFailure(error).message ?? "History could not be removed.");
+                } finally {
+                    removing = false;
+                    cleanupStatus.setAttribute("aria-busy", "false");
+                    controls.forEach(({ control, disabled }) => {
+                        if (control.isConnected) control.disabled = disabled;
+                    });
+                }
+            };
+            const confirmRemoval = (ids: string[]) =>
+                feedbackScope.update(cleanupStatus, {
+                    message:
+                        "Remove " +
+                        ids.length +
+                        " finished request" +
+                        (ids.length === 1 ? "" : "s") +
+                        " from history? Saved results remain. These requests will no longer be retryable.",
+                    severity: "warning",
+                    actions: [
+                        { label: "Remove from history", destructive: true, run: () => remove(ids) },
+                        { label: "Cancel", run: () => notice(cleanupStatus, "") },
+                    ],
+                });
+            cleanup.append(
+                button(
+                    "Clear finished history",
+                    async () => {
+                        try {
+                            const result = await call<{ ids: string[] }>("jobs/history/finished");
+                            if (!feedbackVisible || !cleanupStatus.isConnected) return;
+                            if (result.ids.length) confirmRemoval(result.ids);
+                            else notice(cleanupStatus, "No finished requests to remove.");
+                        } catch (error) {
+                            failure(cleanupStatus, hostFailure(error).message ?? "History could not be loaded.");
+                        }
+                    },
+                    "quiet",
+                ),
+            );
+            if (!jobs.length) {
+                target.append(node("p", queueOffset ? "No more requests" : "No requests yet"));
+            }
             for (const job of jobs) {
                 const row = node("div");
-                row.className = "verticalSection";
-                row.append(node("p", job.request.kind + " · " + job.request.language + " · " + job.state + " · " + job.progress + "%"));
+                row.className = "lb-settings-row";
+                const heading = settingsRowHeader(
+                    job.request.kind + (job.request.language ? " · " + job.request.language : ""),
+                    job.progress + "%" + (job.stage ? " · " + job.stage : ""),
+                    job.state,
+                );
+                row.append(heading.root);
+                if (job.audio?.allowChunking) row.append(node("p", "Chunking requested · " + job.audio.chunkCount + " chunks · one request"));
+
                 if (job.outputDeleted)
                     row.append(
                         node(
@@ -899,21 +916,53 @@ import { hostFailure } from "./contracts.ts";
                         : ["failed", "settings_changed"].includes(job.state)
                           ? ["retry"]
                           : [];
-                for (const action of actions)
-                    row.append(
-                        button(action.charAt(0).toUpperCase() + action.slice(1), async () => {
+                let retryPlan: { identity: string; requestCount: number } | null = null;
+                for (const action of actions) {
+                    const actionButton = button(
+                        action.charAt(0).toUpperCase() + action.slice(1),
+                        async () => {
                             try {
-                                await call("jobs/" + job.id + "/" + action, "POST");
+                                await call(
+                                    "jobs/" + job.id + "/" + action + (retryPlan ? "?planIdentity=" + encodeURIComponent(retryPlan.identity) : ""),
+                                    "POST",
+                                );
                                 query("#lb-refresh").click();
                             } catch (caught) {
                                 const error = hostFailure(caught);
                                 failure(queueStatus, error.message ?? "Request failed.");
                             }
-                        }),
+                        },
+                        "quiet",
                     );
+                    heading.actions.append(actionButton);
+                    if (action === "retry" && job.taskKind === "boundary-review") {
+                        actionButton.disabled = true;
+                        void call<{ identity: string; requestCount: number }>("jobs/" + job.id + "/review-plan", "POST")
+                            .then((plan) => {
+                                if (!actionButton.isConnected) return;
+                                retryPlan = plan;
+                                actionButton.textContent =
+                                    "Retry · " + plan.requestCount + (plan.requestCount === 1 ? " AI request" : " AI requests");
+                                actionButton.disabled = false;
+                            })
+                            .catch(() => {
+                                actionButton.title = "Could not plan retry. Refresh requests after checking the service configuration.";
+                            });
+                    }
+                }
+
+                if (["complete", "failed", "cancelled", "rejected", "settings_changed"].includes(job.state))
+                    heading.actions.append(button("Remove from history", () => confirmRemoval([job.id]), "quiet"));
+                if (job.reviewPlan)
+                    row.append(node("p", job.reviewPlan.requestCount + (job.reviewPlan.requestCount === 1 ? " AI request" : " AI requests")));
+                const edit = button("Edit", null, "quiet");
+                edit.title = "Request history has no editable settings.";
+                heading.actions.append(edit);
+                row.querySelectorAll(":scope > p").forEach((note) => note.classList.add("fieldDescription", "lb-settings-row-description"));
                 target.append(row);
             }
             const navigation = node("div");
+            navigation.className = "lb-actions";
             if (queueOffset > 0)
                 navigation.append(
                     button("Newer requests", () => {
@@ -928,10 +977,17 @@ import { hostFailure } from "./contracts.ts";
                         query("#lb-refresh").click();
                     }),
                 );
-            target.append(navigation);
+            if (jobs.some((job) => ["complete", "failed", "cancelled", "rejected", "settings_changed"].includes(job.state))) target.append(cleanup);
+            target.append(cleanupStatus);
+            if (jobs.length) target.append(retention);
+            if (navigation.childElementCount) target.append(navigation);
         } catch (caught) {
+            if (!current()) return;
             const error = hostFailure(caught);
-            failure(queueStatus, error.message + " Refresh queue to retry.");
+            failure(queueStatus, (error.message || "Requests could not be loaded.") + " Select Refresh to retry.");
+        } finally {
+            if (current()) query("#lb-refresh").setAttribute("aria-busy", "false");
         }
-    };
+    }
+    query("#lb-refresh").onclick = () => void loadRequests();
 })();

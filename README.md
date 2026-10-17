@@ -28,6 +28,9 @@ Use [source and language setup](docs/SETUP.md) to configure credentials, generat
 saved versions, and account/song preferences. Missing Japanese romaji can be generated
 locally with bundled Kawazu. External generation is explicit and sends song text to
 the chosen service; user requests and automatic approval default to off.
+Optional OpenAI-compatible audio transcription uses Jellyfin's FFmpeg, then offers
+local, manual, or AI line-break review while preserving timed tokens. Configure it
+under **Services**; see [transcription and review](docs/SETUP.md#transcribe-audio-and-review-line-breaks).
 
 The [import reference](docs/IMPORT.md) defines supported formats and validation.
 The [matching reference](docs/RANKING.md) explains recording eligibility, ranking,

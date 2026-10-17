@@ -76,7 +76,7 @@ public sealed partial class Store
         {
             var existing = ReadRecord<Job>(c, tx, kind, id);
             if (existing?.OutputDeleted == true && !job.OutputDeleted) return false;
-            if (!job.OutputDeleted && !ValidAdmission(c, tx, new(Epoch, job.DeletionRevision, job.ItemId), [job.Hash], songScope: false)) return false;
+            if (!job.OutputDeleted && !ValidAdmission(c, tx, new(Epoch, job.DeletionRevision, job.ItemId), [job.Hash], songScope: job.TaskKind != "language")) return false;
         }
         return true;
     }
@@ -164,7 +164,7 @@ public sealed partial class Store
             }
             Fence("song:" + id); Fence("original:" + id + ":" + hash);
             void Remove(string kind, string key) => WriteUnchecked<object>(c, tx, kind, key, null);
-            Remove("saved-original", id + ":" + hash); Remove("timing-correction", id + ":" + hash);
+            Remove("saved-original", id + ":" + hash); Remove("timing-correction", id + ":" + hash); Remove("transcript-original", id + ":" + hash);
             if (ReadSelection(c, tx, id).Lyrics?.Hash == hash)
             {
                 var surviving = ReadRecords(c, tx).Where(r => r.Kind == "saved-original").Select(r => Codec.Deserialize<SavedOriginal>(r.Payload)!)

@@ -11,6 +11,9 @@ namespace LyricBridge;
 
 public sealed class Configuration : BasePluginConfiguration
 {
+    private ServiceSetup? serviceSetup;
+    public ServiceSetup ServiceSetup { get => serviceSetup ?? LyricBridge.ServiceSetup.Migrate(Services, Transcription); set => serviceSetup = value; }
+    public TranscriptionConfig Transcription { get; set; } = new();
     public bool EnableWebRenderer { get; set; } = true;
     public string StoragePath { get; set; } = "";
     public SourceConfig[] Sources { get; set; } = new[] { "QQ", "NetEase", "Kugou", "Soda", "Musixmatch", "Spotify", "AppleMusic", "LRCLIB" }.Select(n => new SourceConfig { Name = n }).ToArray();
@@ -71,6 +74,8 @@ public sealed class Plugin : BasePlugin<Configuration>, IHasWebPages
             throw new ArgumentException("Service HTTP timeouts must be between 5 and 600 seconds.");
         if (value.Services.Any(s => !string.IsNullOrWhiteSpace(s.Endpoint) && (!Uri.TryCreate(s.Endpoint, UriKind.Absolute, out var endpoint) || endpoint.Scheme is not ("http" or "https") || !string.IsNullOrEmpty(endpoint.UserInfo) || !string.IsNullOrEmpty(endpoint.Fragment))))
             throw new ArgumentException("Service endpoints must be HTTP(S) URLs without embedded credentials or fragments.");
+        if (value.Transcription is null || value.Transcription.Review is null) throw new ArgumentException("Invalid transcription configuration.");
+        value.ServiceSetup.Validate(Configuration?.ServiceSetup);
         PreferenceService.Validate(value.Defaults);
         base.UpdateConfiguration(configuration);
         ConfigurationUpdated?.Invoke();
@@ -86,6 +91,7 @@ public sealed class Registration : IPluginServiceRegistrator
         var plugin = new Lazy<Plugin>(() => Plugin.Instance
             ?? throw new InvalidOperationException("Jellyfin has not initialized LyricBridge."));
         services.AddSingleton(plugin);
+        services.AddSingleton(_ => new ServiceCatalog(() => plugin.Value.Configuration.ServiceSetup));
         services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddSingleton<WebRendererIntegration>();
         services.AddHostedService(sp => sp.GetRequiredService<WebRendererIntegration>());
@@ -101,8 +107,15 @@ public sealed class Registration : IPluginServiceRegistrator
             sp.GetRequiredService<LocalPronunciation>(), sp.GetRequiredService<LanguageServices>(),
             () => plugin.Value.Configuration.Services.Select(s => s.Name).ToArray(),
             () => plugin.Value.Configuration.AllowUserRequests,
-            () => plugin.Value.Configuration.AutoGeneratePronunciation));
+            () => plugin.Value.Configuration.AutoGeneratePronunciation && plugin.Value.Configuration.ServiceSetup.Options.Any(o => o.Capability == "pronunciation" && o.Provider == "Kawazu" && o.Enabled)));
         services.AddSingleton(sp => new PreferenceService(sp.GetRequiredService<Store>(), () => plugin.Value.Configuration.Defaults));
+        services.AddSingleton<ITranscriptionRepository>(sp => sp.GetRequiredService<Store>());
+        services.AddSingleton<IBoundaryStrategy, LinguisticBoundaries>();
+        services.AddSingleton<TranscriptionProvider>();
+        services.AddSingleton(sp => new AudioPreparation(sp.GetRequiredService<Store>(), () => sp.GetRequiredService<MediaBrowser.Controller.Library.ILibraryManager>(), () => sp.GetRequiredService<MediaBrowser.Controller.MediaEncoding.IMediaEncoder>()));
+        services.AddSingleton<IAudioPreparation>(sp => sp.GetRequiredService<AudioPreparation>());
+        services.AddSingleton<IRemoteTaskHandler>(sp => new TranscriptionTask(() => plugin.Value.Configuration.Transcription, sp.GetRequiredService<ITranscriptionRepository>(), sp.GetRequiredService<IAudioPreparation>(), sp.GetRequiredService<TranscriptionProvider>(), sp.GetRequiredService<ServiceCatalog>().Transcription));
+        services.AddSingleton<IRemoteTaskHandler>(sp => new BoundaryReviewTask(() => plugin.Value.Configuration.Transcription.ReviewUsesAiService ? plugin.Value.Configuration.Services.First(s => s.Name == "AI") : plugin.Value.Configuration.Transcription.Review, sp.GetRequiredService<ITranscriptionRepository>(), sp.GetRequiredService<TranscriptionProvider>(), sp.GetRequiredService<IBoundaryStrategy>(), sp.GetRequiredService<ServiceCatalog>().Review));
         services.AddSingleton<ManagedLibraryMaintenance>();
         services.AddHostedService<TransientMaintenance>();
         services.AddSingleton(sp => new Discovery(
@@ -119,7 +132,7 @@ public sealed class Registration : IPluginServiceRegistrator
             () => plugin.Value.Configuration.MinimumMatch, sp.GetRequiredService<TimeProvider>()));
         services.AddSingleton(sp => new LanguageServices(
             () => plugin.Value.Configuration.Services,
-            logger: sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<LanguageServices>>()));
+            logger: sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<LanguageServices>>(), catalog: sp.GetRequiredService<ServiceCatalog>()));
         services.AddSingleton(sp =>
         {
             var generation = new Generation(() =>
@@ -128,7 +141,7 @@ public sealed class Registration : IPluginServiceRegistrator
                 return new(configuration.AllowUserRequests, configuration.AutoApproveUserRequests,
                     configuration.UserRequestDailyQuota, configuration.UserRequestActiveCap);
             }, sp.GetRequiredService<Store>(), sp.GetRequiredService<LanguageServices>(),
-                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Generation>>());
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Generation>>(), sp.GetServices<IRemoteTaskHandler>());
             generation.ObserveConfiguration(
                 handler => plugin.Value.ConfigurationUpdated += handler,
                 handler => plugin.Value.ConfigurationUpdated -= handler);

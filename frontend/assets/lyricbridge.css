@@ -1147,7 +1147,7 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
 .lb-job-status.lb-feedback-element,
 .lb-save-status.lb-feedback-element,
 .lb-song-save-status.lb-feedback-element {
-    gap: 4px 8px;
+    gap: 12px 8px;
 }
 
 .lb-upgrade-offer.lb-feedback-element {
@@ -1235,6 +1235,8 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
 }
 
 .lb-tools {
+    width: max-content;
+    box-sizing: border-box;
     position: fixed;
     z-index: 1100;
     display: flex;
@@ -1267,4 +1269,139 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
     max-height: var(--lb-notification-height);
     min-height: 0;
     overflow: auto;
+}
+
+/* Transcription review shares the search workspace and import action footer. */
+.lb-transcription-panel .lb-panel-body {
+    flex: 1 1 auto;
+}
+.lb-transcription-phrases {
+    display: grid;
+    gap: var(--lb-space-md);
+}
+.lb-transcription-panel .lb-transcription-phrase {
+    padding: var(--lb-space-md);
+}
+.lb-transcription-text {
+    white-space: pre-wrap;
+    unicode-bidi: plaintext;
+    overflow-wrap: anywhere;
+    font-size: 16px;
+}
+.lb-transcription-split {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--lb-space-sm);
+    margin-block: var(--lb-space-sm);
+}
+.lb-transcription-footer {
+    flex: 0 0 auto;
+    margin: 0;
+    padding-block: var(--lb-space-md);
+    border-top: 1px solid var(--lb-glass-border);
+    background: var(--lb-glass-panel);
+}
+
+.lb-transcription-status {
+    display: grid;
+    align-content: start;
+    gap: var(--lb-space-md);
+    flex: 0 0 auto;
+    max-height: 35%;
+    overflow-y: auto;
+}
+.lb-transcription-status > .lb-feedback,
+.lb-transcription-status > .lb-confirmation {
+    margin: 0;
+}
+.lb-transcription-status:has(> .lb-confirmation:not([hidden])) {
+    max-height: none;
+    overflow: visible;
+}
+.lb-transcription-status:has(> .lb-confirmation:not([hidden])) > .lb-feedback {
+    display: none;
+}
+.lb-transcription-status:has(> .lb-feedback[hidden]):has(> .lb-confirmation[hidden]) {
+    display: none;
+}
+
+/* Keep browser paragraph margins from adding a second gap inside shared dialogs. */
+.lb-dialog > .lb-panel-body > :first-child {
+    margin-block-start: 0;
+}
+.lb-dialog > .lb-panel-body > :last-child {
+    margin-block-end: 0;
+}
+.lb-transcription-overview {
+    display: flex;
+    flex-direction: column;
+    gap: var(--lb-space-xl);
+}
+.lb-transcription-overview > * {
+    flex: 0 0 auto;
+}
+.lb-transcription-request,
+.lb-transcription-results {
+    display: grid;
+    gap: var(--lb-space-md);
+}
+.lb-transcription-request > .lb-help,
+.lb-transcription-request > .lb-song-actions,
+.lb-transcription-results > .lb-help {
+    margin: 0;
+}
+.lb-transcription-request > .lb-field {
+    padding-block: 0;
+}
+.lb-transcription-results-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--lb-space-md);
+}
+.lb-transcription-results-heading > .lb-section-title {
+    margin: 0;
+}
+
+.lb-transcription-tools {
+    display: grid;
+    gap: var(--lb-space-md);
+    margin: 0;
+}
+.lb-transcription-panel .lb-transcription-tools > .lb-disclosure,
+.lb-transcription-panel .lb-transcription-editor > .lb-disclosure {
+    margin: 0;
+}
+.lb-transcription-editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--lb-space-md);
+}
+.lb-transcription-editor > * {
+    flex: 0 0 auto;
+    margin-block: 0;
+}
+.lb-transcription-editor > .lb-field {
+    padding-block: 0;
+}
+.lb-popup .lb-feedback-diagnostics summary {
+    padding-block: 4px;
+}
+.lb-transcription-tools .lb-disclosure-content > .lb-help {
+    margin: 0 0 var(--lb-space-md);
+}
+
+.lb-transcription-management .lb-help {
+    overflow-wrap: anywhere;
+}
+
+.lb-transcription-saved-entry {
+    padding-block: var(--lb-space-md);
+    margin-bottom: var(--lb-space-md);
+    border-bottom: 1px solid var(--lb-frame-edge);
+}
+.lb-transcription-saved-entry > .lb-version-metadata {
+    margin: 0 0 var(--lb-space-sm);
 }

@@ -5,6 +5,7 @@ import type {} from "../shared/runtime.ts";
 import { BridgeRequestError, createApi } from "./api.ts";
 import type { BridgeDocument, SourceCapability, TrackScope } from "./contracts.ts";
 import { button, disclosure, e, field, select } from "./controls.ts";
+import { createDialog, mountDialog } from "./dialog.ts";
 import type { AuxiliaryKind, Preferences } from "./models.ts";
 import { PreviewSession } from "./preview-session.ts";
 import { parseDocument } from "./responses.ts";
@@ -87,15 +88,15 @@ export function createSearchPanel(dependencies: Dependencies) {
         closePopup();
         closeSearch();
         const target = context.scope;
-        context.searchPopup = e("section", "lb-popup lb-search");
+        const dialog = createDialog({
+            label: better ? "Preview lyric update" : "Search versions",
+            wide: true,
+            closeLabel: "Cancel",
+            onClose: () => closeSearch(),
+        });
+        context.searchPopup = dialog.root;
         dependencies.hideImprovement();
-        context.searchPopup.setAttribute("role", "dialog");
-        context.searchPopup.setAttribute("aria-label", better ? "Preview lyric update" : "Search versions");
-        const head = e("header", "lb-popup-header");
-        head.append(
-            e("h2", "", better ? "Preview lyric update" : "Search versions"),
-            button("Cancel", () => closeSearch(), "lb-close", { icon: "close", iconOnly: true }),
-        );
+        dialog.closeButton.classList.add("lb-close");
         const form = e("div", "lb-search-form");
         const title = e("input"),
             artist = e("input");
@@ -137,7 +138,7 @@ export function createSearchPanel(dependencies: Dependencies) {
                 { icon: "edit" },
             ),
         );
-        context.searchPopup.append(head, form, querySummary, toolbar, body);
+        context.searchPopup.append(form, querySummary, toolbar, body);
         form.append(
             e(
                 "small",
@@ -152,7 +153,7 @@ export function createSearchPanel(dependencies: Dependencies) {
                     .join(" · "),
             ),
         );
-        document.body.append(context.searchPopup);
+        mountDialog(context.searchPopup);
         updatePanelBounds();
         requireValue(context.searchPopup.querySelector("button")).focus();
         let picked = null;

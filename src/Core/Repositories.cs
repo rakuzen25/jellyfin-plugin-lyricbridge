@@ -24,6 +24,7 @@ public interface IJobRepository
     Job? FindActiveJob(Guid user, string cacheKey);
     int CountAdmissions(Guid user, DateTime since);
     int CountActiveJobs(Guid user);
+    IReadOnlyList<Job> RemoveFinishedJobs(IReadOnlyList<string> ids, Guid? user = null, DateTimeOffset? before = null);
 }
 
 public interface ILanguageVersionRepository

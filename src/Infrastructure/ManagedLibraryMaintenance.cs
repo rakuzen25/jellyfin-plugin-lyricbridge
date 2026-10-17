@@ -1,6 +1,6 @@
 namespace LyricBridge;
 
-public sealed class ManagedLibraryMaintenance(Store store, Discovery discovery, Generation generation, LocalPronunciation local, Retrieval retrieval)
+public sealed class ManagedLibraryMaintenance(Store store, Discovery discovery, Generation generation, LocalPronunciation local, Retrieval retrieval, IAudioPreparation? audio = null)
 {
     public OriginalDeletion DeleteOriginal(Guid item, string hash, long? expectedRevision = null)
     {
@@ -20,6 +20,7 @@ public sealed class ManagedLibraryMaintenance(Store store, Discovery discovery, 
             await discovery.StopAll();
             await generation.StopAll();
             await local.StopAll();
+            audio?.Clear();
             var deleted = store.ResetManagedLibrary();
             retrieval.ClearMissingCache();
             return deleted;

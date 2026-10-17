@@ -163,6 +163,7 @@ public sealed partial class Store : ISelectionRepository
 
     private static void WriteUnchecked<T>(SqliteConnection connection, SqliteTransaction transaction, string kind, string id, T? value)
     {
+        if (kind == "job" && value is Job job) PrepareJobWrite(connection, transaction, id, job);
         using var command = connection.CreateCommand(); command.Transaction = transaction;
         command.CommandText = value is null
             ? "DELETE FROM records WHERE kind=$kind AND id=$id"

@@ -13,7 +13,7 @@ public interface IPronunciationService
     string Name { get; }
     Task<Dictionary<string, string>> Pronounce(RichLyrics lyrics, GenerationRequest request, IProgress<int> progress, CancellationToken token);
 }
-public sealed record LanguageCapability(string Service, bool Translation, bool Pronunciation, string[] Languages);
+public sealed record LanguageCapability(string Service, bool Translation, bool Pronunciation, string[] Languages, string? OptionId = null, string? Name = null);
 public sealed class LanguageServices : IDisposable
 {
     private readonly HttpClient client;
@@ -21,7 +21,20 @@ public sealed class LanguageServices : IDisposable
     public void Dispose() { if (ownsClient) client.Dispose(); }
     private readonly ILogger<LanguageServices>? logger;
     private readonly Func<ServiceConfig[]> configuration;
-    public LanguageServices(Func<ServiceConfig[]> configuration, HttpClient? httpClient = null, ILogger<LanguageServices>? logger = null) { this.configuration = configuration; this.logger = logger; ownsClient = httpClient is null; client = httpClient ?? new HttpClient(); client.Timeout = Timeout.InfiniteTimeSpan; }
+    private readonly ServiceCatalog? catalog;
+    public ServiceConfig Config(GenerationRequest request) => catalog?.Language(request) ?? Config(request.Service);
+    public ServiceConfig Snapshot(GenerationRequest request) => Codec.Deserialize<ServiceConfig>(Codec.Serialize(Config(request)))!;
+    public LanguageServices(Func<ServiceConfig[]> configuration, HttpClient? httpClient = null, ILogger<LanguageServices>? logger = null, ServiceCatalog? catalog = null) { this.configuration = configuration; this.catalog = catalog; this.logger = logger; ownsClient = httpClient is null; client = httpClient ?? new HttpClient(); client.Timeout = Timeout.InfiniteTimeSpan; }
+    public void Restore(Job job) => catalog?.Restore(job);
+    public bool MatchesCurrent(RichLyrics lyrics, Variant variant, string sourceLanguage)
+    {
+        try
+        {
+            if (catalog == null) return variant.CacheKey == Key(lyrics, new() { Kind = variant.Kind, Language = variant.Language, Service = variant.Service, SourceLanguage = sourceLanguage });
+            return catalog.Options().Where(o => o.Status == "Ready" && o.Capability == variant.Kind && o.Provider == variant.Service).Any(o => variant.CacheKey == Key(lyrics, new() { OptionId = o.Id, Kind = variant.Kind, Language = variant.Language, Service = variant.Service, SourceLanguage = sourceLanguage }));
+        }
+        catch (Exception e) when (e is ArgumentException or WorkflowException) { return false; }
+    }
     public const int AiPromptVersion = 2;
     public static readonly string[] ReasoningLevels = ["", "none", "minimal", "low", "medium", "high", "xhigh"];
     private static string GoogleSource(string language) => language switch { "und" => "auto", "zh-Hans" => "zh-CN", "zh-Hant" => "zh-TW", _ => language };
@@ -30,11 +43,11 @@ public sealed class LanguageServices : IDisposable
     public ITranslationService Translation(string name) => new TranslationAdapter(this, name);
     public IPronunciationService Pronunciation(string name) => name is "Google" or "AI" ? new PronunciationAdapter(this, name) : throw new ArgumentException("Service does not support pronunciation.");
     public bool Available(ServiceConfig s) => s.Name == "Google" || (s.Name == "DeepL" && !string.IsNullOrWhiteSpace(s.ApiKey)) || ((s.Name == "AI" || s.Name == "LibreTranslate") && Uri.TryCreate(s.Endpoint, UriKind.Absolute, out _));
-    public List<LanguageCapability> Capabilities() => configuration().Where(Available).Select(s => new LanguageCapability(s.Name, true, s.Name is "Google" or "AI", s.Name == "Google" ? GooglePronunciationLanguages : ["*"])).ToList();
+    public List<LanguageCapability> Capabilities() => catalog == null ? configuration().Where(Available).Select(s => new LanguageCapability(s.Name, true, s.Name is "Google" or "AI", s.Name == "Google" ? GooglePronunciationLanguages : ["*"])).ToList() : catalog.Options().Where(o => o.Status == "Ready" && o.Capability is "translation" or "pronunciation").Select(o => new LanguageCapability(o.Provider, o.Capability == "translation", o.Capability == "pronunciation", o.Languages, o.Id, o.Name)).ToList();
     public ServiceConfig Snapshot(string name) => Codec.Deserialize<ServiceConfig>(Codec.Serialize(Config(name)))!;
     public GenerationProfile Profile(GenerationRequest request, ServiceConfig? snapshot = null)
     {
-        var c = snapshot ?? Snapshot(request.Service);
+        var c = snapshot ?? Snapshot(request);
         return new(request.Service, Codec.Hash(c.Endpoint), c.Model, request.Kind, request.Language,
             request.SourceLanguage, request.Service == "AI" ? request.ReasoningEffort ?? c.ReasoningEffort : "",
             request.Kind == "translation" && request.Service != "AI" ? request.ContextBefore ?? c.ContextBefore : 0,
@@ -44,6 +57,7 @@ public sealed class LanguageServices : IDisposable
     public GenerationProfile CurrentProfile(GenerationRequest request, ServiceConfig? snapshot = null) => Profile(new GenerationRequest
     {
         Service = request.Service,
+        OptionId = request.OptionId,
         Kind = request.Kind,
         Language = request.Language,
         SourceLanguage = request.SourceLanguage
@@ -54,7 +68,7 @@ public sealed class LanguageServices : IDisposable
     {
         lyrics = Codec.Deserialize<RichLyrics>(Codec.Serialize(lyrics))!; lyrics.Lines = LyricRows.All(lyrics).ToList();
         request.LogCorrelationId ??= Guid.NewGuid().ToString("N");
-        var config = execution ?? Snapshot(request.Service); request.TimeoutSeconds ??= config.TimeoutSeconds; if (!Available(config)) throw new InvalidOperationException("Service requires administrator configuration.");
+        var config = execution ?? Snapshot(request); request.TimeoutSeconds ??= config.TimeoutSeconds; if (!Available(config)) throw new InvalidOperationException("Service requires administrator configuration.");
         if (request.SourceLanguage != "auto") { lyrics = Codec.Deserialize<RichLyrics>(Codec.Serialize(lyrics))!; foreach (var line in lyrics.Lines) line.Language = request.SourceLanguage; }
         if (request.Kind is not ("translation" or "pronunciation")) throw new ArgumentException("Unsupported generation kind.");
         request.SkippedRows.Clear();

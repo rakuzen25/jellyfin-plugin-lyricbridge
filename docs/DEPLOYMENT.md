@@ -32,7 +32,8 @@ set the plugin path to `/lyrics`. The directory must be writable by Jellyfin's
 container user. Entering an unmounted host path does not create a bind mount.
 
 The directory contains a SQLite index with original provider responses, rich lyric
-documents, selections, language versions, preferences, and generation requests.
+documents, selections, language versions, preferences, generation requests, and retained
+transcripts/boundary versions. Temporary audio staging lives alongside the index.
 Back up the complete directory alongside Jellyfin's configuration. To relocate it:
 
 1. Stop Jellyfin.

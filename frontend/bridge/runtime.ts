@@ -12,6 +12,8 @@ import { auxiliary as auxiliaryText } from "./auxiliary.ts";
 import type { BridgeDocument, ServiceCapability, SourceCapability, TrackScope } from "./contracts.ts";
 import { button, disclosure, e, section, select } from "./controls.ts";
 import { createDisplayPanel } from "./display-panel.ts";
+import { createDialog, mountDialog } from "./dialog.ts";
+import { createTranscriptionPanel } from "./transcription-panel.ts";
 import { createImportPanel } from "./import-panel.ts";
 import { createLyricDecoration } from "./lyric-view.ts";
 import type { AuxiliaryKind, Preferences } from "./models.ts";
@@ -213,6 +215,7 @@ export function installBridge() {
         if (!target.jobsRestored && isLyrics()) {
             target.jobsRestored = true;
             void restoreGeneration(target);
+            void transcriptionPanel.restore(target);
         }
         schedulePoll(target);
     }
@@ -237,8 +240,8 @@ export function installBridge() {
         const data = parseDocument(await api("items/" + target.itemId + "/lyrics"), defaults);
         accept(data, target, true);
         if (scope !== target) return;
-        if (force && !lyricContainer()?.querySelector(".lyricsLine")) render(current?.lyrics);
-        updateSongPanel();
+        if (force) render(current?.lyrics);
+        updateSongPanel(force);
         searchUsageRefresh?.();
     }
     function notice(node: HTMLElement | null | undefined, message: string, ttl = 0, expire?: () => void, severity?: FeedbackSeverity) {
@@ -424,7 +427,7 @@ export function installBridge() {
             ready: "",
             partial: "",
             instrumental: "",
-            rejected: "No correct lyric match selected",
+            rejected: "",
             missing: "No lyrics found",
             cleared: "No version selected · automatic search paused",
             failed: "No lyrics available (some sources failed)",
@@ -435,7 +438,7 @@ export function installBridge() {
             {
                 message: initialWait ? "" : messages[data.state ?? ""] || "",
                 severity: data.state === "failed" ? "error" : data.state === "searching" ? "progress" : "info",
-                actions: ["missing", "failed", "rejected", "cleared"].includes(data.state || "") ? [{ label: "Search again", run: retry }] : [],
+                actions: ["missing", "failed", "cleared"].includes(data.state || "") ? [{ label: "Search again", run: retry }] : [],
                 details:
                     data.state !== "partial"
                         ? (data.errors || []).map((error) => error.message + (error.diagnosticId ? " · Reference " + error.diagnosticId : ""))
@@ -557,22 +560,18 @@ export function installBridge() {
         popup.querySelectorAll<HTMLElement>('[role="tabpanel"]').forEach((panel) => (panel.hidden = panel.dataset.tab !== name));
     }
     function openPopup(tabName = "Song") {
-        if (!importPanel.canClose()) return;
+        if (!importPanel.canClose() || !transcriptionPanel.canClose()) return;
         if (popup) {
             if (typeof tabName === "string") activateSettingsTab(tabName);
             else closePopup();
             return;
         }
-        popup = e("section", "lb-popup lb-settings-panel");
-        popup.setAttribute("role", "dialog");
-        popup.setAttribute("aria-label", "Lyrics settings");
-        const head = e("header", "lb-popup-header");
         const heading = e("div", "lb-settings-heading");
         heading.append(
             e("h2", "", current?.track?.title || current?.lyrics?.title || "Lyrics settings"),
             e("p", "lb-settings-artist", current?.track?.artist || current?.lyrics?.artist || ""),
         );
-        head.append(heading, button("Close", closePopup, "", { icon: "close", iconOnly: true }));
+        popup = createDialog({ label: "Lyrics settings", title: heading, className: "lb-settings-panel", onClose: closePopup }).root;
         const tabs = e("div", "lb-tabs");
         tabs.setAttribute("role", "tablist");
         tabs.setAttribute("aria-label", "Lyrics settings");
@@ -615,8 +614,8 @@ export function installBridge() {
                 requireValue(values[next]).focus();
             }
         });
-        popup.append(head, tabs, body);
-        document.body.append(popup);
+        popup.append(tabs, body);
+        mountDialog(popup);
         updatePanelBounds();
         updateSongPanel();
         buildDisplay(requireValue(popup.querySelector<HTMLElement>(".lb-display-panel")));
@@ -715,11 +714,11 @@ export function installBridge() {
         clearTimeout(entry.timer);
         await flushPreference(entry);
     }
-    function updateSongPanel() {
+    function updateSongPanel(force = false) {
         if (playbackPreview.baseline) return;
         const parent = popup?.querySelector<HTMLElement>(".lb-song-panel");
         if (!parent) return;
-        if (!parent.contains(document.activeElement)) buildSongSummary(parent);
+        if (force || !parent.contains(document.activeElement)) buildSongSummary(parent);
         buildVersionsPanel();
     }
     function buildSongSummary(parent: HTMLElement) {
@@ -731,7 +730,7 @@ export function installBridge() {
             missing: "No lyrics found",
             cleared: "No version selected · automatic search paused",
             failed: "Lyrics could not be retrieved",
-            rejected: "Automatic matching paused",
+            rejected: "Lyrics removed · automatic search paused",
             searching: "Searching for lyrics…",
         };
         const summary = section("Playing now");
@@ -793,10 +792,21 @@ export function installBridge() {
                 summary.append(e("small", "lb-help", "Reported by " + (documentState().instrumental?.[0]?.source || "provider")));
             const actions = e("div", "lb-song-actions");
             actions.append(
-                button("Search versions", () => openVersions(), "", { icon: "search" }),
-                button("Search again", retry, "", { icon: "retry" }),
+                button(
+                    "Manage versions",
+                    () => {
+                        activateSettingsTab("Versions");
+                        const original = popup?.querySelector<HTMLElement>('[data-song-kind="original"]');
+                        if (original) {
+                            original.tabIndex = -1;
+                            original.focus({ preventScroll: true });
+                            original.scrollIntoView({ block: "start" });
+                        }
+                    },
+                    "",
+                    { icon: "edit" },
+                ),
             );
-            if (current?.canSelect) actions.append(button("Import lyrics", () => importLyrics(false), "", { icon: "import" }));
             summary.append(actions);
         }
         const language = section("Languages for this song");
@@ -1017,6 +1027,7 @@ export function installBridge() {
         closeSearch: (...args) => closeSearch(...args),
         openVersions: (...args) => openVersions(...args),
         importLyrics: (...args) => importLyrics(...args),
+        transcribeAudio: () => transcriptionPanel.open(),
         capabilities: (...args) => capabilities(...args),
         generate: (...args) => generate(...args),
         mark: (...args) => mark(...args),
@@ -1027,7 +1038,10 @@ export function installBridge() {
         const target = scope;
         try {
             await api("items/" + requireValue(target).itemId + "/" + name, "POST");
-            if (scope === target) await refreshSong(true);
+            if (scope === target) {
+                await refreshSong(true);
+                if (scope === target && name === "reject-matches") status("Lyrics removed", false, 4000, "action:remove-lyrics");
+            }
         } catch (error) {
             if (scope === target) throw error;
             throw new DOMException("The song changed", "AbortError");
@@ -1069,6 +1083,7 @@ export function installBridge() {
         searchPlaybackBar: HTMLElement | null = null;
     function startPlaybackPreview(doc: BridgeDocument, label: string, actions: HTMLElement[]) {
         playbackPreview.begin(requireValue(scope), requireValue(current), media()?.currentTime || 0);
+        if (searchPopup) searchPopup.hidden = true;
         current = doc;
         render(documentState().lyrics);
         searchPlaybackBar?.remove();
@@ -1081,8 +1096,9 @@ export function installBridge() {
         searchPlaybackBar.querySelector("button")?.focus();
     }
     function closeSearch(restore = true, force = false) {
-        if (!force && !importPanel.canClose()) return;
+        if (!force && (!importPanel.canClose() || !transcriptionPanel.canClose())) return;
         importPanel.dispose();
+        transcriptionPanel.dispose();
         if (searchPopup) feedbackScope.releaseWithin(searchPopup);
         searchUsageRefresh = null;
         searchSession?.dispose();
@@ -1093,6 +1109,7 @@ export function installBridge() {
         settingsButton?.focus();
     }
     function endPlaybackPreview(restore = true) {
+        if (searchPopup) searchPopup.hidden = false;
         searchPlaybackBar?.remove();
         searchPlaybackBar = null;
         notifications?.refreshBounds();
@@ -1111,7 +1128,7 @@ export function installBridge() {
         panel: () => searchPopup,
         mount: (panel) => {
             searchPopup = panel;
-            lyricHost()?.append(panel);
+            mountDialog(panel);
         },
         closePopup,
         closeSearch,
@@ -1126,6 +1143,39 @@ export function installBridge() {
         saved: () => playbackPreview.discard(),
         notice: (node, message, severity) => notice(node, message, 0, undefined, severity),
         feedback: (node, options) => feedbackScope.update(node, options),
+    });
+    const transcriptionPanel = createTranscriptionPanel({
+        scope: () => scope,
+        panel: () => searchPopup,
+        mount: (panel) => {
+            searchPopup = panel;
+            mountDialog(panel);
+        },
+        closePopup,
+        closeSearch,
+        endPlaybackPreview,
+        startPlaybackPreview,
+        documentState,
+        api,
+        notifications: () => notifications,
+        refreshSong: () => refreshSong(true),
+        saved: () => playbackPreview.discard(),
+        updatePanelBounds,
+        play: (start, end) => {
+            const audio = media();
+            if (!audio) return () => {};
+            audio.currentTime = start / 10_000_000;
+            const stop = () => {
+                audio.removeEventListener("timeupdate", tick);
+                audio.pause();
+            };
+            const tick = () => {
+                if (audio.currentTime >= end / 10_000_000) stop();
+            };
+            audio.addEventListener("timeupdate", tick);
+            void audio.play().catch(() => stop());
+            return stop;
+        },
     });
     async function importLyrics(existing: boolean) {
         const target = scope;
@@ -1234,7 +1284,7 @@ export function installBridge() {
         );
     }
     const { openVersions } = createSearchPanel({
-        canOpen: () => importPanel.canClose(),
+        canOpen: () => importPanel.canClose() && transcriptionPanel.canClose(),
         responseOrder,
         hideImprovement: () => notifications?.remove("improvement"),
         context: {

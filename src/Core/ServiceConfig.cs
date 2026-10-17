@@ -7,7 +7,9 @@ public sealed class ServiceConfig
     public string ApiKey { get; set; } = "";
     public string Model { get; set; } = "";
     public string ReasoningEffort { get; set; } = "";
-    public int TimeoutSeconds { get; set; } = 15;
+    public int TimeoutSeconds { get; set; } = 120;
+    public int ModelContextWindow { get; set; } = 32768;
+    public int? ModelCompletionLimit { get; set; }
     public int ContextBefore { get; set; }
     public int ContextAfter { get; set; }
 }

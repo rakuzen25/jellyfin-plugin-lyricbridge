@@ -27,6 +27,7 @@ interface GenerationProfile {
     promptRevision: number;
 }
 export interface Variant {
+    optionName?: string | null;
     key: string;
     hash: string;
     kind: AuxiliaryKind;

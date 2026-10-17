@@ -8,19 +8,24 @@ Save configuration before testing services. Playback choices live under
 
 The five tabs group configuration by task:
 
-| Tab               | Settings                                                                |
-| ----------------- | ----------------------------------------------------------------------- |
-| General           | Writable storage, scheduled retrieval, web renderer, maintenance        |
-| Sources           | Provider order, credentials, advanced matching                          |
-| Language services | Kawazu, external service capabilities/setup, synthetic connection tests |
-| Display defaults  | Defaults for accounts without saved preferences                         |
-| Requests          | User permissions, approvals, quotas, request history                    |
+| Tab              | Settings                                                                      |
+| ---------------- | ----------------------------------------------------------------------------- |
+| General          | Writable storage, scheduled retrieval, web renderer, maintenance               |
+| Sources          | Provider order, credentials, advanced matching                                 |
+| Services         | Remote transcription, AI boundary review, Kawazu, translation and pronunciation |
+| Display defaults | Defaults for accounts without saved preferences                                |
+| Requests         | User permissions, approvals, quotas, request history                           |
 
 **Save settings** applies configuration edits across tabs. Switching tabs preserves
 edits; failed saves retain values. Failed initial loads offer **Retry**.
 Connection tests use saved settings and synthetic text; they do not generate library
-lyrics. Results stay beside the service. Configured/Ready status indicates required
-fields are present, separately from successful live access.
+lyrics. Results stay beside the service. Ready indicates required fields are present, separately from successful live access.
+
+Existing settings migrate to named connections and capability options without
+changing models, audio limits, or enablement. Previously inherited AI review becomes
+an option sharing the AI connection. Renaming options or connections preserves jobs
+and caches; effective setting changes require the existing explicit retry flow.
+Saved results remain available after an option is removed.
 
 ## Configure lyric sources
 
@@ -63,7 +68,22 @@ removal of a challenge; do not automate verification bypass.
 
 ## Configure translation and pronunciation
 
-Enter endpoints and required fields under **Language services**:
+**Services** groups setup by **Transcription**, **Translation**, **Pronunciation**, and
+**Line-break review**. Expand a capability to add named options. **Connections** stores
+shared endpoints and credentials; each option chooses its connection, model, timeout,
+and task-specific settings. Multiple options can use one connection.
+
+Badges sit beside names and use **Ready**, **Needs setup**, or **Disabled**. Ready means
+configuration is complete, not that a live connection test succeeded. Counts, provider
+types and local processing appear in secondary text. Google and Japanese romaji are
+built in and do not require connections. Local phrase breaking is always available.
+
+Use **Apply** to stage an editor's changes or **Cancel** to discard them. Finish the
+editor before selecting **Save settings**. Connection edits affect all referencing
+options; remove those options before deleting a connection or changing its type.
+Incomplete setup can be saved, but cannot receive requests.
+
+Connection types and required fields:
 
 | Service        | Endpoint                                                  | Required configuration                             |
 | -------------- | --------------------------------------------------------- | -------------------------------------------------- |
@@ -93,14 +113,15 @@ such as `http://libretranslate:5000`.
 After configuring a service:
 
 1. Select **Save settings**.
-2. Select **Test connection** beside the service.
+2. Open a saved translation or pronunciation option and select **Test connection**.
 3. If it fails, inspect the local diagnostic, correct settings, save, and retry.
 
-A successful test confirms synthetic English-to-Chinese translation, not every
-language or pronunciation capability. Tests remain disabled until required fields
-are present; unsaved changes to that service must be saved first.
+Tests use synthetic translation or Japanese pronunciation text. A successful test
+does not verify every language or capability. Save connection and option changes
+before testing. Transcription and AI review use their normal request workflows.
 
-In **Versions**, explicitly request generation under pronunciation or translation.
+In **Versions**, explicitly choose a service for each translation or pronunciation
+request, even when only one option is available. No service is preselected or remembered.
 External services receive song text. User requests and automatic approval default
 to off; default limits are five new jobs per rolling 24 hours and three active
 requests. Cache hits consume no new request. Administrators manage approval,
@@ -111,11 +132,11 @@ rejection, cancellation, and retry under **Requests**.
 AI **Thinking level** defaults to **Provider default**, which omits
 `reasoning_effort`. Explicit None, Minimal, Low, Medium, High, and Extra high send the
 matching value and omit temperature. Use a level supported by your endpoint/model.
-Service HTTP timeouts range from 5–600 seconds, defaulting to 15; higher thinking
-levels may need longer timeouts.
+Language-service HTTP timeouts range from 5–600 seconds. New options default to
+120 seconds, including AI line-break review and transcription; migrated options preserve their timeout. Higher thinking levels may
+need longer timeouts. Transcription supports up to 3,600 seconds.
 
-For Google, DeepL, and LibreTranslate, **Advanced generation settings → Translation
-context** provides independent **Lines before/after** values from 0–10, both defaulting
+For Google, DeepL, and LibreTranslate, **Advanced generation settings** provides independent **Context lines before/after** values from 0–10, both defaulting
 to zero. Start with a small window. DeepL uses its
 [context parameter](https://developers.deepl.com/api-reference/translate/request-translation);
 Google/LibreTranslate use markers and reject missing/duplicated markers rather than
@@ -135,10 +156,13 @@ pronunciation is enabled. Originals display while it runs. Hepburn is the defaul
 Passport and Nippon are available. Supplied pronunciation takes priority.
 Local work has no external approval or quota.
 
-Administrators can disable **Language services → Kawazu → Automatically generate
-missing Japanese pronunciation**. This stops new automatic scheduling; saved rows and
-manual generation remain available, and queued work may finish.
-Disabling pronunciation also stops new automatic local scheduling.
+Administrators can disable **Services → Pronunciation → Automatically generate
+missing pronunciation**. Automatic generation uses enabled local pronunciation
+options for supported languages; currently only Japanese is supported. Remote
+services require a manual request. Turning automatic generation off stops new
+scheduling; saved rows and manual generation remain available, and queued work
+may finish. Disabling the local option or pronunciation display also stops new
+automatic local scheduling.
 
 ## Choose playback languages and display
 
@@ -164,6 +188,115 @@ For reduced rendering load, choose **Display → Text sizes and layout → Rende
 quality → Low power**. Artwork becomes stationary and glyph lift/glow stops, while
 timed highlighting continues. Standard is the default; quality is saved in this
 browser. See [performance limits](PERFORMANCE.md).
+
+## Transcribe audio and review line breaks
+
+Add and enable an option under **Services → Transcription**, using an AI-compatible
+connection and a transcription model. Configure an API base
+including `/v1`, model ID, and optional bearer key. LyricBridge appends
+`/audio/transcriptions`. The initial example is `https://api.groq.com/openai/v1`,
+`whisper-large-v3`, Opus in an Ogg container, and a 25 MB endpoint upload limit.
+Opus is the default for new options; existing saved format choices are retained.
+Choose WAV, FLAC, or Opus according to endpoint support; FLAC remains available
+for lossless uploads. Jellyfin's configured FFmpeg prepares audio;
+LyricBridge does not run local inference. Administrator password fields follow the
+existing credential convention; playback/job responses and logs exclude keys.
+
+Open **Lyrics settings → Versions → Original lyrics → Transcribe audio**, then choose
+a transcription service. Use the
+current local Jellyfin track or upload a copy of the same recording starting at time
+zero. An audio language code is optional (`auto` detects it). Input uploads default
+to 256 MB, with at most three staged uploads per account. Unfinished uploads can be
+resumed with **Use staged audio** or removed with **Discard staged audio**. Prepared audio is bounded;
+recordings exceeding the staging limit must be shortened. Normal request permissions,
+approval and quotas apply even when the track has no selected lyrics.
+
+When new transcription is unavailable, the dialog explains whether requests are
+disabled, transcription is turned off, or service setup is incomplete. Saved
+transcription results remain available for review.
+
+If prepared audio exceeds the endpoint limit, **Transcribe in chunks** shows the
+proposed chunk count before retry. A chunked recording is one request; administrators
+see its count during approval. Chunk boundaries prefer pauses and never overlap.
+Explicit retries retain the chosen option and reuse compatible completed chunks.
+Choose another option by starting a new request. Review chunk seams for recognition
+errors. When timestamp options are rejected, **Use segment timing only** offers an
+explicit fallback; untimed responses cannot become karaoke.
+
+Successful results remain until deleted. Raw responses, timed tokens and provider text
+are retained separately. Karaoke uses timed-token text when it disagrees with full
+provider text. Overlapping/decreasing token times remain intact. Temporary audio is
+removed after success, rejection or cancellation; failed-job and unclaimed staging
+expires after seven days. Cancelled uploads need uploading again for a new request.
+
+**Review line breaks** opens the latest saved entry. New transcriptions have no saved
+line breaks: **Generate automatic line breaks** creates an unsaved draft. Japanese uses the
+bundled NMeCab/IpaDic dictionary; other languages use generic word, punctuation and
+pause rules. Character/duration targets are soft. Split/merge, boundary playback,
+undo/redo, reset and saved-version switching leave token text and timing intact.
+Manual cuts may override grammatical advice but cannot split tokens or grapheme
+clusters. Segment-only output cannot split inside an untimed segment. Transcript
+correction and waveform editing are not part of this editor.
+
+Manual changes and **Apply automatic line breaks** change only the draft.
+**Save line breaks** retains its boundaries and preferences without changing playback;
+**Use reviewed lyrics** saves and selects an original atomically. Saving keeps undo history.
+**Reset edits** restores the captured baseline. Navigation offers Save and continue,
+Discard, or Keep editing; failed saves preserve the draft. AI submission captures a
+private input snapshot without adding that draft to the saved list.
+
+**Manage saved line breaks** lists each entry's origin and service metadata with a
+Delete action. Deleting an entry preserves other entries sharing its boundaries and
+keeps the current draft and undo history. Deleting the last entry is allowed; reopening
+then requires explicit generation. **Delete transcription** removes its entries and
+associated reviews and cancels active requests. Owner/administrator permissions and
+saved-original dependencies are shown beside disabled actions. Delete dependent originals
+first; neither deletion action cascades into originals. Legacy active reviews also block
+deletion of their input entry until finished or cancelled.
+
+The review dialog separates **Automatic line breaks** (local targets and application)
+from **AI review** (service selection and remote proposal). AI review uses the
+character, duration, and short-reply targets from the automatic settings; requesting
+it keeps the current edit in place until a result is explicitly opened. Closing the
+dialog leaves admitted jobs running. **Dismiss** hides a job notice for the current
+track session without cancelling its work. Reopening restores active jobs rather
+than resurfacing historical failures.
+
+**Services → Line-break review** configures optional AI review options. Each can reuse
+a connection with its own model. Choose a service explicitly for each **AI review**
+request. Advanced settings include **Model context window**, defaulting to 32,768
+tokens when lookup fails or metadata is unavailable. **Detect model limits automatically**
+is enabled by default for new/default options: choosing a connection and model fetches
+optional metadata from that endpoint's `/models` response for the exact model ID.
+Apply keeps the detected value; Cancel discards it. Turn detection off to enter a manual
+limit; existing non-default budgets remain manual. **Fetch model limits** retries discovery.
+No external model registry is used.
+
+AI review prefers one whole-transcript request. A conservative input estimate, safety
+margin, and response headroom determine whether natural-boundary batches are needed.
+The dialog and approvals show the planned AI request count. Providers can make their
+own routing attempts beyond this count. Requests run sequentially with a separate
+HTTP timeout per batch; completion limits remain the provider's default.
+
+Explicit retries reuse compatible validated batches; changed inputs or service settings
+require a new plan. Failed review checkpoints expire seven days after the latest failure;
+cancellation clears them. A proposal is saved only after every batch validates. Weak
+batch seams are flagged for review. Context-limit rejection requires correcting the
+budget before explicit retry; the plugin does not automatically retry or split again.
+
+AI returns boundary IDs only; invalid proposals retain the current edit. Finished proposals offer **Review result** rather than replacing
+newer manual work. Every successful review also appears in **Saved line breaks**, including
+reviews with the same boundaries as an existing version. These result references survive
+notification dismissal and request-history cleanup. The open list refreshes on completion
+without replacing edits; reopening a saved transcription also loads completed results.
+**Use reviewed lyrics** is administrator-only: it atomically saves
+an immutable original and selects it for the shared track. Conflicts preserve edits
+and offer a refreshed selection baseline. Translation/pronunciation then use normal
+version selection and automatic-pronunciation settings.
+
+Closing review stops previews and view-owned requests; admitted jobs continue and
+restore on returning to the track. Delete a result after deleting any saved originals
+that still need it. Deleting one original does not remove another version's transcript.
 
 ## Select and restore lyric versions
 
@@ -249,17 +382,34 @@ Back up [plugin storage](DEPLOYMENT.md#configure-and-back-up-storage) before thi
 irreversible operation. In **General → Maintenance → Reset managed lyric library**,
 type `RESET`, then select **Delete managed lyric library**.
 
-Reset stops active discovery/generation and deletes managed originals/raw lyrics,
+Reset stops active discovery/generation and deletes audio staging, transcripts,
+boundary versions, managed originals/raw lyrics,
 language versions, preview caches, timing, selections, classifications, and request
 history. Deleted SQLite pages are cleared and compacted. Plugin settings, credentials,
 account/song preferences, music/sidecar files, Jellyfin storage, and other plugins'
 data remain. Opening lyrics or enabled scheduled retrieval can refill storage.
 
+## Request history retention
+
+Translation, pronunciation, transcription, and AI review share one history policy.
+Completed, failed, cancelled, rejected, and settings-changed requests are removed
+30 days after their latest terminal transition. Pending, queued, and running requests
+are retained. Cleanup runs at startup and daily; existing terminal history receives
+a full retention window when first upgraded.
+
+The **Requests** tab loads recent activity when opened; **Refresh** reloads it.
+Empty history hides cleanup actions. **Remove from history** removes one finished request; **Clear finished
+history** confirms a snapshot of finished requests and skips any that have become active.
+Removal ends retry availability and clears job-owned temporary data. Generated lyric
+versions, selected originals, retained transcripts, and saved review proposals remain.
+Notification **Dismiss** only hides a notice; it does not remove history or cancel work.
+Removing history does not restore the rolling 24-hour request quota.
+
 ## Diagnose requests and feedback
 
 Success confirmations expire after four seconds. Progress stays until completion;
 errors persist until dismissed/resolved. Dismiss does not cancel work.
-Pending approvals, classifications, configuration availability, and history persist.
+Pending approvals, classifications, and configuration availability persist.
 Improvement dismissal and failed-job dismissal apply to the current viewing session.
 Monitoring failures offer **Retry status check**; confirmed generation failures offer
 **Retry generation**.

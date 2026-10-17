@@ -130,28 +130,6 @@
                     background: rgba(128, 128, 128, 0.12);
                     font-weight: 400;
                 }
-                #LyricBridgeConfig .lb-service-heading {
-                    display: flex;
-                    align-items: center;
-                    gap: 12px;
-                }
-                #LyricBridgeConfig .lb-service-main {
-                    flex: 1;
-                    min-width: 0;
-                    display: flex;
-                    flex-wrap: wrap;
-                    align-items: center;
-                    gap: 8px;
-                }
-                #LyricBridgeConfig .lb-service-capability {
-                    flex-basis: 100%;
-                    font-weight: 400;
-                    line-height: 1.5;
-                    margin: 0;
-                }
-                #LyricBridgeConfig .lb-service-heading > span:last-child {
-                    flex-shrink: 0;
-                }
                 #LyricBridgeConfig .emby-checkbox-label {
                     min-height: 44px;
                     padding-inline-start: 32px;
@@ -170,28 +148,6 @@
                 #LyricBridgeConfig .emby-checkbox-label .checkboxIcon {
                     font-size: 20px;
                 }
-                #LyricBridgeConfig .lb-service-heading > span:last-child {
-                    margin-inline-start: auto;
-                    font-size: 0.9em;
-                }
-                #LyricBridgeConfig .lb-provider-heading {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                }
-                #LyricBridgeConfig .lb-provider-heading .checkboxContainer {
-                    margin: 0;
-                    flex: 1;
-                    min-width: 0;
-                }
-                #LyricBridgeConfig .lb-source-row,
-                #LyricBridgeConfig .lb-service {
-                    padding: 12px 0;
-                    border-bottom: 1px solid rgba(128, 128, 128, 0.25);
-                }
-                #LyricBridgeConfig .lb-source-row p {
-                    margin: 8px 0 0;
-                }
                 #LyricBridgeConfig details {
                     margin: 12px 0;
                 }
@@ -200,16 +156,8 @@
                     line-height: 1.5;
                     padding: 8px 0;
                 }
-                #LyricBridgeConfig .lb-service {
-                    margin: 0;
-                }
-                #LyricBridgeConfig .lb-service > summary {
-                    font-weight: 600;
-                    padding: 0;
-                    min-height: 44px;
-                }
                 #LyricBridgeConfig .lb-service-body {
-                    padding-top: 12px;
+                    padding-top: 20px;
                 }
                 #LyricBridgeConfig .lb-service-body > .fieldDescription {
                     margin: 8px 0 16px;
@@ -332,6 +280,209 @@
                 #LyricBridgeConfig .lb-material-destructive {
                     color: #e77;
                 }
+                #LyricBridgeConfig .lb-settings-surface {
+                    margin: 16px 0;
+                    padding: 16px;
+                    border: 1px solid rgba(128, 128, 128, 0.25);
+                    border-radius: 8px;
+                    background: rgba(128, 128, 128, 0.06);
+                }
+                #LyricBridgeConfig .lb-settings-surface:empty {
+                    display: none;
+                }
+                #LyricBridgeConfig .lb-settings-surface > .lb-section-heading {
+                    margin: 0 0 12px;
+                }
+                #LyricBridgeConfig .lb-service > summary {
+                    list-style: none;
+                }
+                #LyricBridgeConfig .lb-service > summary::-webkit-details-marker {
+                    display: none;
+                }
+                #LyricBridgeConfig .lb-settings-chevron {
+                    width: 8px;
+                    height: 8px;
+                    margin: 8px;
+                    border-right: 2px solid currentColor;
+                    border-bottom: 2px solid currentColor;
+                    transform: rotate(-45deg);
+                }
+                #LyricBridgeConfig .lb-service[open] > summary .lb-settings-chevron {
+                    transform: rotate(45deg);
+                }
+                #LyricBridgeConfig .lb-service[open] > summary {
+                    padding-bottom: 0;
+                }
+                #LyricBridgeConfig .lb-service-editor {
+                    margin: 0 0 20px;
+                    padding: 20px;
+                    border: 0;
+                    border-radius: 6px;
+                    background: rgba(128, 128, 128, 0.1);
+                }
+                #LyricBridgeConfig .lb-settings-row > .lb-service-editor {
+                    margin: 16px 0 0;
+                }
+                #LyricBridgeConfig .lb-editor-switch {
+                    margin-bottom: 20px;
+                }
+                #LyricBridgeConfig .lb-settings-editor-title {
+                    margin: 0 0 20px;
+                    font-size: 1em;
+                }
+                #LyricBridgeConfig .lb-settings-action {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-sizing: border-box;
+                    min-height: 44px;
+                    min-width: 64px;
+                    margin: 0;
+                    padding: 8px 12px;
+                    border: 0;
+                    border-radius: 0.2em;
+                    background: transparent;
+                    box-shadow: none;
+                    color: inherit;
+                    font: inherit;
+                    font-weight: 400;
+                    line-height: 1.5;
+                }
+                #LyricBridgeConfig .lb-settings-action:not(:disabled):is(:hover, :focus-visible) {
+                    background: rgba(128, 128, 128, 0.12);
+                }
+                #LyricBridgeConfig .lb-settings-action:disabled {
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                }
+                #LyricBridgeConfig .lb-settings-action:focus-visible {
+                    outline: 2px solid currentColor !important;
+                    outline-offset: 2px;
+                }
+                #LyricBridgeConfig .lb-settings-icon-action {
+                    border-radius: 50%;
+                    width: 44px;
+                    min-width: 44px;
+                    padding: 0;
+                }
+                #LyricBridgeConfig .lb-settings-action-group {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 4px;
+                    flex: 0 0 auto;
+                }
+                #LyricBridgeConfig .lb-settings-row .lb-settings-row-title {
+                    font-weight: 400;
+                }
+                #LyricBridgeConfig .lb-settings-row {
+                    padding: 16px 0;
+                    margin: 0;
+                }
+                #LyricBridgeConfig .lb-settings-row + .lb-settings-row {
+                    border-top: 1px solid rgba(128, 128, 128, 0.16);
+                }
+                #LyricBridgeConfig .lb-settings-row:first-child {
+                    padding-top: 0;
+                }
+                #LyricBridgeConfig .checkboxContainer:has(input:disabled) {
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                }
+                #LyricBridgeConfig .checkboxContainer:has(input:disabled) * {
+                    cursor: not-allowed;
+                }
+                #LyricBridgeConfig .lb-settings-row-actions .checkboxContainer {
+                    display: inline-flex;
+                    align-items: center;
+                    min-height: 44px;
+                    box-sizing: border-box;
+                    margin: 0;
+                    width: auto;
+                    flex: 0 0 auto;
+                }
+                #LyricBridgeConfig .lb-service-body > button,
+                #LyricBridgeConfig .lb-connections > button {
+                    margin-top: 8px;
+                }
+                #LyricBridgeConfig .lb-settings-row-heading {
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    min-height: 44px;
+                    padding: 0;
+                    line-height: 1.5;
+                    font-weight: 400;
+                }
+                #LyricBridgeConfig .lb-settings-row-main {
+                    flex: 1;
+                    min-width: 0;
+                }
+                #LyricBridgeConfig .lb-settings-row-title {
+                    display: flex;
+                    flex-wrap: wrap;
+                    align-items: center;
+                    gap: 8px;
+                    font-weight: 600;
+                }
+                #LyricBridgeConfig .lb-settings-row-title .checkboxContainer {
+                    margin: 0;
+                }
+                #LyricBridgeConfig .lb-settings-row-description {
+                    display: block;
+                    margin: 4px 0 0;
+                    padding-inline: 0;
+                    line-height: 1.5;
+                    font-weight: 400;
+                }
+                #LyricBridgeConfig .lb-settings-row-actions {
+                    display: flex;
+                    flex-wrap: wrap;
+                    align-items: center;
+                    justify-content: flex-end;
+                    gap: 16px;
+                    flex: 0 0 auto;
+                    max-width: 100%;
+                }
+                #LyricBridgeConfig .lb-settings-row-heading.lb-settings-row-orderable {
+                    display: grid;
+                    grid-template-columns: 92px minmax(0, 1fr) max-content;
+                }
+                #LyricBridgeConfig .lb-source-row .lb-settings-row-actions {
+                    display: grid;
+                    grid-template-columns: max-content 64px;
+                }
+                @media (max-width: 600px) {
+                    #LyricBridgeConfig .lb-settings-row-heading.lb-settings-row-orderable {
+                        grid-template-columns: 44px minmax(0, 1fr);
+                    }
+                    #LyricBridgeConfig .lb-settings-row-ordering {
+                        grid-column: 1;
+                        grid-row: 1 / span 2;
+                        align-self: start;
+                        flex-direction: column;
+                    }
+                    #LyricBridgeConfig .lb-settings-row-orderable > .lb-settings-row-main,
+                    #LyricBridgeConfig .lb-settings-row-orderable > .lb-settings-row-actions {
+                        grid-column: 2;
+                    }
+                    #LyricBridgeConfig .lb-settings-row > .lb-settings-row-heading {
+                        flex-direction: column;
+                        align-items: stretch;
+                    }
+                    #LyricBridgeConfig .lb-settings-row > .lb-settings-row-heading .lb-settings-row-main {
+                        flex-basis: auto;
+                    }
+                    #LyricBridgeConfig .lb-settings-row > .lb-settings-row-heading .lb-settings-row-actions {
+                        justify-content: flex-start;
+                        width: 100%;
+                    }
+                    #LyricBridgeConfig .lb-settings-row-heading {
+                        flex-wrap: wrap;
+                    }
+                    #LyricBridgeConfig .lb-settings-row-main {
+                        flex-basis: 220px;
+                    }
+                }
             </style>
             <div data-role="content">
                 <div class="content-primary">
@@ -415,7 +566,7 @@
                             <section class="verticalSection" role="tabpanel" data-tab="Sources" hidden>
                                 <h3 class="sectionTitle">Automatic lyric sources</h3>
                                 <p class="fieldDescription">Order breaks ties after recording, timing, and supplied-row quality.</p>
-                                <div id="lb-sources"></div>
+                                <div id="lb-sources" class="lb-settings-surface"></div>
                                 <details>
                                     <summary>Advanced matching</summary>
                                     <div class="inputContainer">
@@ -424,28 +575,23 @@
                                     </div>
                                 </details>
                             </section>
-                            <section class="verticalSection" role="tabpanel" data-tab="Language services" hidden>
-                                <h3 class="sectionTitle">Language services</h3>
-                                <details class="lb-service" data-service="Kawazu">
-                                    <summary class="lb-service-heading">
-                                        <span class="lb-service-main">
-                                            <span>Kawazu</span><span class="lb-config-badge">Local</span>
-                                            <span class="fieldDescription lb-service-capability"
-                                                >Pronunciation only · Japanese → romaji. Supplied rows take priority.</span
-                                            >
-                                        </span>
-                                        <span>Options</span>
-                                    </summary>
-                                    <div class="lb-service-body">
-                                        <label class="checkboxContainer emby-checkbox-label">
-                                            <input is="emby-checkbox" type="checkbox" id="lb-auto-pronunciation" />
-                                            <span>Automatically generate missing Japanese pronunciation</span>
-                                        </label>
-                                        <p class="fieldDescription">
-                                            Manual generation and saved pronunciation remain available when disabled. Work already queued may finish.
-                                        </p>
-                                    </div>
-                                </details>
+                            <section class="verticalSection" role="tabpanel" data-tab="Services" hidden>
+                                <h3 class="sectionTitle">Services</h3>
+                                <p class="fieldDescription">
+                                    Configured means required settings are present; it does not confirm that a connection works. Enabled options are
+                                    offered in playback.
+                                </p>
+                                <div id="lb-local-pronunciation">
+                                    <label class="checkboxContainer emby-checkbox-label">
+                                        <input is="emby-checkbox" type="checkbox" id="lb-auto-pronunciation" />
+                                        <span>Automatically generate missing pronunciation</span>
+                                    </label>
+                                    <p class="fieldDescription">
+                                        Uses enabled local pronunciation services for supported languages. Currently supports Japanese. Remote
+                                        services require a manual request. Turning this off keeps saved pronunciation and manual generation available.
+                                        Work already queued may finish.
+                                    </p>
+                                </div>
                                 <div id="lb-services"></div>
                             </section>
                             <section class="verticalSection" role="tabpanel" data-tab="Display defaults" hidden>
@@ -478,14 +624,16 @@
                                         <input label="Active requests per user" is="emby-input" id="lb-active" type="number" min="1" max="100" />
                                     </div>
                                 </div>
-                                <div class="lb-section-heading">
-                                    <h3 class="sectionTitle">Approval queue</h3>
-                                    <button is="emby-button" type="button" id="lb-refresh" class="raised emby-button">
-                                        <span>Refresh queue</span>
-                                    </button>
-                                </div>
-                                <div id="lb-queue-status" class="fieldDescription" role="status" aria-live="polite"></div>
-                                <div id="lb-queue"></div>
+                                <section class="lb-settings-surface" aria-label="Requests">
+                                    <div class="lb-section-heading">
+                                        <h3 class="sectionTitle">Requests</h3>
+                                        <button is="emby-button" type="button" id="lb-refresh" class="emby-button button-flat lb-settings-action">
+                                            <span>Refresh</span>
+                                        </button>
+                                    </div>
+                                    <div id="lb-queue-status" class="fieldDescription" role="status" aria-live="polite"></div>
+                                    <div id="lb-queue"></div>
+                                </section>
                             </section>
                             <footer class="lb-config-footer">
                                 <button is="emby-button" type="submit" class="raised button-submit" disabled><span>Save settings</span></button>

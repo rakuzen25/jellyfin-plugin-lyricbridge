@@ -16,7 +16,7 @@ public sealed class SafeExceptionFilter(ILogger<SafeExceptionFilter> logger) : I
     {
         if (context.Exception is OperationCanceledException && context.HttpContext.RequestAborted.IsCancellationRequested) return;
         if (context.Exception is WorkflowException workflow) { context.Result = new JsonResult(new { error = SafeError.Create(workflow.Code, workflow.Message, workflow.Retryable) with { Issues = workflow.Issues, IssueCount = workflow.IssueCount } }, Codec.Json) { StatusCode = workflow.Status }; context.ExceptionHandled = true; return; }
-        var error = context.Exception switch { ServiceFailure f => SafeError.Create(f.Code, f.Message, true, f.RetryAt?.UtcDateTime), OperationCanceledException => SafeError.Create("service_timeout", "The connection test timed out after 15 seconds. Check the endpoint or try a lower AI thinking level.", true), HttpRequestException => SafeError.Create("service_unavailable", "The service could not be reached or rejected the request. Check its endpoint and setup, then retry.", true), InvalidDataException => SafeError.Create("invalid_line_mapping", "The service response did not contain the expected lyric-line mapping. Check model JSON support or retry.", true), ArgumentException => SafeError.Create("invalid_request", "Check the supplied settings and try again."), InvalidOperationException => SafeError.Create("action_unavailable", "This action is unavailable in the current state."), _ => SafeError.Create("request_failed", "The lyric action could not complete. Try again or check the plugin configuration.", true) };
+        var error = context.Exception switch { ServiceFailure f => SafeError.Create(f.Code, f.Message, true, f.RetryAt?.UtcDateTime), OperationCanceledException => SafeError.Create("service_timeout", "The connection test reached its configured HTTP timeout. Check the endpoint or try a lower AI thinking level.", true), HttpRequestException => SafeError.Create("service_unavailable", "The service could not be reached or rejected the request. Check its endpoint and setup, then retry.", true), InvalidDataException => SafeError.Create("invalid_line_mapping", "The service response did not contain the expected lyric-line mapping. Check model JSON support or retry.", true), ArgumentException => SafeError.Create("invalid_request", "Check the supplied settings and try again."), InvalidOperationException => SafeError.Create("action_unavailable", "This action is unavailable in the current state."), _ => SafeError.Create("request_failed", "The lyric action could not complete. Try again or check the plugin configuration.", true) };
         logger.LogWarning("LyricBridge action failed: {Code}; diagnostic {DiagnosticId}", error.Code, error.DiagnosticId);
         context.Result = new JsonResult(new { error }, Codec.Json) { StatusCode = error.Code == "search_limit" ? 429 : error.Code == "invalid_request" ? 400 : 503 }; context.ExceptionHandled = true;
     }
@@ -34,7 +34,7 @@ public sealed class StoreOperationFilter(Store store) : IAsyncActionFilter
     }
 }
 [ApiController, Authorize, Route("LyricBridge"), TypeFilter(typeof(SafeExceptionFilter)), TypeFilter(typeof(StoreOperationFilter))]
-public sealed class Api(SelectionService selection, LanguageVersionService versions, TimingService timing, LyricQueryService query, LibraryAccess access, PreferenceService preferences, ManagedLibraryMaintenance maintenance, Generation generation, LanguageServices languages, Discovery discovery, LocalPronunciation local, WebRendererIntegration renderer, Lazy<Plugin> plugin) : ControllerBase
+public sealed class Api(SelectionService selection, LanguageVersionService versions, TimingService timing, LyricQueryService query, LibraryAccess access, PreferenceService preferences, ManagedLibraryMaintenance maintenance, Generation generation, LanguageServices languages, Discovery discovery, LocalPronunciation local, WebRendererIntegration renderer, Lazy<Plugin> plugin, TranscriptionProvider? transcriptionProvider = null) : ControllerBase
 {
     private IActionResult JsonData(object? value) => new JsonResult(value, Codec.Json);
     private IActionResult Error(int status, string code, string message, bool retryable = false) => new JsonResult(new { error = SafeError.Create(code, message, retryable) }, Codec.Json) { StatusCode = status };
@@ -162,6 +162,7 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
         var item = Item(id); if (item == null) return NotFound();
         var doc = await Read(item, token);
         if (doc == null || Codec.ContentHash(doc) != input.Hash) return Error(409, "lyric_version_changed", "Reload this song’s current lyrics before generating pronunciation.");
+        _ = Catalog.Resolve("pronunciation", input.OptionId, "Kawazu");
         var prefs = EffectivePrefs(id);
         if (input.Retry) local.Retry(doc, prefs, input.IncludeSupplied);
         var state = local.Ensure(doc, prefs, input.IncludeSupplied);
@@ -208,6 +209,31 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
         var target = Path.GetFullPath(string.IsNullOrWhiteSpace(configured) ? plugin.Value.DataDirectory : configured);
         return JsonData(new { activeStoragePath = query.ActiveStoragePath, configuredStoragePath = target, restartRequired = target != query.ActiveStoragePath });
     }
+    private ServiceCatalog Catalog => new(() => plugin.Value.Configuration.ServiceSetup);
+    [HttpGet("service-options")]
+    public IActionResult ServiceOptions() => JsonData(Catalog.Options());
+    [HttpPost("service-options/{optionId}/test")]
+    public async Task<IActionResult> TestOption(string optionId, CancellationToken token)
+    {
+        if (!Admin) return Error(403, "permission_denied", "Only administrators can test service connections.");
+        var option = Catalog.Configuration.Options.FirstOrDefault(o => o.Id == optionId);
+        if (option == null || option.Capability is not ("translation" or "pronunciation") || option.Provider == "Kawazu") return Error(400, "unsupported_test", "Test language-service options with synthetic text; use the transcription or review workflow for other capabilities.");
+        Catalog.Resolve(option.Capability, optionId);
+        var doc = new RichLyrics { Lines = [new() { Id = "test", Text = option.Capability == "pronunciation" ? "おはよう" : "Good morning", Language = option.Capability == "pronunciation" ? "ja" : "en" }] };
+        await languages.Generate(doc, new() { OptionId = optionId, Kind = option.Capability, Language = "zh-Hans" }, new Progress<int>(), token);
+        return JsonData(new { state = "ready", message = "Connection succeeded using synthetic text." });
+    }
+    [HttpPost("service-options/model-limits")]
+    public async Task<IActionResult> ModelLimits(ModelLimitInput input, CancellationToken token)
+    {
+        if (!Admin) return Error(403, "permission_denied", "Only administrators can inspect model limits.");
+        var settings = new ServiceConfig { Endpoint = input.Endpoint, ApiKey = input.ApiKey ?? "", Model = input.Model };
+        if (string.IsNullOrEmpty(settings.ApiKey) && input.ConnectionId != null)
+            settings.ApiKey = Catalog.Configuration.Connections.FirstOrDefault(c => c.Id == input.ConnectionId && c.Endpoint == input.Endpoint)?.ApiKey ?? "";
+        using var owned = transcriptionProvider == null ? new TranscriptionProvider() : null;
+        var limits = await (transcriptionProvider ?? owned!).FetchModelLimits(settings, token);
+        return JsonData(new { available = limits != null, contextWindow = limits?.ContextWindow, completionLimit = limits?.CompletionLimit });
+    }
     [HttpGet("services")]
     public IActionResult Services() => JsonData(languages.Capabilities());
     [HttpGet("sources")]
@@ -218,7 +244,7 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
     public async Task<IActionResult> Generate(Guid id, GenerationRequest request, CancellationToken token)
     {
         var item = Item(id); if (item == null) return NotFound(); var lyrics = await Read(item, token); if (lyrics == null) return Error(409, "no_sung_lyrics", "Load sung lyrics before requesting translation or pronunciation."); lyrics.Hash = Codec.ContentHash(lyrics); query.SaveDocument(lyrics); if (!LanguageTag(request.Language) || request.Kind is not ("translation" or "pronunciation")) return Error(400, "invalid_request", "Choose a valid language and generation kind."); request.SourceLanguage = EffectivePrefs(id).SourceLanguage;
-        try { if (!languages.Available(languages.Config(request.Service))) return Error(409, "service_not_configured", "Ask an administrator to set up this service."); return JsonData(generation.Request(UserId, id, lyrics, request, Admin)); }
+        try { if (request.OptionId == null && !request.ServiceSpecified) return Error(400, "service_choice_required", "Choose a service option for this request."); if (!languages.Available(languages.Config(request))) return Error(409, "service_not_configured", "Ask an administrator to set up this service."); return JsonData(generation.Request(UserId, id, lyrics, request, Admin)); }
         catch (UnauthorizedAccessException) { return Error(403, "requests_disabled", "External generation requests are disabled for your account."); }
         catch (ArgumentException) { return Error(400, "unsupported_service", "Choose an available service."); }
         catch (InvalidOperationException e) { return Error(409, e.Message.StartsWith("Daily") ? "daily_quota" : "active_quota", e.Message, true); }
@@ -231,6 +257,33 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
         var jobs = active ? generation.ActiveJobs(Admin ? null : UserId) : generation.Jobs(Admin ? null : UserId, offset, limit);
         return JsonData(jobs.Where(j => (!itemId.HasValue || j.ItemId == itemId.Value) && Item(j.ItemId) != null));
     }
+    [HttpPost("jobs/{id}/review-plan")]
+    public IActionResult RetryReviewPlan(string id)
+    {
+        var job = generation.GetJob(id);
+        if (job == null || (!Admin && job.UserId != UserId) || Item(job.ItemId) == null) return NotFound();
+        var plan = generation.ReviewRetryPlan(id, UserId, Admin);
+        return JsonData(new { plan.Identity, plan.RequestCount });
+    }
+    [HttpGet("jobs/history/finished")]
+    public IActionResult FinishedHistory()
+    {
+        var ids = new List<string>();
+        for (var offset = 0; ; offset += 500)
+        {
+            var page = generation.Jobs(Admin ? null : UserId, offset, 500);
+            ids.AddRange(page.Where(j => JobLifecycle.Terminal(j.State) && Item(j.ItemId) != null).Select(j => j.Id));
+            if (page.Count < 500) break;
+        }
+        return JsonData(new { ids });
+    }
+    [HttpPost("jobs/history/remove")]
+    public IActionResult RemoveHistory(RemoveHistoryInput input)
+    {
+        if (input.Ids == null || input.Ids.Count > 10000) return Error(400, "invalid_request", "Choose at most 10,000 finished requests.");
+        var ids = input.Ids.Where(id => generation.GetJob(id) is { } job && (Admin || job.UserId == UserId) && Item(job.ItemId) != null).ToList();
+        return JsonData(new { removedIds = generation.RemoveHistory(ids, Admin ? null : UserId) });
+    }
     [HttpGet("jobs/{jobId}")]
     public IActionResult JobStatus(string jobId)
     {
@@ -238,7 +291,7 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
         return job == null || (!Admin && job.UserId != UserId) || Item(job.ItemId) == null ? NotFound() : JsonData(job);
     }
     [HttpPost("jobs/{id}/{operation}")]
-    public IActionResult JobAction(string id, string operation) { var job = generation.GetJob(id); if (job == null || Item(job.ItemId) == null) return NotFound(); try { return JsonData(generation.Action(id, operation, UserId, Admin)); } catch (UnauthorizedAccessException) { return Error(403, "permission_denied", "You cannot perform this request action."); } catch (InvalidOperationException) { return Error(409, "action_unavailable", "This action is not available in the current request state."); } }
+    public IActionResult JobAction(string id, string operation, string? planIdentity = null) { var job = generation.GetJob(id); if (job == null || Item(job.ItemId) == null) return NotFound(); try { return JsonData(generation.Action(id, operation, UserId, Admin, planIdentity)); } catch (UnauthorizedAccessException) { return Error(403, "permission_denied", "You cannot perform this request action."); } catch (InvalidOperationException) { return Error(409, "action_unavailable", "This action is not available in the current request state."); } }
     [HttpGet("admin/web-renderer")]
     public IActionResult WebRenderer() => Admin ? JsonData(renderer.Status) : Forbid();
     [HttpPost("admin/web-renderer/repair")]
@@ -249,8 +302,11 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
 }
 public sealed record SearchInput(string? Title = null, string? Artist = null, string? Source = null);
 public sealed record InstrumentalInput(bool Clear = false);
-public sealed record PronunciationInput(string Hash, bool IncludeSupplied = true, bool Retry = false);
+public sealed record PronunciationInput(string Hash, bool IncludeSupplied = true, bool Retry = false, string? OptionId = null);
 
 public sealed record ResetLibraryInput(string Confirmation);
 
 public sealed record DeleteOriginalInput(bool Confirmed, long? Revision = null);
+
+public sealed record ModelLimitInput(string Endpoint, string Model, string? ApiKey = null, string? ConnectionId = null);
+public sealed record RemoveHistoryInput(List<string> Ids);

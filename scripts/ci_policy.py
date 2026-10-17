@@ -115,6 +115,7 @@ def known_impacts(path: str, root: Path | None = None) -> set[str]:
             "search-session",
             "search-models",
             "source-usage",
+            "transcription-state",
         }:
             return {"frontend", "workflow", "artifacts"}
         if name in {
@@ -154,7 +155,18 @@ def known_impacts(path: str, root: Path | None = None) -> set[str]:
         result = {"backend", "tooling", "artifacts"}
         if (
             path.startswith("src/Core/")
-            or path in {"src/Api.cs", "src/LyricPayload.cs"}
+            or path
+            in {
+                "src/Api.cs",
+                "src/TranscriptionApi.cs",
+                "src/AudioPreparation.cs",
+                "src/Infrastructure/TranscriptionTasks.cs",
+                "src/Infrastructure/TranscriptionProvider.cs",
+                "src/Infrastructure/Store.Jobs.cs",
+                "src/Infrastructure/Store.Generation.cs",
+                "src/Infrastructure/TransientMaintenance.cs",
+                "src/LyricPayload.cs",
+            }
             or "Service.cs" in path
         ):
             result |= {"workflow", "rendering"}

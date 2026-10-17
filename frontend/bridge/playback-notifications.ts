@@ -157,7 +157,7 @@ export class PlaybackNotifications {
             visible.add(focused);
         }
         for (const entry of this.entries.values()) entry.root.hidden = !visible.has(entry);
-        this.summary.hidden = sorted.length <= 2 && !this.expanded;
+        this.summary.hidden = sorted.length <= 2;
         this.summary.setAttribute("aria-expanded", String(this.expanded));
         const caption = this.expanded ? "Show fewer" : Math.max(0, sorted.length - 2) + " more notifications";
         const label = this.summary.querySelector(".lb-action-label")!;
@@ -211,7 +211,7 @@ export class PlaybackNotifications {
         const hostRect = this.host.getBoundingClientRect();
         // Empty Jellyfin views still reserve the remaining page for lyrics loading/missing states.
         const hostBox =
-            !hostRect.height && this.host.classList.contains("lyricPage")
+            this.host.classList.contains("lyricPage") && !this.host.querySelector(".lyricsLine")
                 ? { left: hostRect.left, right: hostRect.right, top: hostRect.top, bottom: top + (viewport?.height || innerHeight) - safeBottom }
                 : hostRect;
         const box = notificationBounds(
@@ -232,9 +232,9 @@ export class PlaybackNotifications {
             !box.height ||
             (![...this.entries.values()].some((entry) => !!entry.options.message) &&
                 ![...this.root.children].some((node) => node !== this.list && node !== this.summary && node instanceof HTMLElement && !node.hidden));
-        for (const [property, value] of Object.entries({ left: box.left, top: box.top, width: box.width, maxHeight: box.height }))
-            if (this.root.style[property as "left" | "top" | "width" | "maxHeight"] !== value + "px")
-                this.root.style[property as "left" | "top" | "width" | "maxHeight"] = value + "px";
+        for (const [property, value] of Object.entries({ left: box.left, top: box.top, maxWidth: box.width, maxHeight: box.height }))
+            if (this.root.style[property as "left" | "top" | "maxWidth" | "maxHeight"] !== value + "px")
+                this.root.style[property as "left" | "top" | "maxWidth" | "maxHeight"] = value + "px";
         this.root.style.setProperty("--lb-notification-height", box.height + "px");
     }
     dispose(): void {

@@ -6,7 +6,8 @@
         "saved-originals.spec.cjs",
         "embedded-versions.spec.cjs",
         "workflow-lifecycle.spec.cjs",
-        "import-lyrics.spec.cjs"
+        "import-lyrics.spec.cjs",
+        "transcription.spec.cjs"
     ],
     "rendering": [
         "artwork-lifecycle.spec.cjs",

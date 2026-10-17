@@ -1,3 +1,4 @@
+import { adminButton } from "./controls.ts";
 import type { FeedbackAdapter } from "../shared/feedback.ts";
 /** Native Jellyfin controls, deliberately independent of lyrics glass styling. */
 export const materialFeedback: FeedbackAdapter = {
@@ -23,19 +24,10 @@ export const materialFeedback: FeedbackAdapter = {
         };
     },
     button(action) {
-        const control = document.createElement("button");
-        control.type = "button";
-        control.setAttribute("is", "emby-button");
-        control.className = "raised emby-button";
-        const label = document.createElement("span");
-        label.textContent = action.label;
-        control.append(label);
+        const control = adminButton(action.label, () => action.run());
         control.disabled = !!action.disabled || !!action.busy;
         control.setAttribute("aria-busy", String(!!action.busy));
         if (action.destructive) control.classList.add("lb-material-destructive");
-        control.onclick = () => {
-            void action.run();
-        };
         return control;
     },
 };

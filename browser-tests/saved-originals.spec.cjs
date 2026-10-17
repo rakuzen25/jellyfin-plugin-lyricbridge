@@ -10,7 +10,7 @@ function fixture(admin = true, delay = false) {
         documents[1].lyrics={...documents[1].lyrics,hash:'saved-import',source:'Imported',providerId:'local',lines:documents[1].lyrics.lines.map(l=>({...l,text:'Imported '+l.text}))};
         let savedHashes=['demo-ready','saved-import'],activeOriginal='demo-ready';
         payload=function(){const d=activeOriginal?structuredClone(documents[activeOriginal==='demo-ready'?0:1]):basePayload();
-          if(!activeOriginal){d.lyrics=null;d.state='missing';d.variants=[];}
+          if(!activeOriginal){d.lyrics=null;d.state='cleared';d.variants=[];}
           d.canSelect=${admin};d.canDeleteOriginals=${admin};
           d.savedOriginals=savedHashes.map(hash=>({itemId:'11111111111111111111111111111111',hash,source:hash==='demo-ready'?'Demo fixture':'Imported',providerId:hash==='demo-ready'?'42':'local',title:'Morning light',artist:'Fixture',wordTimed:true,savedAt:'2026-10-11T00:00:00Z',revision:0}));return d;};
         window.fetch = async function (input, init) {`,
@@ -90,6 +90,34 @@ test("@workflow saved originals preview, switching, and confirmed current deleti
         await saved(page).locator(".lb-version-toggle").click();
     await expect(saved(page).getByRole("button", { name: "Use", exact: true })).toBeDisabled();
     await expect.poll(() => page.evaluate(() => window.LyricBridge.current.lyrics?.hash)).toBe("demo-ready");
+    await saved(page).getByRole("button", { name: "Delete", exact: true }).click();
+    await saved(page).getByRole("button", { name: "Delete saved original", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.LyricBridge.current.lyrics)).toBeNull();
+    await expect(page.locator(".lyricsContainer .lyricsLine")).toHaveCount(0);
+    await expect(page.locator(".lb-tools")).toContainText("No version selected");
+    await expect(page.locator(".lb-song-panel")).toContainText("No version selected");
+    await page.getByRole("tab", { name: "Song", exact: true }).click();
+    await page.getByRole("button", { name: "Manage versions", exact: true }).click();
+    await expect(page.getByRole("tab", { name: "Versions", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator('[data-song-kind="original"]')).toBeFocused();
+});
+
+test("@workflow forced refresh clears deleted lyrics while song controls retain focus", async ({ page }) => {
+    await demo(page, { transformHtml: fixture() });
+    await versions(page);
+    await page.getByRole("tab", { name: "Song", exact: true }).click();
+    await page.locator(".lb-song-panel").getByRole("button", { name: "Adjust timing", exact: true }).focus();
+    await page.evaluate(async () => {
+        for (const hash of ["saved-import", "demo-ready"])
+            await fetch("/LyricBridge/items/11111111111111111111111111111111/originals/" + hash, {
+                method: "DELETE",
+                body: JSON.stringify({ confirmed: true, revision: 0 }),
+            });
+        await window.LyricBridge.refreshSong(true);
+    });
+    await expect(page.locator(".lb-song-panel")).toContainText("No version selected");
+    await expect(page.locator(".lyricsContainer .lyricsLine")).toHaveCount(0);
+    await expect(page.locator(".lb-tools")).toContainText("No version selected");
 });
 
 test("@workflow non-administrators can preview without select or delete controls", async ({ page }) => {

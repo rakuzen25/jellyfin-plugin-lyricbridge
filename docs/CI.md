@@ -41,11 +41,11 @@ Keep tests at different boundaries when they protect different contracts:
 | Contract                                                                                   | Primary maintained checks                                                                  |
 | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
 | Toolchain identity, image agreement, upgrade policy                                        | `pnpm test:tooling`, toolchain/browser guards                                              |
-| Ranking, formats/imports, generation identity/quotas, preference and deletion transactions | `tests/StorageTests.csproj` scenarios                                                      |
+| Ranking, formats/imports, transcription/boundaries, shared generation quotas and deletion transactions | `tests/StorageTests.csproj` scenarios                                                      |
 | Search/preview/generation ownership, account changes, failed writes                        | Frontend unit tests and workflow browser group                                             |
 | Multilingual layout, timing/follow, settings, artwork races, teardown                      | Rendering browser group                                                                    |
 | Five-minute playback, generation/navigation, resource/heap/CPU growth                      | `long-session.spec.cjs` in performance projects                                            |
-| Authentication, libraries, native lyrics, injection, reset, restart, uninstall             | `tests/PackageInstallation.py`                                                             |
+| Authentication, libraries, native lyrics, injection, reset, restart, uninstall             | `tests/PackageInstallation.py` (including synthetic remote audio, FFmpeg and native cue ends) |
 | Source classification, receipt trust, archive/source/notices, reproducibility              | `tests/CiPolicy.py`, `ReleaseAutomation.py`, `PackageArtifacts.py`, `ReproducibleBuild.py` |
 
 Live credentialed providers, ARM64, and physical-device power/thermals need separate
@@ -198,3 +198,6 @@ paths; it does not validate remote permissions or the complete Renovate schema.
 - [Publish verified assets](RELEASING.md) after release gates pass.
 - Compare CI critical-path duration and runner minutes only for equivalent inputs,
   coverage, and hardware; separate queue/download time from execution.
+
+Service setup coverage includes legacy migration, shared connections, option identity,
+explicit playback choices, and configuration/job compatibility with mocked providers.

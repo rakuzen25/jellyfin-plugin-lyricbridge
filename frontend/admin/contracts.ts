@@ -1,3 +1,34 @@
+export interface ServiceConnection {
+    Id: string;
+    Name: string;
+    Provider: string;
+    Endpoint: string;
+    ApiKey: string;
+}
+export interface ServiceOption {
+    Id: string;
+    Name: string;
+    Capability: string;
+    Provider: string;
+    ConnectionId: string | null;
+    Enabled: boolean;
+    Model: string;
+    TimeoutSeconds: number;
+    ModelContextWindow?: number;
+    DetectModelLimits?: boolean | null;
+    ModelCompletionLimit?: number | null;
+    ReasoningEffort: string;
+    ContextBefore: number;
+    ContextAfter: number;
+    UploadFormat: string;
+    MaxUploadMb: number;
+    MaxInputMb: number;
+}
+export interface ServiceSetup {
+    Version: number;
+    Connections: ServiceConnection[];
+    Options: ServiceOption[];
+}
 interface SourceConfiguration {
     Name: string;
     Enabled: boolean;
@@ -27,7 +58,21 @@ interface DisplayDefaults {
     ShowTranslation: boolean;
     JapaneseRomaji: boolean;
 }
+interface TranscriptionConfiguration {
+    Enabled: boolean;
+    Endpoint: string;
+    Model: string;
+    ApiKey: string;
+    UploadFormat: string;
+    MaxUploadMb: number;
+    MaxInputMb: number;
+    TimeoutSeconds: number;
+    ReviewUsesAiService: boolean;
+    Review: ServiceConfiguration;
+}
 export interface Configuration {
+    ServiceSetup: ServiceSetup;
+    Transcription: TranscriptionConfiguration;
     [key: string]: unknown;
     EnableWebRenderer: boolean;
     StoragePath: string;
@@ -49,6 +94,10 @@ export interface JobSummary {
     state: string;
     progress: number;
     request: { kind: string; language: string };
+    audio?: { chunkCount: number; allowChunking: boolean };
+    taskKind?: string;
+    stage?: string;
+    reviewPlan?: { requestCount: number };
     error?: string;
     failure?: { diagnosticId?: string };
 }

@@ -28,6 +28,14 @@ const visible = (page) => page.locator(".lb-notification-card:visible").evaluate
 test("notification priority, deduplication and expanded state survive operation updates", async ({ page }) => {
     await fixture(page);
     await expect.poll(() => visible(page)).toEqual(["action:error", "action:warning"]);
+    await expect
+        .poll(() =>
+            page.locator(".lb-tools").evaluate((node) => {
+                const host = document.getElementById("lyrics").getBoundingClientRect();
+                return node.getBoundingClientRect().width < Math.min(520, host.width - 24);
+            }),
+        )
+        .toBe(true);
     await page.getByRole("button", { name: "3 more notifications" }).click();
     await expect(page.locator(".lb-notification-card:visible")).toHaveCount(5);
     await page.evaluate(() => {
@@ -46,6 +54,29 @@ test("notification priority, deduplication and expanded state survive operation 
     expect(await page.evaluate(() => document.querySelector(".lb-notification-list").scrollTop)).toBe(await page.evaluate(() => window.beforeScroll));
     await page.getByRole("button", { name: "Show fewer" }).click();
     await expect.poll(() => visible(page)).toEqual(["action:error", "action:warning"]);
+});
+
+test("dismissing notifications updates the summary and hides unnecessary collapse controls", async ({ page }) => {
+    await fixture(page);
+    await page.evaluate(() => {
+        for (const id of ["action:error", "action:warning", "action:progress-a", "action:progress-b", "improvement"])
+            window.cards.set(id, {
+                message: id,
+                severity: id === "action:error" ? "error" : id === "action:warning" ? "warning" : "info",
+                actions: [{ label: "Dismiss", run: () => window.cards.remove(id) }],
+            });
+    });
+    await page.locator('.lb-notification-card[data-operation="action:error"]').getByRole("button", { name: "Dismiss" }).click();
+    await expect(page.getByRole("button", { name: "2 more notifications" })).toBeVisible();
+    await page.getByRole("button", { name: "2 more notifications" }).click();
+    await page.locator('.lb-notification-card[data-operation="action:warning"]').getByRole("button", { name: "Dismiss" }).click();
+    await expect(page.getByRole("button", { name: "Show fewer" })).toBeVisible();
+    await page.locator('.lb-notification-card[data-operation="action:progress-a"]').getByRole("button", { name: "Dismiss" }).click();
+    await expect(page.locator(".lb-notification-summary")).toBeHidden();
+    await expect(page.locator(".lb-notification-card:visible")).toHaveCount(2);
+    await page.evaluate(() => window.cards.set("new-operation", { message: "Another notification" }));
+    await expect(page.getByRole("button", { name: "Show fewer" })).toBeVisible();
+    await expect(page.locator(".lb-notification-card:visible")).toHaveCount(3);
 });
 
 test("focused cards remain visible and diagnostic focus survives changed details", async ({ page }) => {
@@ -126,6 +157,29 @@ test("expanded notifications scroll within a small lyrics container and keep col
         document.querySelector(".lb-tools").remove();
     });
     await expect(page.locator(".lb-tools")).toHaveCount(0);
+});
+
+test("empty lyrics pages leave room for a complete transcription notification", async ({ page }) => {
+    await fixture(page);
+    await page.evaluate(() => {
+        window.cards.dispose();
+        const host = document.getElementById("lyrics");
+        host.classList.add("lyricPage");
+        host.style.height = "80px";
+        window.cards = new window.fixture.PlaybackNotifications(document.querySelector(".lb-tools"), host);
+        window.cards.set("job:transcription", {
+            message: "Audio transcription · running",
+            secondary: "Preparing audio · 00:01:41",
+            severity: "progress",
+            actions: [
+                { label: "Cancel request", run: () => {} },
+                { label: "Dismiss", run: () => {} },
+            ],
+        });
+    });
+    await expect.poll(() => page.locator(".lb-notification-list").evaluate((node) => node.scrollHeight <= node.clientHeight + 1)).toBe(true);
+    await expect(page.getByRole("button", { name: "Cancel request", exact: true })).toBeInViewport();
+    await expect(page.getByRole("button", { name: "Dismiss", exact: true })).toBeInViewport();
 });
 
 test("success expires while errors persist and focused success waits until focus leaves", async ({ page }) => {

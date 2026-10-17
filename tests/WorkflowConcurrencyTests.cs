@@ -46,7 +46,7 @@ public sealed class WorkflowConcurrencyTests : IDisposable
     {
         var store = new Store(directory);
         var profile = new GenerationProfile("AI", "endpoint-id", "model", "translation", "en", "auto", "", 0, 0, 1);
-        var job = new Job { State = "running", Hash = "document", Profile = profile }; store.SaveJob(job);
+        var job = new Job { State = "running", Hash = "document", Profile = profile }; store.Put("job", job.Id, job);
         var variant = new Variant("version", job.Hash, "translation", "en", "AI", "model", new() { ["line"] = "text" }, Profile: profile);
         using (var connection = new SqliteConnection("Data Source=" + Path.Combine(directory, "index.sqlite")))
         {

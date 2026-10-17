@@ -196,7 +196,7 @@
                 }
                 if (path.endsWith("/LyricBridge/sources"))
                     return new Response(JSON.stringify([{ name: "Demo fixture", enabled: true, configured: true }]));
-                if(path.endsWith("/LyricBridge/services"))return new Response(JSON.stringify([{service:"Google",translation:true,pronunciation:true,languages:["*"]}]));
+                if(path.endsWith("/LyricBridge/services"))return new Response(JSON.stringify([{service:"Google",translation:true,pronunciation:true,languages:["*"]},{service:"Kawazu",translation:false,pronunciation:true,languages:["ja"]}]));
                 if (path.includes("/LyricBridge/search/"))
                     return new Response(
                         JSON.stringify({

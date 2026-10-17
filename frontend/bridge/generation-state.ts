@@ -1,12 +1,18 @@
-import type { RequestFailure } from "./api.ts";
+import { BridgeRequestError, type RequestFailure } from "./api.ts";
 export interface GenerationJob {
     id: string;
+    taskKind?: string;
+    stage?: string;
+    resultId?: string | null;
+    reviewRequestCount?: number;
+    chunkCount?: number;
+    allowChunking?: boolean;
     hash?: string;
     state: string;
     progress: number;
     outputDeleted?: boolean;
     outputDeletedAt?: string | null;
-    request: { service: string; kind: string; language?: string };
+    request: { optionName?: string; optionId?: string; service: string; kind: string; language?: string };
     error?: string | null;
     failure?: RequestFailure | null;
 }
@@ -52,10 +58,25 @@ export function parseGenerationJob(value: unknown): GenerationJob {
     }
     return {
         id: value.id,
+        ...(record(value.reviewPlan) && typeof value.reviewPlan.requestCount === "number"
+            ? { reviewRequestCount: value.reviewPlan.requestCount }
+            : {}),
+        ...(typeof value.taskKind === "string" ? { taskKind: value.taskKind } : {}),
+        ...(typeof value.stage === "string" ? { stage: value.stage } : {}),
+        ...(typeof value.resultId === "string" ? { resultId: value.resultId } : {}),
+        ...(record(value.audio) && typeof value.audio.chunkCount === "number"
+            ? { chunkCount: value.audio.chunkCount, allowChunking: value.audio.allowChunking === true }
+            : {}),
         ...(value.hash === undefined ? {} : { hash: value.hash }),
         state: value.state,
         progress: value.progress,
-        request: { service: value.request.service, kind: value.request.kind, language: value.request.language },
+        request: {
+            service: value.request.service,
+            kind: value.request.kind,
+            language: value.request.language,
+            ...(typeof value.request.optionName === "string" ? { optionName: value.request.optionName } : {}),
+            ...(typeof value.request.optionId === "string" ? { optionId: value.request.optionId } : {}),
+        },
         error: value.error,
         failure,
         ...(value.outputDeleted === undefined ? {} : { outputDeleted: value.outputDeleted }),
@@ -70,6 +91,7 @@ interface MonitorOptions {
     read(signal: AbortSignal): Promise<GenerationJob>;
     changed(job: GenerationJob): void | Promise<void>;
     failed(error: unknown, retry: () => Promise<void>): void;
+    removed?(): void;
     pollMs?: number;
 }
 /** One track-owned poller per job. Superseded requests cannot publish or reschedule. */
@@ -100,7 +122,10 @@ export class GenerationMonitor {
                     void this.poll();
                 }, this.options.pollMs ?? 1000);
         } catch (error) {
-            if (current()) this.options.failed(error, this.poll);
+            if (current() && error instanceof BridgeRequestError && error.status === 404 && this.options.removed) {
+                this.options.removed();
+                this.dispose();
+            } else if (current()) this.options.failed(error, this.poll);
         }
     };
     dispose(): void {

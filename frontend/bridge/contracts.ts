@@ -68,6 +68,8 @@ export interface TrackScope {
     reusableVersionRows?: Map<string, HTMLElement>;
 }
 export interface ServiceCapability {
+    optionId?: string;
+    name?: string;
     service: string;
     translation: boolean;
     pronunciation: boolean;

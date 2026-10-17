@@ -39,6 +39,7 @@ interface Dependencies {
     closeSearch: (restore?: boolean) => void;
     openVersions: (better?: RichLyrics | null | undefined, mixKind?: AuxiliaryKind | undefined) => Promise<void>;
     importLyrics: (existing: boolean) => Promise<void>;
+    transcribeAudio: () => void;
     capabilities: () => Promise<void>;
     generate: (kind: AuxiliaryKind, service: string, parent: HTMLElement, forceNew?: boolean) => Promise<void>;
 }
@@ -61,6 +62,7 @@ export function createVersionPanel(dependencies: Dependencies) {
         closeSearch,
         openVersions,
         importLyrics,
+        transcribeAudio,
         capabilities,
         generate,
         mark,
@@ -373,7 +375,7 @@ export function createVersionPanel(dependencies: Dependencies) {
         const area = e("div", "lb-language-versions");
         area.dataset.versionKind = "original";
         parent.append(area);
-        if (!versions.length) area.append(e("p", "lb-help", "No saved originals yet."));
+        if (!versions.length) area.append(e("p", "lb-help", "No saved originals."));
         trackScope().versionBrowsing ??= {};
         const browsing = requireValue(trackScope().versionBrowsing);
         if (browsing.original === undefined || (browsing.original !== null && !versions.some((v) => v.hash === browsing.original)))
@@ -585,11 +587,14 @@ export function createVersionPanel(dependencies: Dependencies) {
         );
         if (!currentOriginal)
             original.append(
-                e("p", "lb-help", documentState().state === "instrumental" ? "This version is instrumental." : "Lyrics are not ready yet."),
+                e("p", "lb-help", documentState().state === "instrumental" ? "This version is instrumental." : "No original lyrics selected."),
             );
         originalVersions(original);
         const originalActions = e("div", "lb-section-actions");
-        originalActions.append(button("Search versions", () => openVersions(), "", { icon: "search" }));
+        originalActions.append(
+            button("Search versions", () => openVersions(), "", { icon: "search" }),
+            button("Transcribe audio", transcribeAudio, "", { icon: "speech" }),
+        );
         if (documentState().canSelect)
             originalActions.append(
                 button("Import lyrics", () => importLyrics(false), "", { icon: "import" }),
@@ -720,10 +725,9 @@ export function createVersionPanel(dependencies: Dependencies) {
                                   [...languages].some((language) => service.languages?.some((supported) => supported.split("-")[0] === language)))
                             : service.translation !== false,
                     );
-                    const choices: [string, string][] = [
-                        ...(kind === "pronunciation" && japanese ? [["Kawazu", "Local (Kawazu)"] as [string, string]] : []),
-                        ...(documentState().canGenerate ? available.map((service) => [service.service, service.service] as [string, string]) : []),
-                    ];
+                    const choices: [string, string][] = available
+                        .filter((s) => (s.service === "Kawazu" ? kind === "pronunciation" && japanese : documentState().canGenerate))
+                        .map((s) => [s.optionId || s.service, s.name || (s.service === "Kawazu" ? "Local (Kawazu)" : s.service)]);
                     if (!choices.length) {
                         prepareBody.append(e("p", "lb-help", "External generation is unavailable for your account."));
                         return;
@@ -756,45 +760,67 @@ export function createVersionPanel(dependencies: Dependencies) {
                     );
                     thinking.dataset.generationKey = "reasoningEffort";
                     const showAdvanced = (value: string) => {
-                        advanced.hidden = value === "Kawazu";
-                        requireValue(thinking.closest<HTMLElement>(".lb-field")).hidden = value !== "AI";
+                        const provider = available.find((s) => (s.optionId || s.service) === value)?.service || value;
+                        advanced.hidden = !value || provider === "Kawazu";
+                        requireValue(thinking.closest<HTMLElement>(".lb-field")).hidden = provider !== "AI";
                         for (const input of advanced.querySelectorAll<HTMLElement>('[data-generation-key^="context"]'))
-                            requireValue(input.closest<HTMLElement>(".lb-field")).hidden = value === "AI" || kind !== "translation";
+                            requireValue(input.closest<HTMLElement>(".lb-field")).hidden = provider === "AI" || kind !== "translation";
                     };
-                    const method = select(prepareBody, "Generation method", requireValue(choices[0])[0], choices, showAdvanced);
-                    showAdvanced(requireValue(choices[0])[0]);
+                    const method = select(prepareBody, "Generation method", "", [["", "Choose a service…"], ...choices], (value) => {
+                        showAdvanced(value);
+                        start.disabled = !value;
+                    });
+                    showAdvanced("");
                     prepareBody.append(advanced);
                     const generationActions = e("div", "lb-section-actions");
-                    generationActions.append(
-                        button(
-                            "Start generation",
-                            async () => {
-                                if (method.value !== "Kawazu") return generate(kind, method.value, prepare, true);
+                    const start = button(
+                        "Start generation",
+                        async () => {
+                            if (!method.value) return;
+                            const selected = available.find((s) => (s.optionId || s.service) === method.value);
+                            if ((selected?.service || method.value) !== "Kawazu") {
+                                const chosen = method.value;
+                                start.disabled = true;
+                                method.disabled = true;
                                 try {
-                                    const target = context.scope;
-                                    await api("items/" + requireValue(target).itemId + "/pronunciation", "POST", {
-                                        hash: requireValue(documentState().lyrics).hash,
-                                        includeSupplied: true,
-                                        retry: true,
-                                    });
-                                    if (context.scope !== target) return;
-                                    await refreshSong();
-                                    status(
-                                        documentState().pronunciation?.state === "complete"
-                                            ? "Local pronunciation version ready"
-                                            : "Generating local pronunciation…",
-                                        false,
-                                        documentState().pronunciation?.state === "complete" ? 4000 : 0,
-                                        "local-pronunciation",
-                                    );
-                                } catch (error) {
-                                    showError(error, prepare);
+                                    await generate(kind, chosen, prepare, true);
+                                } finally {
+                                    method.value = "";
+                                    method.disabled = false;
+                                    showAdvanced("");
                                 }
-                            },
-                            "lb-primary",
-                            { icon: "generate" },
-                        ),
+                                return;
+                            }
+                            method.value = "";
+                            start.disabled = true;
+                            showAdvanced("");
+                            try {
+                                const target = context.scope;
+                                await api("items/" + requireValue(target).itemId + "/pronunciation", "POST", {
+                                    hash: requireValue(documentState().lyrics).hash,
+                                    includeSupplied: true,
+                                    retry: true,
+                                    ...(selected?.optionId ? { optionId: selected.optionId } : {}),
+                                });
+                                if (context.scope !== target) return;
+                                await refreshSong();
+                                status(
+                                    documentState().pronunciation?.state === "complete"
+                                        ? "Local pronunciation version ready"
+                                        : "Generating local pronunciation…",
+                                    false,
+                                    documentState().pronunciation?.state === "complete" ? 4000 : 0,
+                                    "local-pronunciation",
+                                );
+                            } catch (error) {
+                                showError(error, prepare);
+                            }
+                        },
+                        "lb-primary",
+                        { icon: "generate" },
                     );
+                    start.disabled = true;
+                    generationActions.append(start);
                     generationActions.append(
                         button("Cancel", () => {
                             setGenerationPanelOpen(prepare, false);

@@ -66,6 +66,8 @@ test("@workflow generation approval, settings change and explicit retry remain v
     await versions(page);
     const panel = page.locator('.lb-generation[data-kind="translation"]');
     await page.locator('[data-song-kind="translation"]').getByRole("button", { name: "Generate translation", exact: true }).click();
+    await expect(panel.getByRole("button", { name: "Start generation", exact: true })).toBeDisabled();
+    await panel.getByLabel("Generation method", { exact: true }).selectOption("Google");
     await panel.getByRole("button", { name: "Start generation", exact: true }).click();
     await expect(page.locator(".lb-job-progress")).toContainText("pending");
     await page.locator(".lb-popup").getByRole("button", { name: "Close", exact: true }).click();
@@ -351,6 +353,27 @@ test("@workflow Versions owns original actions and Search keeps only top-level a
     await expect(page.locator(".lb-search-form > .lb-advanced > summary")).toHaveText("Advanced: provider track ID");
 });
 
+test("@workflow removed lyrics retain their state without a persistent playback notification", async ({ page }) => {
+    await demo(page, {
+        transformHtml: intercept(`
+  if(path.endsWith('/reject-matches')){window.lyricsRemoved=true;return new Response(null,{status:204});}
+  if(path.endsWith('/lyrics')&&window.lyricsRemoved)return new Response(JSON.stringify({...payload(),state:'rejected',complete:true,lyrics:null,variants:[]}));
+ `),
+    });
+    await versions(page);
+    await page.locator('[data-song-kind="original"]').getByRole("button", { name: "Remove lyrics", exact: true }).click();
+    await page.locator(".lb-confirmation").getByRole("button", { name: "Remove lyrics", exact: true }).click();
+    const confirmation = page.locator('.lb-tools [data-operation="action:remove-lyrics"]');
+    await expect(confirmation).toContainText("Lyrics removed");
+    await page.getByRole("tab", { name: "Song", exact: true }).click();
+    await expect(page.locator(".lb-song-panel")).toContainText("Lyrics removed · automatic search paused");
+    await expect(page.getByRole("button", { name: "Manage versions", exact: true })).toBeVisible();
+    await expect(confirmation).toBeHidden({ timeout: 6000 });
+    await page.evaluate(() => window.LyricBridge.refreshSong(true));
+    await expect(page.locator(".lb-notification-card:visible")).toHaveCount(0);
+    await expect(page.locator(".lyricsContainer .lyricsLine")).toHaveCount(0);
+});
+
 test("@workflow ordinary accounts cannot change classification", async ({ page }) => {
     await demo(page, {
         transformHtml: intercept(`
@@ -539,4 +562,22 @@ test("@layout icon and text controls share vertical centers", async ({ page }) =
     await page.locator(".lb-popup-header").getByRole("button", { name: "Close", exact: true }).click();
     await page.locator(".ak-lyrics-timing-chip").click();
     await check();
+});
+
+test("@workflow local pronunciation remains selectable when external requests are disabled", async ({ page }) => {
+    await demo(page, {
+        transformHtml: intercept(`
+  if(path.endsWith('/lyrics')) {const data=payload();data.canGenerate=false;return new Response(JSON.stringify(data));}
+  if(path.endsWith('/services')) return new Response(JSON.stringify([{service:'Kawazu',optionId:'local-option',name:'Japanese romaji',translation:false,pronunciation:true,languages:['ja']} ]));
+  if(path.endsWith('/pronunciation')) {window.localChoice=await request.json();return new Response(null,{status:204});}
+ `),
+    });
+    await versions(page);
+    const group = page.locator('[data-song-kind="pronunciation"]');
+    await group.getByRole("button", { name: "Generate pronunciation", exact: true }).click();
+    const setup = page.locator('.lb-generation[data-kind="pronunciation"]');
+    await expect(setup.getByRole("button", { name: "Start generation", exact: true })).toBeDisabled();
+    await setup.getByLabel("Generation method", { exact: true }).selectOption("local-option");
+    await setup.getByRole("button", { name: "Start generation", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.localChoice?.optionId)).toBe("local-option");
 });

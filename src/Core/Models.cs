@@ -58,6 +58,11 @@ public sealed record SongLanguagePreferences(string? SourceLanguage = null, stri
 }
 public sealed class GenerationRequest
 {
+    public string? OptionId { get; set; }
+    public string? OptionName { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool ServiceSpecified { get; private set; }
+    private string service = "Google";
     [System.Text.Json.Serialization.JsonIgnore]
     public string? LogCorrelationId { get; set; }
     public Dictionary<string, string> SkippedRows { get; set; } = new();
@@ -68,13 +73,21 @@ public sealed class GenerationRequest
     public int? ContextAfter { get; set; }
     public string Kind { get; set; } = "translation";
     public string Language { get; set; } = "zh-Hans";
-    public string Service { get; set; } = "Google";
+    public string Service { get => service; set { service = value; ServiceSpecified = true; } }
     public string SourceLanguage { get; set; } = "auto";
 }
 public sealed record GenerationProfile(string Service, string EndpointIdentity, string Model, string Kind, string Language, string SourceLanguage, string ReasoningEffort, int ContextBefore, int ContextAfter, int PromptRevision);
 
 public sealed class Job
 {
+    public string TaskKind { get; set; } = "language";
+    public string Title { get; set; } = "";
+    public string Artist { get; set; } = "";
+    public AudioRequest? Audio { get; set; }
+    public BoundaryReviewRequest? Review { get; set; }
+    public ReviewPlan? ReviewPlan { get; set; }
+    public string? ResultId { get; set; }
+    public string Stage { get; set; } = "";
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public Guid UserId { get; set; }
     public Guid ItemId { get; set; }
@@ -90,10 +103,11 @@ public sealed class Job
     public string? Error { get; set; }
     public SafeError? Failure { get; set; }
     public int Progress { get; set; }
+    public DateTimeOffset? TerminalAt { get; set; }
     [System.Text.Json.Serialization.JsonConverter(typeof(UtcTimestampConverter))]
     public DateTime Created { get; set; } = DateTime.UtcNow;
 }
-public sealed record Variant(string Key, string Hash, string Kind, string Language, string Service, string Model, Dictionary<string, string> Text, int ContextBefore = 0, int ContextAfter = 0, string ReasoningEffort = "", int PromptVersion = 0, string? CacheKey = null, DateTime? CreatedAt = null, SuppliedOrigin? Origin = null, Dictionary<string, string>? SkippedRows = null, GenerationProfile? Profile = null, string OriginType = "generated");
+public sealed record Variant(string Key, string Hash, string Kind, string Language, string Service, string Model, Dictionary<string, string> Text, int ContextBefore = 0, int ContextAfter = 0, string ReasoningEffort = "", int PromptVersion = 0, string? CacheKey = null, DateTime? CreatedAt = null, SuppliedOrigin? Origin = null, Dictionary<string, string>? SkippedRows = null, GenerationProfile? Profile = null, string OriginType = "generated", string? OptionName = null);
 public static class Codec
 {
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { PropertyNameCaseInsensitive = true };
@@ -110,3 +124,8 @@ public sealed record TimingCorrection(string Hash, string Fingerprint, double Se
 
 public sealed record SuppliedOrigin(string Source, string ProviderId, string? DonorHash = null);
 public sealed record MixedOrigin(string DonorHash, Dictionary<string, string>? Mapping = null);
+
+public static class JobLifecycle
+{
+    public static bool Terminal(string state) => state is "complete" or "failed" or "cancelled" or "rejected" or "settings_changed";
+}

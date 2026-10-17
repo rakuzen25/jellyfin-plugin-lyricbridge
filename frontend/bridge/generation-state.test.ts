@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { BridgeRequestError } from "./api.ts";
 import { GenerationMonitor, parseGenerationJob } from "./generation-state.ts";
 import type { GenerationJob } from "./generation-state.ts";
 function deferred<T>() {
@@ -89,4 +90,31 @@ test("deleted output metadata survives job parsing and malformed markers fail", 
     assert.equal(parseGenerationJob(input).outputDeletedAt, input.outputDeletedAt);
     assert.throws(() => parseGenerationJob({ ...input, outputDeleted: "true" }));
     assert.throws(() => parseGenerationJob({ ...input, outputDeletedAt: 42 }));
+});
+
+test("removed history disposes its monitor and removes feedback without a status-check failure", async () => {
+    const track = new AbortController();
+    let removed = 0,
+        failed = 0,
+        reads = 0;
+    const monitor = new GenerationMonitor({
+        signal: track.signal,
+        read: async () => {
+            reads++;
+            throw new BridgeRequestError({ code: "request_unavailable", message: "Removed" }, null, 404);
+        },
+        changed: () => assert.fail("Removed requests cannot publish"),
+        removed: () => {
+            removed++;
+        },
+        failed: () => {
+            failed++;
+        },
+    });
+    await monitor.poll();
+    await monitor.poll();
+    assert.equal(removed, 1);
+    assert.equal(failed, 0);
+    assert.equal(reads, 1);
+    track.abort();
 });

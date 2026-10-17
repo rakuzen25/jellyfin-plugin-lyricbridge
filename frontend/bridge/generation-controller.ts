@@ -60,8 +60,11 @@ export function createGenerationController(dependencies: Dependencies) {
         text.setAttribute("role", "status");
         parent.append(text);
         try {
-            if (kind === "pronunciation" && !services().find((s) => s.service === service)?.pronunciation)
-                throw new Error("This service cannot generate pronunciation.");
+            const selected = services().find(
+                (s) => (s.optionId || s.service) === service && (kind === "translation" ? s.translation : s.pronunciation),
+            );
+            if (!selected) throw new Error("Choose an available service option.");
+            if (kind === "pronunciation" && !selected.pronunciation) throw new Error("This service cannot generate pronunciation.");
             if (forceNew && (!documentState().auxiliaryChoices?.[kind] || requireValue(documentState().auxiliaryChoices)[kind] === "auto")) {
                 const previous = requireValue(documentState().lyrics)
                     .lines.map((line) => auxiliary(line, kind, documentState().preferences))
@@ -84,13 +87,14 @@ export function createGenerationController(dependencies: Dependencies) {
                 if (!requireValue(input.closest<HTMLElement>(".lb-field")).hidden && input.value !== "" && input.value !== "inherit")
                     options[requireValue(input.dataset.generationKey)] = input.type === "number" ? Number(input.value) : input.value;
             const thinking = parent.querySelector<HTMLSelectElement>('[data-generation-key="reasoningEffort"]');
-            if (service === "AI" && thinking?.value === "") options.reasoningEffort = "";
+            if (selected.service === "AI" && thinking?.value === "") options.reasoningEffort = "";
             const job = parseGenerationJob(
                 await api("items/" + target.itemId + "/generate", "POST", {
                     ...options,
                     kind,
                     language: documentState().preferences.translationLanguage,
-                    service,
+                    service: selected.service,
+                    ...(selected.optionId ? { optionId: selected.optionId } : {}),
                     forceNew,
                 }),
             );
@@ -116,7 +120,8 @@ export function createGenerationController(dependencies: Dependencies) {
         const operation = "job:" + job.id;
         let latest = job;
         const name = kind === "pronunciation" ? "Pronunciation" : "Translation";
-        const describe = (next: GenerationJob) => name + " · " + next.request.service + " · " + next.state + " · " + next.progress + "%";
+        const describe = (next: GenerationJob) =>
+            name + " · " + (next.request.optionName || next.request.service) + " · " + next.state + " · " + next.progress + "%";
         const dismiss = () => {
             target.dismissedJobs ??= new Set();
             target.dismissedJobs.add(job.id);
@@ -240,6 +245,12 @@ export function createGenerationController(dependencies: Dependencies) {
                 const detailHost = popup()?.querySelector<HTMLElement>('[data-song-kind="' + kind + '"]');
                 if (detailHost?.getClientRects().length) drawJobDetails(detailHost.querySelector<HTMLElement>(".lb-generation") || detailHost, kind);
                 if (next.state === "complete" && !next.outputDeleted) await refreshSong();
+            },
+            removed: () => {
+                notifications()?.remove(operation);
+                target.jobs?.delete(job.id);
+                target.jobActions?.delete(job.id);
+                parentCancel.remove();
             },
             failed: (error, retryCheck) => {
                 if (scope() === target)

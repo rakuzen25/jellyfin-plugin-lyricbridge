@@ -2,7 +2,7 @@ import type { LyricLine, RichLyrics } from "../shared/lyrics.ts";
 import type { AuxiliaryDocument, AuxiliaryKind, Preferences, Variant } from "./models.ts";
 function variantLabel(v: Variant) {
     return (
-        v.service +
+        (v.optionName || v.service) +
         (v.model ? " · " + v.model : "") +
         (v.reasoningEffort ? " · " + v.reasoningEffort : "") +
         (v.createdAt ? " · " + new Date(v.createdAt).toLocaleString() : " · saved version")

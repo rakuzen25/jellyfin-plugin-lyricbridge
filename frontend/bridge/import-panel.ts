@@ -6,6 +6,7 @@ import { button, e, section, select } from "./controls.ts";
 import type { Preferences } from "./models.ts";
 import { parseDocument } from "./responses.ts";
 import { feedbackHost } from "./feedback.ts";
+import { createDialog } from "./dialog.ts";
 
 interface UploadPreview {
     fileName: string;
@@ -73,15 +74,15 @@ export function createImportPanel(dependencies: Dependencies) {
         d.closeSearch();
         const target = d.scope();
         if (!target) return;
-        const panel = e("section", "lb-popup lb-import-panel");
-        panel.setAttribute("role", "dialog");
-        panel.setAttribute("aria-label", "Import lyrics");
-        const header = e("header", "lb-popup-header");
         const cancel = () => {
             if (!saving) d.closeSearch();
         };
-        const close = button("Cancel", cancel, "", { icon: "close", iconOnly: true });
-        header.append(e("h2", "", "Import lyrics"), close);
+        const { root: panel, closeButton: close } = createDialog({
+            label: "Import lyrics",
+            className: "lb-import-panel",
+            closeLabel: "Cancel",
+            onClose: cancel,
+        });
         const body = e("div", "lb-panel-body");
         const fileGroup = section("Lyric file");
         const fileLabel = e("p", "lb-help", "Choose a lyric file up to 1 MB. Decoded text must also fit within 1 MB.");
@@ -327,7 +328,7 @@ export function createImportPanel(dependencies: Dependencies) {
         const cancelButton = button("Cancel", cancel, "", { icon: "close" });
         actions.append(confirm, playback, choose, cancelButton);
         body.append(fileGroup, progress, feedback, summary, warnings, lyrics);
-        panel.append(header, body, actions);
+        panel.append(body, actions);
         d.mount(panel);
         d.updatePanelBounds();
         updateActions();

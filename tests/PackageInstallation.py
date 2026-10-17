@@ -46,6 +46,55 @@ class QuietFiles(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         pass
 
+    def do_POST(self):
+        if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
+            chunks = []
+            while length := int(self.rfile.readline().split(b";", 1)[0], 16):
+                chunks.append(self.rfile.read(length))
+                assert self.rfile.read(2) == b"\r\n"
+            assert self.rfile.readline() == b"\r\n"
+            payload = b"".join(chunks)
+        else:
+            payload = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        if self.path == "/mock/v1/audio/transcriptions":
+            assert (
+                self.headers.get("Authorization") == "Bearer fixture-transcription-key"
+            )
+            assert (
+                b"verbose_json" in payload and b"timestamp_granularities[]" in payload
+            )
+            response = {
+                "language": "en",
+                "text": "Hello world!",
+                "words": [
+                    {"word": "Hello", "start": 0.1, "end": 0.8},
+                    {"word": "world!", "start": 0.7, "end": 1.6},
+                ],
+            }
+        elif self.path == "/mock/v1/chat/completions":
+            request = json.loads(payload)
+            source = json.loads(request["messages"][1]["content"])
+            response = {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {"endTokenIds": source["eligibleEndTokenIds"]}
+                            )
+                        }
+                    }
+                ]
+            }
+        else:
+            self.send_error(404)
+            return
+        encoded = json.dumps(response).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
 
 with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
     root = Path(directory)
@@ -93,9 +142,15 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         headers = {"Authorization": authorization, "Content-Type": "application/json"}
         if token and not anonymous:
             headers["Authorization"] += f', Token="{token}"'
+        if isinstance(body, bytes):
+            headers["Content-Type"] = "application/octet-stream"
         request = urllib.request.Request(
             base + path,
-            data=None if body is None else json.dumps(body).encode(),
+            data=None
+            if body is None
+            else body
+            if isinstance(body, bytes)
+            else json.dumps(body).encode(),
             headers=headers,
             method=method,
         )
@@ -453,6 +508,108 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         assert any(
             value.strip().lower() == "asa" for value in version["text"].values()
         ), "Unexpected local pronunciation"
+        # The owned HTTP server also acts as a deterministic OpenAI-compatible audio/text endpoint.
+        # Real Jellyfin FFmpeg prepares both library audio and the synthetic WAV upload.
+        original_hash = rich["lyrics"]["hash"]
+        configuration.pop("ServiceSetup", None)
+        transcription = configuration["Transcription"]
+        transcription.update(
+            {
+                "Enabled": True,
+                "Endpoint": f"http://{gateway}:{catalog.server_port}/mock/v1",
+                "Model": "fixture",
+                "ApiKey": "fixture-transcription-key",
+                "ReviewUsesAiService": False,
+            }
+        )
+        transcription["Review"].update(
+            {"Endpoint": transcription["Endpoint"], "Model": "fixture"}
+        )
+        call(f"/Plugins/{PLUGIN}/Configuration", "POST", configuration)
+
+        def completed(job):
+            for _ in range(200):
+                current = call_json("/LyricBridge/jobs/" + job["id"])
+                if current["state"] == "complete":
+                    return current
+                assert current["state"] not in (
+                    "failed",
+                    "cancelled",
+                    "settings_changed",
+                ), current
+                time.sleep(0.1)
+            raise AssertionError("Mocked transcription/review job did not complete")
+
+        service_options = call_json("/LyricBridge/service-options")
+        assert "fixture-transcription-key" not in json.dumps(service_options)
+        audio_option = next(
+            o["id"]
+            for o in service_options
+            if o["capability"] == "transcription" and o["status"] == "Ready"
+        )
+        review_option = next(
+            o["id"]
+            for o in service_options
+            if o["capability"] == "boundary-review" and o["status"] == "Ready"
+        )
+        source_job = completed(
+            call_json(
+                public_api + "/transcribe",
+                "POST",
+                {"source": "track", "optionId": audio_option},
+            )
+        )
+        assert source_job["request"]["optionId"] == audio_option
+        assert source_job["request"]["optionName"]
+
+        assert "fixture-transcription-key" not in json.dumps(source_job)
+        transcript_api = public_api + "/transcriptions/" + source_job["resultId"]
+        transcript = call_json(transcript_api)
+        assert transcript["transcript"]["text"] == "Hello world!"
+        assert len(transcript["transcript"]["rawResponses"]) == 1
+        choice = {
+            "transcriptId": source_job["resultId"],
+            "endTokenIds": ["t0", "t1"],
+            "settings": transcript["versions"][0]["settings"],
+            "expectedSelection": transcript["selection"],
+        }
+        preview = call_json(transcript_api + "/preview", "POST", choice)
+        assert len(preview["lines"]) == 2
+        assert call_json(public_api + "/lyrics")["lyrics"]["hash"] == original_hash
+        completed(
+            call_json(
+                transcript_api + "/review",
+                "POST",
+                {**choice, "optionId": review_option},
+            )
+        )
+        call(transcript_api + "/use", "POST", choice)
+        native = call_json("/Audio/" + public_id + "/Lyrics")
+        assert "".join(line["Text"] for line in native["Lyrics"]) == "Hello world!"
+        assert native["Lyrics"][0]["Cues"][0]["End"] == 8_000_000
+        assert native["Lyrics"][1]["Cues"][0]["Start"] == 7_000_000
+        upload = call_json(
+            public_api + "/transcription-upload?optionId=" + audio_option,
+            "POST",
+            (media / "public/track.wav").read_bytes(),
+        )
+        uploaded = completed(
+            call_json(
+                public_api + "/transcribe",
+                "POST",
+                {
+                    "source": "upload",
+                    "uploadId": upload["id"],
+                    "optionId": audio_option,
+                },
+            )
+        )
+        assert uploaded["resultId"] != source_job["resultId"]
+        call(public_api + "/originals/" + original_hash + "/select", "POST", {})
+        print(
+            "PASS: configured remote transcription, real FFmpeg, binary upload, AI boundary review, atomic use and native explicit karaoke ends.",
+            flush=True,
+        )
         listener = call_json("/Users/New", "POST", {"Name": "fixture-listener"})
         public_folder = next(
             folder["ItemId"]
@@ -489,6 +646,7 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         for path in (
             "/LyricBridge/items/" + restricted_id + "/lyrics",
             "/Audio/" + restricted_id + "/Lyrics",
+            "/LyricBridge/items/" + restricted_id + "/transcriptions",
         ):
             try:
                 call(path)
@@ -496,6 +654,16 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
             except urllib.error.HTTPError as error:
                 assert error.code in (403, 404)
         listener_token = token
+        try:
+            call(transcript_api + "/use", "POST", choice)
+            raise AssertionError("Ordinary user changed shared transcription selection")
+        except urllib.error.HTTPError as error:
+            assert error.code == 403
+        try:
+            call(public_api + "/transcribe", "POST", {"source": "track"})
+            raise AssertionError("Disabled user transcription request accepted")
+        except urllib.error.HTTPError as error:
+            assert error.code == 403
         token = admin_token
         call(public_api + "/reject-matches", "POST", {})
         token = listener_token

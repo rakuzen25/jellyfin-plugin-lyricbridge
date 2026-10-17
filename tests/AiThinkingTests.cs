@@ -50,7 +50,7 @@ public sealed class AiThinkingTests : TestHost
             var store = Own(new Store(Path.Combine(root, "thinking")));
             var generation = Own(new Generation(Policy, store, services));
             var job = generation.Request(Guid.NewGuid(), Guid.NewGuid(), doc, request, true);
-            Assert.True(job.Request.TimeoutSeconds == 15, "timeout snapshotted");
+            Assert.True(job.Request.TimeoutSeconds == 120, "timeout snapshotted");
             Assert.True(job.Request.ReasoningEffort == "high", "admin level snapshotted on request");
             config.ReasoningEffort = "low";
             foreach (var level in LanguageServices.ReasoningLevels.Where(s => s != ""))

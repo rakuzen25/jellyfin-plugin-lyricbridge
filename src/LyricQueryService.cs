@@ -50,7 +50,7 @@ public sealed class LyricQueryService(ILyricManager native, ILyricQueryRepositor
             var localKey = LocalPronunciation.Key(lyrics, preferences, explicitLocal);
             var localKeys = new[] { LocalPronunciation.Key(lyrics, preferences), fullLocalKey };
             variants = store.Versions(lyrics.Hash).Where(v => (v.Service != "Kawazu" || localKeys.Contains(v.Key) || v.Key == selectedPronunciation)).Select(v => v.Kind == "translation" && v.Language.StartsWith("zh") ? v with { Text = v.Text.ToDictionary(k => k.Key, k => Display.Chinese(k.Value, Display.TranslationScript(preferences))) } : v).ToList();
-            variants = variants.OrderByDescending(v => v.Service == "Kawazu" && v.Key == localKey).ThenByDescending(v => serviceNames().Contains(v.Service) && v.CacheKey == languages.Key(lyrics, new GenerationRequest { Kind = v.Kind, Language = v.Language, Service = v.Service, SourceLanguage = preferences.SourceLanguage })).ThenByDescending(v => v.CreatedAt ?? DateTime.MinValue).ToList();
+            variants = variants.OrderByDescending(v => v.Service == "Kawazu" && v.Key == localKey).ThenByDescending(v => serviceNames().Contains(v.Service) && languages.MatchesCurrent(lyrics, v, preferences.SourceLanguage)).ThenByDescending(v => v.CreatedAt ?? DateTime.MinValue).ToList();
             outcome.Lyrics = Display.Apply(lyrics, preferences);
         }
         var track = new TrackSummary(item.Name, string.Join(", ", item.Artists), item.Album, item.RunTimeTicks / 10000);

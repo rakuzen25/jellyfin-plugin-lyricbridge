@@ -16,7 +16,7 @@ Each project owns a distinct boundary:
 | `LyricBridge`                | Registration, configuration, authenticated controllers, library access, tasks, native lyrics  | Host singleton access stays here; controllers delegate to explicit services                                   |
 | Vendored Lyricify helper     | Provider/format adapters and field comparisons                                                | Separately maintained dependency; preserve [upstream provenance](../vendor/UPSTREAM.md)                       |
 
-Repository contracts live in `src/Core/Repositories.cs`. Services accept narrow
+Repository contracts live in `src/Core/Repositories.cs` and the transcription domain contract. Services accept narrow
 interfaces such as `IGenerationRepository` and `IPreferenceRepository`; controllers
 do not access generic storage keys. Multi-record completion and selection are transactional.
 Shared .NET policy lives in `Directory.Build.props`; vendor source retains its own
@@ -26,6 +26,35 @@ Jellyfin constructs the plugin after service registration, so configuration acce
 captures the host owner lazily. Services read that owner's current configuration,
 including replacements, and detach events from the same owner on disposal.
 Workers stop before storage clears only its own SQLite connection pool.
+
+Generation coordinates admission, approval, shared quotas, cancellation, configuration
+identity and restart recovery for language, transcription and boundary-review handlers.
+Typed audio/review requests and their outputs remain separate from auxiliary variants.
+Core plans context-budgeted review requests with immutable ownership and natural seams.
+Infrastructure executes sequential batches and checkpoints validated responses under a
+plan/configuration identity; proposals publish only after full coverage validation.
+Track-scoped planning previews and admission share the same deterministic planner.
+Saved entries hold origin, preferences, and provenance separately from deduplicated immutable
+boundary payloads. Explicit Save and atomic Save-and-Use retain drafts; local breaking and
+transcription completion do not create entries. Each completed AI request creates its own
+entry, independent of notifications and expiring job history. New review jobs capture their
+input snapshot; legacy jobs continue resolving stored versions. Entry deletion revalidates
+ownership, original dependencies, and legacy active-job references transactionally, fences
+late saves, and collects boundary payloads only after their final dependency is removed.
+Schema 5 initializes legacy entries once without recreating deleted results on restart.
+The host resolves owned audio IDs/library access and supplies configured FFmpeg through
+`IAudioPreparation`; infrastructure owns HTTP and linguistic analysis. Core composes
+source-ordered timed tokens directly into rich lyrics, without the file importer's
+chronological sorting. Timestamp fidelity is independent of grammatical boundary advice.
+
+Service setup has a configuration version independent of managed storage schema 5.
+Core models shared connections, capability options and readiness. Host configuration
+normalizes legacy settings deterministically; infrastructure resolves stable option
+IDs into existing adapters and immutable execution snapshots. Names and option IDs
+are metadata, separate from output-affecting profile/cache identity. Legacy requests
+resolve only when unambiguous; stored legacy jobs retain their migrated option identity.
+Public catalogs expose safe option metadata, never endpoint credentials. Automatic
+local Japanese pronunciation remains independent of explicit remote option selection.
 
 ## Frontend ownership
 
@@ -54,8 +83,19 @@ their baseline and newest deferred response until cancel/apply. Image loads and
 cooperative yields settle on disposal; generation/view checks reject stale decoration.
 Accepted preference writes finish using captured account/song identities even after
 playback cancellation. Shared resource ownership lives in `frontend/shared/lifecycle.ts`.
+Transcription review owns its edit history, request revisions and previews; admitted-job
+monitors belong to the captured track. Shared feedback and playback notifications carry
+stable job identities. Status-check failures do not imply that remote work failed.
 
 ## Storage and deletion
+
+Finished request history expires after 30 days from its latest terminal transition.
+Admission accounting is stored separately for the rolling quota window, so manual or
+automatic history removal cannot restore quota. Removal revalidates terminal state in
+one transaction, clears retry checkpoints, and preserves independently stored results.
+Late updates require an existing job. Failed review checkpoints expire after seven
+days; active work is exempt. Existing maintenance owns startup/daily cleanup.
+
 
 Schema 5 initializes only empty stores; unsupported schemas fail before writes, without
 migration. [Storage operations](DEPLOYMENT.md#configure-and-back-up-storage) explain
@@ -71,6 +111,12 @@ song/original/content fences in one SQLite write transaction. Previously admitte
 cannot save after a matching fence, even if identical content is re-imported.
 Cancellation follows commit outside the write gate; deleted job history does not pin
 removed content. Shared documents remain while another live reference requires them.
+
+Transcripts, raw provider responses and immutable boundary versions are explicitly
+retained in schema 5 records. Committing a reviewed original checks its selection
+baseline transactionally. Transcript deletion fences admitted work and refuses removal
+while saved originals still depend on it. Audio staging/checkpoints have separate
+cleanup lifetimes; successful output does not retain input audio.
 
 Minute maintenance removes expired misses while live misses retain the full ten-minute
 provider suppression window. Persistent temporary-data cleanup runs daily.
