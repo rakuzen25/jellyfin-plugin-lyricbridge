@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.4](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.1.3...v0.1.4) (2026-10-17)
+
+
+### Bug Fixes
+
+* **deps:** update dependency lucide to v1.57.0 ([#34](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/issues/34)) ([3df1b97](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/3df1b9701abb96dd2e045b16431420ba23e5393c))
+* **deps:** update dependency lucide to v1.58.0 ([#37](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/issues/37)) ([de1a774](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/de1a7744721d1f3c843c7b3db35aec98c2f19d8a))
+
 ## [0.1.3](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.1.2...v0.1.3) (2026-10-14)
 
 

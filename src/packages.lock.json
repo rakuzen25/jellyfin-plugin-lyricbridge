@@ -55,7 +55,7 @@
         "type": "Project",
         "dependencies": {
           "Kawazu": "[1.1.4, )",
-          "LyricBridge.Core": "[0.1.3, )",
+          "LyricBridge.Core": "[0.1.4, )",
           "Lyricify.Lyrics.Helper": "[0.2.0, )"
         }
       },
