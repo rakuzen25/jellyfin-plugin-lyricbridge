@@ -3,11 +3,14 @@
     <LyricBridgeVersion>0.1.3</LyricBridgeVersion> <!-- x-release-please-version -->
     <LyricBridgeGuid>70a9d327-7e98-4201-88a5-724d39366c40</LyricBridgeGuid>
     <LyricBridgeName>LyricBridge</LyricBridgeName>
-    <LyricBridgeOwner>LyricBridge contributors</LyricBridgeOwner>
-    <LyricBridgeOverview>Multilingual karaoke lyrics</LyricBridgeOverview>
-    <LyricBridgeDescription>Multilingual karaoke lyrics with an automatically injected web renderer and
-      writable plugin storage</LyricBridgeDescription>
-    <LyricBridgeCategory>General</LyricBridgeCategory>
+    <LyricBridgeOwner>rakuzen25</LyricBridgeOwner>
+    <LyricBridgeOverview>Word-by-word karaoke lyrics, translations, and pronunciation for Jellyfin
+      Web.</LyricBridgeOverview>
+    <LyricBridgeDescription>Follow your music with synchronized karaoke lyrics in Jellyfin Web.
+      Search multiple lyric providers, import lyrics, and save your preferred versions. Display
+      translations and pronunciation alongside the original lyrics, with optional tools to generate
+      missing language support or transcribe audio.</LyricBridgeDescription>
+    <LyricBridgeCategory>Music</LyricBridgeCategory>
     <JellyfinTargetAbi>12.2.0.0</JellyfinTargetAbi>
     <JellyfinReferenceDir Condition="'$(JellyfinReferenceDir)' == ''">
       $(MSBuildThisFileDirectory).build/jellyfin</JellyfinReferenceDir>
@@ -23,7 +26,8 @@
     <Nullable>enable</Nullable>
     <Version>$(LyricBridgeVersion)</Version>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(MSBuildProjectName)' != 'Lyricify.Lyrics.Helper' and '$(MSBuildProjectName)' != 'StorageTests'">
+  <PropertyGroup
+    Condition="'$(MSBuildProjectName)' != 'Lyricify.Lyrics.Helper' and '$(MSBuildProjectName)' != 'StorageTests'">
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest</AnalysisLevel>
   </PropertyGroup>
