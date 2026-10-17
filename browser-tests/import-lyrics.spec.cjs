@@ -1,3 +1,4 @@
+const { expectPlaybackPreview } = require("./preview-assertions.cjs");
 const { test, expect } = require("playwright/test");
 const { demo } = require("./demo-fixture.cjs");
 async function openUpload(
@@ -35,17 +36,21 @@ test("@layout upload preview shares controls, preserves playback until confirmat
     await page.screenshot({ path: testInfo.outputPath("upload-preview.png") });
     await panel.getByRole("button", { name: "Playback preview", exact: true }).click();
     await expect(page.locator(".ak-enhanced-line").first()).toContainText("Uploaded first");
+    await expectPlaybackPreview(page, "Return to upload preview");
     await page.locator("audio").evaluate((audio) => (audio.currentTime = 12));
     await page
         .getByRole("region", { name: "Lyric version playback preview" })
         .getByRole("button", { name: "Return to upload preview", exact: true })
         .click();
     expect(await page.evaluate(() => window.LyricBridge.current.lyrics.hash)).toBe(baseline);
-    expect(await page.locator("audio").evaluate((audio) => audio.currentTime)).toBeCloseTo(7, 1);
+    expect(await page.locator("audio").evaluate((audio) => audio.currentTime)).toBeCloseTo(12, 1);
     await panel.getByRole("button", { name: "Playback preview", exact: true }).click();
     await page.keyboard.press("Escape");
-    await expect(panel).toHaveCount(0);
+    await expect(panel).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Playback preview", exact: true })).toBeFocused();
     expect(await page.evaluate(() => window.LyricBridge.current.lyrics.hash)).toBe(baseline);
+    await panel.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(panel).toHaveCount(0);
     const reopened = await openUpload(page);
     await expect(reopened.getByRole("button", { name: "Import", exact: true })).toBeEnabled();
     await reopened.getByRole("button", { name: "Import", exact: true }).click();

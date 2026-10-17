@@ -1245,16 +1245,30 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
     display: none !important;
 }
 
-/* Preview controls remain independent of notification priority/counts. */
-.lb-tools > .lb-preview-playback-bar {
+/* The preview is never part of the scrollable notification collection. */
+.lb-preview-slot {
+    flex: 0 0 auto;
+    min-width: 0;
+}
+.lb-preview-slot > .lb-preview-playback-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--lb-space-md);
+    align-items: center;
+    width: 100%;
     padding: 14px 16px;
     box-sizing: border-box;
     border: 1px solid var(--lb-glass-border);
     border-radius: var(--lb-control-radius);
     background: var(--lb-glass-panel);
-    max-height: var(--lb-notification-height);
     min-height: 0;
+}
+.lb-preview-playback-bar > span {
+    max-height: 4.5em;
     overflow: auto;
+}
+.lb-preview-playback-bar > .lb-button {
+    flex: 0 0 auto;
 }
 
 /* Transcription review shares the search workspace and import action footer. */

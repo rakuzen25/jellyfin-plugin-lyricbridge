@@ -1,3 +1,4 @@
+const { expectPlaybackPreview } = require("./preview-assertions.cjs");
 const { test, expect } = require("playwright/test");
 const { demo } = require("./demo-fixture.cjs");
 function fixture(extra = "") {
@@ -191,8 +192,16 @@ test("@layout phrase review shares controls, preserves karaoke, and supports man
     await expect(panel.locator(".lb-transcription-phrase")).toHaveCount(2);
     await panel.getByRole("button", { name: "Redo", exact: true }).click();
     await expect(panel.locator(".lb-transcription-phrase")).toHaveCount(3);
+    expect(await panel.locator(".lb-dialog-footer button").allTextContents()).toEqual([
+        "Back to recordings",
+        "Playback preview",
+        "Save line breaks",
+        "Use reviewed lyrics",
+    ]);
+    await expect(panel.locator(".lb-transcription-editor").getByRole("button", { name: "Playback preview", exact: true })).toHaveCount(0);
     await panel.getByRole("button", { name: "Playback preview", exact: true }).click();
     await expect(page.locator(".ak-enhanced-line").first()).toContainText("Hello");
+    await expectPlaybackPreview(page, "Return to line breaks");
     await expect.poll(() => page.evaluate(() => window.previewBoundaries?.endTokenIds)).toEqual(["t0", "t2", "t3"]);
     await page.getByRole("button", { name: "Return to line breaks", exact: true }).click();
     expect(await page.evaluate(() => window.LyricBridge.current.lyrics.hash)).toBe(baseline);

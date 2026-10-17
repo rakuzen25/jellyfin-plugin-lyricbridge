@@ -20,7 +20,7 @@ import { createLyricDecoration } from "./lyric-view.ts";
 import type { AuxiliaryKind, Preferences } from "./models.ts";
 import type { PreferenceSave } from "./preferences.ts";
 import { PreferenceQueue, preferenceIdentity } from "./preferences.ts";
-import { PreviewSession } from "./preview-session.ts";
+import { PlaybackPreview, type PlaybackPreviewRequest } from "./playback-preview.ts";
 import { displayFailure, parseDocument, parseServices, parseSources, responseOrder as readResponseOrder } from "./responses.ts";
 import type { SearchQuery, SearchResults } from "./search-models.ts";
 import { createSearchPanel } from "./search-panel.ts";
@@ -58,7 +58,6 @@ export function installBridge() {
         settingsButton: HTMLButtonElement | null = null,
         popup: HTMLElement | null = null,
         searchPopup: HTMLElement | null = null,
-        languagePlayback: { scope: TrackScope | null; input: HTMLElement } | null = null,
         refreshFrame = 0,
         services: ServiceCapability[] = [],
         sources: SourceCapability[] = [];
@@ -163,7 +162,6 @@ export function installBridge() {
     const api = createApi({ request: () => lastRequest, scope: () => scope, fetch: baseFetch, responseOrder, received: () => metrics.requests++ });
     function cancel() {
         window.JellyfinLyricMotion?.setSharedTimingOffset?.(0);
-        languagePlayback = null;
         document.querySelectorAll<HTMLElement>(".lb-instrumental-view").forEach((n) => n.remove());
         notifications?.dispose();
         notifications = null;
@@ -1077,12 +1075,6 @@ export function installBridge() {
             set popup(value) {
                 popup = value;
             },
-            get languagePlayback() {
-                return languagePlayback;
-            },
-            set languagePlayback(value) {
-                languagePlayback = value;
-            },
             get scope() {
                 return scope;
             },
@@ -1109,6 +1101,9 @@ export function installBridge() {
         richLines: (...args) => richLines(...args),
         auxiliary: (...args) => auxiliary(...args),
         startPlaybackPreview: (...args) => startPlaybackPreview(...args),
+        stopPlaybackPreview: (panel) => {
+            if (previewController.panel === panel) endPlaybackPreview();
+        },
         notice: (...args) => notice(...args),
         api: (...args) => api(...args),
         refreshSong: (...args) => refreshSong(...args),
@@ -1170,22 +1165,24 @@ export function installBridge() {
     });
 
     let searchUsageRefresh: (() => void) | null = null;
-    const playbackPreview = new PreviewSession<TrackScope, BridgeDocument>();
-    let searchSession: SearchSession<SearchQuery, SearchResults> | null = null,
-        searchPlaybackBar: HTMLElement | null = null;
-    function startPlaybackPreview(doc: BridgeDocument, label: string, actions: HTMLElement[]) {
-        playbackPreview.begin(requireValue(scope), requireValue(current), media()?.currentTime || 0);
-        if (searchPopup) searchPopup.hidden = true;
-        current = doc;
-        render(documentState().lyrics);
-        searchPlaybackBar?.remove();
-        searchPlaybackBar = e("div", "lb-preview-playback-bar");
-        searchPlaybackBar.setAttribute("role", "region");
-        searchPlaybackBar.setAttribute("aria-label", "Lyric version playback preview");
-        searchPlaybackBar.append(e("span", "", label), ...actions);
-        tools?.append(searchPlaybackBar);
-        notifications?.refreshBounds();
-        searchPlaybackBar.querySelector("button")?.focus();
+    const previewController = new PlaybackPreview({
+        scope: () => scope,
+        current: () => current,
+        time: () => media()?.currentTime || 0,
+        render: (doc) => {
+            current = doc;
+            render(documentState().lyrics);
+            updateStatus();
+        },
+        mount: (bar) => notifications?.setPreview(bar),
+        pending: (doc, order) => {
+            if (scope) accept(doc, scope, true, order);
+        },
+    });
+    const playbackPreview = previewController.session;
+    let searchSession: SearchSession<SearchQuery, SearchResults> | null = null;
+    function startPlaybackPreview(request: PlaybackPreviewRequest) {
+        previewController.start(request);
     }
     function closeSearch(restore = true, force = false, returnToSettings = true) {
         if (!force && (searchPopup?.getAttribute("aria-busy") === "true" || !importPanel.canClose() || !transcriptionPanel.canClose())) return;
@@ -1223,19 +1220,7 @@ export function installBridge() {
             });
     }
     function endPlaybackPreview(restore = true) {
-        if (searchPopup) searchPopup.hidden = false;
-        searchPlaybackBar?.remove();
-        searchPlaybackBar = null;
-        notifications?.refreshBounds();
-        const ending = playbackPreview.finish(scope, restore);
-        if (ending.baseline && scope) {
-            current = ending.baseline.doc;
-            render(documentState().lyrics);
-            if (media()) requireValue(media()).currentTime = ending.baseline.time;
-            updateStatus();
-        }
-        if (ending.pending && scope) accept(ending.pending.data, scope, true, ending.pending.order);
-        if (scope && current) updateStatus();
+        previewController.end(restore);
     }
     const exportPanel = createExportPanel({
         scope: () => scope,
@@ -1455,12 +1440,6 @@ export function installBridge() {
             set searchUsageRefresh(value) {
                 searchUsageRefresh = value;
             },
-            get searchPlaybackBar() {
-                return searchPlaybackBar;
-            },
-            set searchPlaybackBar(value) {
-                searchPlaybackBar = value;
-            },
             get lastRequest() {
                 return lastRequest;
             },
@@ -1561,6 +1540,10 @@ export function installBridge() {
     lifetime.on(document, "keydown", (event) => {
         if (event.key === "Escape") {
             event.preventDefault();
+            if (previewController.running) {
+                endPlaybackPreview();
+                return;
+            }
             if (searchPopup) requestWorkflowClose();
             else closePopup();
         }

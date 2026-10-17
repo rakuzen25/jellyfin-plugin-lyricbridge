@@ -301,8 +301,12 @@ that still need it. Deleting one original does not remove another version's tran
 ## Select and restore lyric versions
 
 In **Versions**, expand a version to browse its actions; expansion does not change
-playback. **Preview** is temporary; cancellation restores previous lyrics and playback
-position. **Use** saves the applicable choice. Supplied rows remain attached to their
+playback. **Preview with playback** uses a persistent glass bar above playback
+notifications. Its **Return** action (or Escape) restores the previous lyrics without
+seeking, then reopens the source panel with its edits and scroll position intact. The same behavior applies to saved originals, translation/pronunciation,
+imports, and transcription review. Save, Use, and Cancel stay in the source panel;
+transcription's **Playback preview** is in its bottom action bar before Save and Use.
+**Use** saves the applicable choice. Supplied rows remain attached to their
 original and cannot be deleted independently.
 
 **Saved originals** retains selected providers, upgrades, and imports; identical

@@ -1,3 +1,4 @@
+import type { PlaybackPreviewRequest } from "./playback-preview.ts";
 import type { FeedbackOptions, FeedbackSeverity } from "../shared/feedback.ts";
 import { parseRequestIssues, type RequestIssue } from "./api.ts";
 import { isRecord } from "../shared/invariants.ts";
@@ -30,7 +31,7 @@ interface Dependencies {
     beginWorkflow(): boolean;
     closeSearch(restore?: boolean): void;
     endPlaybackPreview(): void;
-    startPlaybackPreview(doc: BridgeDocument, label: string, actions: HTMLElement[]): void;
+    startPlaybackPreview(request: PlaybackPreviewRequest): void;
     api(path: string, method?: string, body?: unknown, signal?: AbortSignal): Promise<unknown>;
     defaults: Preferences;
     status(message: string): void;
@@ -329,10 +330,17 @@ export function createImportPanel(dependencies: Dependencies) {
                 else {
                     playing = true;
                     playback.querySelector(".lb-action-label")!.textContent = "Stop playback preview";
-                    d.startPlaybackPreview(preview.document, "Uploaded lyrics playback preview", [
-                        button("Return to upload preview", stopPlayback, "", { icon: "back" }),
-                        button("Cancel import", cancel, "", { icon: "close" }),
-                    ]);
+                    d.startPlaybackPreview({
+                        document: preview.document,
+                        description: "Uploaded lyrics playback preview",
+                        returnLabel: "Return to upload preview",
+                        panel,
+                        trigger: playback,
+                        onEnd: () => {
+                            playing = false;
+                            playback.querySelector(".lb-action-label")!.textContent = "Playback preview";
+                        },
+                    });
                 }
             },
             "",

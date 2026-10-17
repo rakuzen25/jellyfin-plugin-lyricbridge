@@ -227,3 +227,130 @@ if(path.endsWith('/jobs/monitor-fixture')){if(!window.checkRecovered)return new 
     await page.waitForTimeout(1200);
     await expect(card).toHaveCount(0);
 });
+
+test("preview controls remain above expanded scrolling notifications on a short viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 360 });
+    await fixture(page);
+    await page.evaluate(() => {
+        const bar = document.createElement("div");
+        bar.className = "lb-preview-playback-bar";
+        const label = document.createElement("span");
+        label.textContent = "Previewing a long recording and its translated lyrics";
+        const back = document.createElement("button");
+        back.textContent = "Return to results";
+        back.className = "lb-button";
+        back.onclick = () => (window.returnClicked = true);
+        bar.append(label, back);
+        window.cards.setPreview(bar);
+    });
+    const bar = page.locator(".lb-preview-playback-bar");
+    await expect(bar.getByRole("button", { name: "Return to results" })).toBeVisible();
+    const before = await bar.boundingBox();
+    await page.getByRole("button", { name: "3 more notifications" }).click();
+    await page.evaluate(() => (document.querySelector(".lb-notification-list").scrollTop = 300));
+    await expect.poll(async () => Math.abs((await bar.boundingBox()).y - before.y)).toBeLessThan(1);
+    await bar.getByRole("button", { name: "Return to results" }).click();
+    expect(await page.evaluate(() => window.returnClicked)).toBe(true);
+});
+
+test("shared preview controller restores its source and newest deferred response, and abort never restores another owner", async ({ page }) => {
+    await fixture(page);
+    await page.evaluate(() => {
+        const panel = document.createElement("section");
+        panel.id = "source-panel";
+        panel.style.cssText = "height:100px;overflow:auto";
+        const spacer = document.createElement("div");
+        spacer.style.height = "500px";
+        const trigger = document.createElement("button");
+        trigger.id = "source-trigger";
+        trigger.textContent = "Preview with playback";
+        panel.append(trigger, spacer);
+        document.body.append(panel);
+        panel.scrollTop = 80;
+        window.owner = { controller: new AbortController() };
+        window.previewDoc = { id: "baseline" };
+        window.previewTime = 7;
+        window.renders = [];
+        window.preview = new window.fixture.PlaybackPreview({
+            scope: () => window.owner,
+            current: () => window.previewDoc,
+            time: () => window.previewTime,
+            render: (doc, time) => {
+                window.previewDoc = doc;
+                if (time != null) window.previewTime = time;
+                window.renders.push(doc.id);
+            },
+            mount: (bar) => window.cards.setPreview(bar),
+            pending: (doc) => {
+                window.previewDoc = doc;
+                window.renders.push(doc.id);
+            },
+        });
+        window.beginPreview = () =>
+            window.preview.start({ document: { id: "preview" }, description: "Fixture preview", returnLabel: "Return to source", panel, trigger });
+        window.beginPreview();
+        window.previewTime = 19;
+        window.beginPreview();
+        window.preview.session.defer(window.owner, { data: { id: "fresh" }, renderNow: true, order: 2 });
+        window.preview.session.defer(window.owner, { data: { id: "old" }, renderNow: true, order: 1 });
+    });
+    await page.getByRole("button", { name: "Return to source" }).click();
+    expect(
+        await page.evaluate(() => ({
+            doc: window.previewDoc.id,
+            time: window.previewTime,
+            scroll: document.getElementById("source-panel").scrollTop,
+        })),
+    ).toEqual({ doc: "fresh", time: 19, scroll: 80 });
+    await expect(page.locator("#source-trigger")).toBeFocused();
+    await expect(page.locator("#source-panel")).toBeVisible();
+    await page.evaluate(() => {
+        window.beginPreview();
+        window.previewTime = 23;
+        const previous = window.owner;
+        window.owner = { controller: new AbortController() };
+        window.previewDoc = { id: "other-track" };
+        previous.controller.abort();
+        window.preview.end();
+    });
+    await expect(page.locator(".lb-preview-playback-bar")).toHaveCount(0);
+    expect(await page.evaluate(() => ({ doc: window.previewDoc.id, time: window.previewTime }))).toEqual({ doc: "other-track", time: 23 });
+    await expect(page.locator("#source-panel")).toBeHidden();
+});
+
+test("preview overlay respects the lyric view origin and width below a Jellyfin header", async ({ page }) => {
+    await page.setViewportSize({ width: 800, height: 600 });
+    await fixture(page);
+    await page.evaluate(() => {
+        document.body.style.minHeight = "2000px";
+        const header = document.createElement("header");
+        header.className = "skinHeader";
+        header.style.cssText = "position:fixed;inset:0 0 auto;height:110px;background:#333";
+        header.textContent = "Jellyfin navigation";
+        document.body.append(header);
+        const host = document.getElementById("lyrics");
+        host.className = "lyricPage";
+        host.style.cssText = "position:relative;margin:140px 0 0 60px;width:280px;height:380px";
+        const bar = document.createElement("div");
+        bar.className = "lb-preview-playback-bar";
+        bar.textContent = "Previewing original";
+        const back = document.createElement("button");
+        back.textContent = "Return";
+        bar.append(back);
+        window.cards.setPreview(bar);
+    });
+    const root = page.locator(".lb-tools");
+    await expect
+        .poll(() =>
+            root.evaluate((node) => {
+                const box = node.getBoundingClientRect(),
+                    host = document.getElementById("lyrics").getBoundingClientRect(),
+                    header = document.querySelector(".skinHeader").getBoundingClientRect();
+                return box.top >= host.top && box.top >= header.bottom && box.left >= host.left && box.right <= host.right;
+            }),
+        )
+        .toBe(true);
+    const before = await root.boundingBox();
+    await page.evaluate(() => window.scrollTo(0, 300));
+    await expect.poll(async () => Math.abs((await root.boundingBox()).y - before.y)).toBeLessThan(1);
+});

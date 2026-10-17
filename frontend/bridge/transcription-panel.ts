@@ -1,3 +1,4 @@
+import type { PlaybackPreviewRequest } from "./playback-preview.ts";
 import { parseServiceOptions, type ServiceOptionInfo } from "./service-options.ts";
 import { FeedbackScope, type FeedbackAction } from "../shared/feedback.ts";
 import { isRecord, requireValue } from "../shared/invariants.ts";
@@ -17,7 +18,7 @@ interface Dependencies {
     beginWorkflow(): boolean;
     closeSearch(restore?: boolean): void;
     endPlaybackPreview(): void;
-    startPlaybackPreview(doc: BridgeDocument, label: string, actions: HTMLElement[]): void;
+    startPlaybackPreview(request: PlaybackPreviewRequest): void;
     documentState(): BridgeDocument;
     api(path: string, method?: string, body?: unknown, signal?: AbortSignal | null): Promise<unknown>;
     notifications(): PlaybackNotifications | null;
@@ -479,11 +480,13 @@ export function createTranscriptionPanel(d: Dependencies) {
                 const lyrics = await api(path() + "/preview", "POST", body());
                 if (!live() || revision !== requestRevision || submitted !== JSON.stringify(body())) return;
                 if (!isRecord(lyrics) || !Array.isArray(lyrics.lines)) throw new Error("Invalid playback preview.");
-                d.startPlaybackPreview(
-                    { ...d.documentState(), lyrics: lyrics as unknown as RichLyrics, canGenerate: false, canSelect: false },
-                    "Reviewing transcription line breaks",
-                    [button("Return to line breaks", () => d.endPlaybackPreview(), "", { icon: "back" })],
-                );
+                d.startPlaybackPreview({
+                    document: { ...d.documentState(), lyrics: lyrics as unknown as RichLyrics, canGenerate: false, canSelect: false },
+                    description: "Reviewing transcription line breaks",
+                    returnLabel: "Return to line breaks",
+                    panel,
+                    trigger: footer.querySelector<HTMLElement>("[data-playback-preview]"),
+                });
             } catch (cause) {
                 error(cause);
             }
@@ -925,7 +928,6 @@ export function createTranscriptionPanel(d: Dependencies) {
                     "",
                     { icon: "reset" },
                 ),
-                button("Playback preview", () => void preview(), "", { icon: "preview" }),
             );
             main.append(actions);
             const phrases = e("div", "lb-transcription-phrases");
@@ -1035,6 +1037,9 @@ export function createTranscriptionPanel(d: Dependencies) {
                     { icon: "back" },
                 ),
             );
+            const playback = button("Playback preview", () => void preview(), "", { icon: "preview" });
+            playback.dataset.playbackPreview = "true";
+            footer.append(playback);
             const saveButton = button("Save line breaks", () => void saveDraft(), "", {
                 icon: "check",
                 ...(review.canUse ? {} : { appearance: "primary" as const }),

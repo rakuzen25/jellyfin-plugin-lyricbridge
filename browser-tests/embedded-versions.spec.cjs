@@ -1,3 +1,4 @@
+const { expectPlaybackPreview } = require("./preview-assertions.cjs");
 const { test, expect } = require("playwright/test");
 const { demo } = require("./demo-fixture.cjs");
 function fixture(backgroundOnly = false) {
@@ -83,6 +84,7 @@ test("@layout embedded background rows support preview and selected-language fil
     await expect(card.locator(".lb-preview-block")).toContainText("背景翻译");
     await card.getByRole("button", { name: "Preview with playback", exact: true }).click();
     await expect(page.locator(".lb-popup")).toBeHidden();
+    await expectPlaybackPreview(page, "Return to versions");
     await page.getByRole("button", { name: "Return to versions", exact: true }).click();
     await expect(page.locator(".lb-popup")).toBeVisible();
     await expect.poll(() => page.locator("audio").evaluate((audio) => audio.currentTime)).toBe(7);

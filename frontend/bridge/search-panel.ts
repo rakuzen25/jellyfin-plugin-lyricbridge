@@ -1,3 +1,4 @@
+import type { PlaybackPreviewRequest } from "./playback-preview.ts";
 import { feedbackHost } from "./feedback.ts";
 import type { FeedbackOptions, FeedbackSeverity } from "../shared/feedback.ts";
 import { requireValue } from "../shared/invariants.ts";
@@ -19,7 +20,6 @@ interface Context {
     current: BridgeDocument | null;
     sources: SourceCapability[];
     searchUsageRefresh: (() => void) | null;
-    searchPlaybackBar: HTMLElement | null;
     lastRequest: Request | null;
     searchSession: SearchSession<SearchQuery, SearchResults> | null;
 }
@@ -48,7 +48,7 @@ interface Dependencies {
     ) => { text: string; provenance: string; key: string } | null;
     status: (message: string, error?: boolean, ttl?: number) => void;
     showError: (cause: unknown, parent?: HTMLElement | null | undefined, retryAction?: () => unknown) => void;
-    startPlaybackPreview: (doc: BridgeDocument, label: string, actions: HTMLElement[]) => void;
+    startPlaybackPreview: (request: PlaybackPreviewRequest) => void;
     sourceUsage: (doc: BridgeDocument | null) => Map<string, string[]>;
     languageChoices: [string, string][];
     baseFetch: ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) &
@@ -317,13 +317,13 @@ export function createSearchPanel(dependencies: Dependencies) {
                                 entry.badge.hidden = true;
                                 entry.explanation.hidden = true;
                             }
-                            showError(error, context.searchPlaybackBar || preview, () => {
+                            showError(error, preview, () => {
                                 void search();
                             });
                             void refreshSong().catch((cause: unknown) => {
                                 if (context.scope === target && context.searchPopup === searchPanel) showError(cause, searchPanel);
                             });
-                        } else showError(error, context.searchPlaybackBar || preview);
+                        } else showError(error, preview);
                     } finally {
                         saving = false;
                         if (context.searchPopup === searchPanel) dialog.setBusy(false);
@@ -336,32 +336,12 @@ export function createSearchPanel(dependencies: Dependencies) {
                     button(
                         "Preview with playback",
                         () => {
-                            const actions = [
-                                button(
-                                    "Return to results",
-                                    () => {
-                                        requireValue(context.searchPopup).hidden = false;
-                                        context.searchPlaybackBar?.remove();
-                                        context.searchPlaybackBar = null;
-                                        requireValue(context.searchPopup).querySelector("button")?.focus();
-                                    },
-                                    "",
-                                    { icon: "back" },
-                                ),
-                                button("Cancel preview", () => closeSearch(), "", { icon: "close" }),
-                            ];
-                            if (canSelect)
-                                actions.push(
-                                    button(displayedOffer || upgrade ? "Use improved version" : "Use this version", saveVersion, "lb-primary", {
-                                        icon: "check",
-                                    }),
-                                );
-                            startPlaybackPreview(
-                                { ...data, itemId: requireValue(target).itemId },
-                                "Previewing " + candidate.source + " · " + candidate.title,
-                                actions,
-                            );
-                            requireValue(context.searchPopup).hidden = true;
+                            startPlaybackPreview({
+                                document: { ...data, itemId: requireValue(target).itemId },
+                                description: "Previewing " + candidate.source + " · " + candidate.title,
+                                returnLabel: "Return to results",
+                                panel: searchPanel,
+                            });
                         },
                         "",
                         { icon: "preview" },

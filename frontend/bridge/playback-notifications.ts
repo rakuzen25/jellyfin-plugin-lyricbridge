@@ -23,6 +23,62 @@ export function notificationBounds(host: Box, viewport: Box, reserved: readonly 
     }
     return { left, top, width, height: Math.max(0, bottom - top) };
 }
+/** The lyric content can move; only its scrollport defines overlay geometry. */
+function playbackScrollport(host: HTMLElement, viewport: Box): Box {
+    if (!host.classList.contains("lyricPage")) return host.getBoundingClientRect();
+    const content = host.getBoundingClientRect();
+    let x = 0,
+        y = 0;
+    let scrollport = viewport;
+    for (let node: HTMLElement | null = host; node; node = node.parentElement) {
+        if (node !== host) {
+            x += node.scrollLeft;
+            y += node.scrollTop;
+        }
+        if (node !== document.body && node !== document.documentElement && /auto|scroll/.test(getComputedStyle(node).overflowY)) {
+            const rect = node.getBoundingClientRect();
+            scrollport = { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+            break;
+        }
+    }
+    // Keep the lyric view's unscrolled origin and width, rather than granting the
+    // overlay the whole viewport (which includes Jellyfin's navigation header).
+    return {
+        left: Math.max(scrollport.left, content.left + x),
+        right: Math.min(scrollport.right, content.right + x),
+        top: Math.max(scrollport.top, content.top + y),
+        bottom: scrollport.bottom,
+    };
+}
+/** A transformed lyric ancestor makes fixed controls move with its scroller.
+ * Reserve their unscrolled footprint, so collision avoidance cannot drag the overlay. */
+function reservedControlBounds(node: HTMLElement): Box {
+    const rect = node.getBoundingClientRect();
+    let fixed: HTMLElement | null = node;
+    while (fixed && getComputedStyle(fixed).position !== "fixed") fixed = fixed.parentElement;
+    if (!fixed) return rect;
+    let containing = fixed.parentElement;
+    while (containing) {
+        const style = getComputedStyle(containing);
+        if (
+            style.transform !== "none" ||
+            style.perspective !== "none" ||
+            style.filter !== "none" ||
+            (style.backdropFilter && style.backdropFilter !== "none") ||
+            /layout|paint|strict|content/.test(style.contain) ||
+            /transform|perspective|filter/.test(style.willChange)
+        )
+            break;
+        containing = containing.parentElement;
+    }
+    let x = 0,
+        y = 0;
+    for (let parent = containing; parent; parent = parent.parentElement) {
+        x += parent.scrollLeft;
+        y += parent.scrollTop;
+    }
+    return { left: rect.left + x, right: rect.right + x, top: rect.top + y, bottom: rect.bottom + y };
+}
 interface Entry {
     root: HTMLElement;
     options: FeedbackOptions;
@@ -41,6 +97,7 @@ export class PlaybackNotifications {
     private host: HTMLElement;
     private observer: ResizeObserver;
     private visibility: MutationObserver;
+    private preview = e("div", "lb-preview-slot");
     private list = e("div", "lb-notification-list");
     private summary: HTMLButtonElement;
     constructor(privateRoot: HTMLElement, host: HTMLElement) {
@@ -59,7 +116,8 @@ export class PlaybackNotifications {
         this.list.id = "lb-notification-list";
         this.list.setAttribute("aria-label", "Playback notifications");
         this.summary.setAttribute("aria-controls", this.list.id);
-        this.root.replaceChildren(this.list, this.summary);
+        this.preview.hidden = true;
+        this.root.replaceChildren(this.preview, this.list, this.summary);
         this.observer = new ResizeObserver(this.scheduleBounds);
         this.visibility = new MutationObserver(this.scheduleBounds);
         this.setHost(host);
@@ -82,6 +140,12 @@ export class PlaybackNotifications {
         for (let node: HTMLElement | null = host; node; node = node.parentElement)
             this.visibility.observe(node, { attributes: true, attributeFilter: ["class", "hidden", "style"] });
         this.scheduleBounds();
+    }
+    setPreview(bar: HTMLElement | null): void {
+        if (this.disposed) return;
+        this.preview.replaceChildren(...(bar ? [bar] : []));
+        this.preview.hidden = !bar;
+        this.refreshBounds();
     }
     set(id: string, options: FeedbackOptions, classes = ""): HTMLElement {
         let entry = this.entries.get(id);
@@ -207,31 +271,21 @@ export class PlaybackNotifications {
             ...document.querySelectorAll<HTMLElement>(".headerTop,.skinHeader,.nowPlayingBar,.ak-lyrics-tools-bar,.lb-settings-trigger"),
         ]
             .filter((node) => node.getClientRects().length && !node.closest("[hidden],.hide"))
-            .map((node) => node.getBoundingClientRect());
-        const hostRect = this.host.getBoundingClientRect();
-        // Empty Jellyfin views still reserve the remaining page for lyrics loading/missing states.
-        const hostBox =
-            this.host.classList.contains("lyricPage") && !this.host.querySelector(".lyricsLine")
-                ? { left: hostRect.left, right: hostRect.right, top: hostRect.top, bottom: top + (viewport?.height || innerHeight) - safeBottom }
-                : hostRect;
-        const box = notificationBounds(
-            hostBox,
-            {
-                left: left + safeLeft,
-                top: top + safeTop,
-                right: left + (viewport?.width || innerWidth) - safeRight,
-                bottom: top + (viewport?.height || innerHeight) - safeBottom,
-            },
-            reserved,
-        );
+            .map(reservedControlBounds);
+        const viewportBox = {
+            left: left + safeLeft,
+            top: top + safeTop,
+            right: left + (viewport?.width || innerWidth) - safeRight,
+            bottom: top + (viewport?.height || innerHeight) - safeBottom,
+        };
+        const box = notificationBounds(playbackScrollport(this.host, viewportBox), viewportBox, reserved);
         this.root.hidden =
             !this.host.isConnected ||
             !!this.host.closest("[hidden],.hide") ||
             !this.host.getClientRects().length ||
             !box.width ||
             !box.height ||
-            (![...this.entries.values()].some((entry) => !!entry.options.message) &&
-                ![...this.root.children].some((node) => node !== this.list && node !== this.summary && node instanceof HTMLElement && !node.hidden));
+            (![...this.entries.values()].some((entry) => !!entry.options.message) && this.preview.hidden);
         for (const [property, value] of Object.entries({ left: box.left, top: box.top, maxWidth: box.width, maxHeight: box.height }))
             if (this.root.style[property as "left" | "top" | "maxWidth" | "maxHeight"] !== value + "px")
                 this.root.style[property as "left" | "top" | "maxWidth" | "maxHeight"] = value + "px";

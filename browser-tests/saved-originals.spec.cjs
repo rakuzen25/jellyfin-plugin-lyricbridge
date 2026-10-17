@@ -1,3 +1,4 @@
+const { expectPlaybackPreview } = require("./preview-assertions.cjs");
 const { test, expect } = require("playwright/test");
 const { demo } = require("./demo-fixture.cjs");
 function fixture(admin = true, delay = false) {
@@ -71,6 +72,7 @@ test("@workflow saved originals preview, switching, and confirmed current deleti
     await imported.getByRole("button", { name: "Preview with playback", exact: true }).click();
     await expect(page.locator(".lb-popup")).toBeHidden();
     await expect(page.locator(".lb-preview-playback-bar")).toContainText("Previewing original · Imported");
+    await expectPlaybackPreview(page, "Return to versions");
     await page.getByRole("button", { name: "Return to versions", exact: true }).click();
     await expect(page.locator(".lb-popup")).toBeVisible();
     expect(await page.evaluate(() => window.LyricBridge.current.lyrics?.hash)).toBe("demo-ready");

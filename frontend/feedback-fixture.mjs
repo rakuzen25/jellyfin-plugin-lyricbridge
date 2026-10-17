@@ -7,7 +7,8 @@ export function feedbackFixture(directory) {
 import { glassFeedback } from './bridge/feedback.ts';
 import { materialFeedback } from './admin/feedback.ts';
 import { PlaybackNotifications } from './bridge/playback-notifications.ts';
-window.fixture = {FeedbackScope, glassFeedback, materialFeedback, PlaybackNotifications};`,
+import { PlaybackPreview } from './bridge/playback-preview.ts';
+window.fixture = {FeedbackScope, glassFeedback, materialFeedback, PlaybackNotifications, PlaybackPreview};`,
             resolveDir: directory,
         },
         bundle: true,

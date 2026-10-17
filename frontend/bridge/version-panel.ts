@@ -1,3 +1,4 @@
+import type { PlaybackPreviewRequest } from "./playback-preview.ts";
 import { requireValue } from "../shared/invariants.ts";
 import type { LyricLine, RichLyrics } from "../shared/lyrics.ts";
 import type {} from "../shared/runtime.ts";
@@ -9,7 +10,6 @@ import { button, disclosure, e, field, section, select, setGenerationPanelOpen }
 import type { AuxiliaryKind, Preferences, Variant } from "./models.ts";
 interface Context {
     popup: HTMLElement | null;
-    languagePlayback: { scope: TrackScope | null; input: HTMLElement } | null;
     scope: TrackScope | null;
     current: BridgeDocument | null;
     services: ServiceCapability[];
@@ -29,7 +29,8 @@ interface Dependencies {
         preferences: Preferences,
         document?: BridgeDocument | null,
     ) => { text: string; provenance: string; key: string } | null;
-    startPlaybackPreview: (doc: BridgeDocument, label: string, actions: HTMLElement[]) => void;
+    startPlaybackPreview: (request: PlaybackPreviewRequest) => void;
+    stopPlaybackPreview(panel: HTMLElement | null): void;
     notice: (node: HTMLElement | null | undefined, message: string, ttl?: number, expire?: (() => void) | undefined) => void;
     api: (path: string, method?: string, body?: unknown, signal?: AbortSignal | null | undefined) => Promise<unknown>;
     refreshSong: (force?: boolean) => Promise<void>;
@@ -230,11 +231,12 @@ export function createVersionPanel(dependencies: Dependencies) {
                             "Preview with playback",
                             () => {
                                 stopLanguagePlayback();
-                                context.languagePlayback = { scope: context.scope, input: previewButton };
-                                startPlaybackPreview(requireValue(doc()), "Previewing " + kind + " · " + version.title, [
-                                    button("Return to versions", stopLanguagePlayback, "", { icon: "back" }),
-                                ]);
-                                requireValue(context.popup).hidden = true;
+                                startPlaybackPreview({
+                                    document: requireValue(doc()),
+                                    description: "Previewing " + kind + " · " + version.title,
+                                    returnLabel: "Return to versions",
+                                    panel: requireValue(context.popup),
+                                });
                             },
                             "",
                             { icon: "preview" },
@@ -317,12 +319,7 @@ export function createVersionPanel(dependencies: Dependencies) {
         updateActive();
     }
     function stopLanguagePlayback() {
-        if (!context.languagePlayback) return;
-        const input = context.languagePlayback.input;
-        context.languagePlayback = null;
-        closeSearch();
-        if (context.popup) context.popup.hidden = false;
-        if (input?.isConnected) input.focus();
+        dependencies.stopPlaybackPreview(context.popup);
     }
     function drawJobDetails(parent: HTMLElement, kind: AuxiliaryKind) {
         parent = parent.querySelector<HTMLElement>(":scope > .lb-disclosure-content") || parent;
@@ -488,11 +485,12 @@ export function createVersionPanel(dependencies: Dependencies) {
                                 () => {
                                     if (context.scope !== target || target?.controller.signal.aborted || context.popup !== popup) return;
                                     stopLanguagePlayback();
-                                    context.languagePlayback = { scope: target, input: previewButton };
-                                    startPlaybackPreview(doc, "Previewing original · " + version.source, [
-                                        button("Return to versions", stopLanguagePlayback, "", { icon: "back" }),
-                                    ]);
-                                    if (popup) popup.hidden = true;
+                                    startPlaybackPreview({
+                                        document: doc,
+                                        description: "Previewing original · " + version.source,
+                                        returnLabel: "Return to versions",
+                                        panel: requireValue(popup),
+                                    });
                                 },
                                 "",
                                 { icon: "preview" },

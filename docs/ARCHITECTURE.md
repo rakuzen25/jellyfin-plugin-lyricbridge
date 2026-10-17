@@ -58,6 +58,13 @@ local Japanese pronunciation remains independent of explicit remote option selec
 
 ## Frontend ownership
 
+One playback-preview controller owns the reversible document baseline, deferred
+retrieval responses, source-panel visibility, and focus restoration for all preview
+callers. Callers provide typed requests rather than bar elements. The body-mounted
+playback overlay has one geometry owner, using the lyric scrollport and visual viewport;
+a dedicated preview slot remains above the independently scrolling notification list.
+
+
 Editable source and static assets live in `frontend/`; `pnpm build` recreates
 `dist/web/` for packaging and browser fixtures. The two public TypeScript entrypoints
 only initialize their installations. Strict checking includes checked indexed access;
