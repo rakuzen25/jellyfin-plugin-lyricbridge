@@ -928,13 +928,6 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
     min-width: 0;
     margin: 0;
 }
-.lb-popup .lb-search-failures > .lb-disclosure-heading {
-    padding: 4px 0;
-    font-weight: 500;
-}
-.lb-popup .lb-search-failures[open] {
-    flex-basis: 100%;
-}
 
 /* Job status occupies the first row; all actions stay together beneath it. */
 .lb-job-banner {
@@ -1063,13 +1056,6 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
     }
 }
 
-/* Upload preview follows the settings/search panel control and spacing system. */
-.lb-import-panel > .lb-song-actions {
-    flex: 0 0 auto;
-    margin: 0;
-    padding-top: 12px;
-    border-top: 1px solid var(--lb-glass-border);
-}
 .lb-import-preview {
     overflow-wrap: anywhere;
 }
@@ -1295,13 +1281,6 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
     gap: var(--lb-space-sm);
     margin-block: var(--lb-space-sm);
 }
-.lb-transcription-footer {
-    flex: 0 0 auto;
-    margin: 0;
-    padding-block: var(--lb-space-md);
-    border-top: 1px solid var(--lb-glass-border);
-    background: var(--lb-glass-panel);
-}
 
 .lb-transcription-status {
     display: grid;
@@ -1404,4 +1383,128 @@ body:has(.lyricPage > .lb-settings-trigger) .ak-lyrics-tools-bar {
 }
 .lb-transcription-saved-entry > .lb-version-metadata {
     margin: 0 0 var(--lb-space-sm);
+}
+
+.lb-export-text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 16rem;
+    overflow: auto;
+    font-size: 0.85em;
+}
+
+/* Workflow rhythm: 8px within controls, 12px between rows, 24px between sections. */
+.lb-workflow-dialog {
+    overflow: hidden;
+    padding: var(--lb-space-lg);
+    gap: var(--lb-space-md);
+}
+.lb-workflow-dialog > .lb-dialog-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    gap: var(--lb-space-md);
+    padding: var(--lb-space-xs);
+    scroll-padding-block: var(--lb-space-md);
+}
+.lb-workflow-dialog > .lb-dialog-body > * {
+    flex: 0 0 auto;
+    margin-block: 0;
+}
+.lb-workflow-dialog > .lb-dialog-body > .lb-search-body {
+    flex: 1 1 auto;
+    min-height: 180px;
+}
+.lb-dialog-feedback {
+    flex: 0 0 auto;
+    min-height: 0;
+    max-height: 35%;
+    overflow: auto;
+    display: grid;
+    gap: var(--lb-space-md);
+}
+.lb-dialog-feedback:empty,
+.lb-dialog-feedback:not(:has(> .lb-feedback-element:not([hidden]), > :not([hidden]) > .lb-feedback-element:not([hidden]))),
+.lb-dialog-footer:empty,
+.lb-dialog-footer:not(:has(> :not([hidden]))) {
+    display: none;
+}
+.lb-dialog-feedback > .lb-feedback,
+.lb-dialog-footer > .lb-feedback {
+    margin: 0;
+}
+.lb-dialog-footer {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--lb-space-sm);
+    border-top: 1px solid var(--lb-glass-border);
+    padding-top: var(--lb-space-md);
+}
+.lb-dialog-footer > :is(.lb-feedback, p) {
+    flex: 1 0 100%;
+}
+.lb-dialog-footer > .lb-feedback {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--lb-space-sm);
+    padding: var(--lb-space-md);
+    max-block-size: min(30dvh, 240px);
+    overflow: auto;
+}
+.lb-dialog-footer > .lb-feedback .lb-feedback-diagnostics:not(:has(details[open])) {
+    grid-column: 3;
+    grid-row: 1;
+}
+.lb-dialog-footer > .lb-feedback .lb-feedback-diagnostics summary {
+    padding-block: 0;
+}
+.lb-workflow-dialog .lb-search-form {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(130px, 0.75fr);
+}
+.lb-workflow-dialog .lb-setting-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--lb-space-md);
+    padding: 0;
+    border: 0;
+}
+.lb-workflow-dialog .lb-setting-group + .lb-setting-group {
+    margin-block-start: var(--lb-space-md);
+}
+.lb-workflow-dialog .lb-setting-group > :is(h3, p) {
+    margin: 0;
+}
+/* Disclosed forms keep hints with their field and separate adjacent fields. */
+.lb-workflow-dialog .lb-disclosure-content:has(> .lb-field) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--lb-space-md);
+}
+.lb-workflow-dialog .lb-disclosure-content:has(> .lb-field) > * {
+    margin-block: 0;
+}
+.lb-workflow-dialog .lb-field {
+    padding: 0;
+    gap: var(--lb-space-sm);
+}
+.lb-workflow-dialog .lb-field:not(:has(input[type="checkbox"])) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+}
+@media (max-width: 600px) {
+    .lb-workflow-dialog {
+        padding: var(--lb-space-md);
+    }
+    .lb-workflow-dialog .lb-search-form {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .lb-dialog-footer > .lb-button {
+        flex: 1 1 auto;
+    }
 }

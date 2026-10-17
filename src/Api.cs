@@ -50,7 +50,7 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
     public IActionResult SongPreferences(Guid id, SongLanguagePreferences input)
     {
         if (Item(id) == null) return NotFound();
-        if ((input.SourceLanguage != null && !LanguageTag(input.SourceLanguage)) || (input.TranslationLanguage != null && (!LanguageTag(input.TranslationLanguage) || input.TranslationLanguage == "auto"))) return Error(400, "invalid_preferences", "Choose a valid original and translation language.");
+        if (input.OriginalChineseScript is not (null or "Simplified" or "Traditional") || (input.SourceLanguage != null && !LanguageTag(input.SourceLanguage)) || (input.TranslationLanguage != null && (!LanguageTag(input.TranslationLanguage) || input.TranslationLanguage == "auto"))) return Error(400, "invalid_preferences", "Choose a valid original and translation language.");
         preferences.SaveSong(UserId, id, input);
         return SongPreferences(id);
     }
@@ -64,6 +64,25 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
     }
     [HttpGet("items/{id:guid}/lyrics")]
     public async Task<IActionResult> Lyrics(Guid id, CancellationToken token) { var item = Item(id); return item == null ? NotFound() : Payload(id, await query.Discover(item, token)); }
+    private async Task<ExportArtifact> ExportComposition(Audio item, ExportInput input, CancellationToken token)
+    {
+        var original = await query.Read(item, token, persist: false) ?? throw new WorkflowException(404, "lyrics_unavailable", "There are no selected lyrics to export.");
+        var payload = query.Build(item, UserId, Admin, new() { State = "ready", Lyrics = original, Complete = true }, readOnly: true);
+        return LyricExport.Create(LyricExport.Capture(original, payload), input, Codec.Serialize(new { payload.AuxiliaryChoices, Variants = payload.Variants.Select(v => v.Key) }), payload.Track!.Artist + " - " + payload.Track.Title, payload.Preferences.RowOrder);
+    }
+    [HttpPost("items/{id:guid}/export/preview")]
+    public async Task<IActionResult> ExportPreview(Guid id, ExportInput input, CancellationToken token)
+    {
+        var item = Item(id); return item == null ? NotFound() : JsonData((await ExportComposition(item, input, token)).Preview);
+    }
+    [HttpPost("items/{id:guid}/export")]
+    public async Task<IActionResult> Export(Guid id, ExportInput input, CancellationToken token)
+    {
+        var item = Item(id); if (item == null) return NotFound();
+        if (string.IsNullOrEmpty(input.Fingerprint)) return Error(400, "export_preview_required", "Preview the export before downloading.");
+        var artifact = await ExportComposition(item, input, token);
+        return File(artifact.Bytes, artifact.ContentType, artifact.FileName);
+    }
     [HttpGet("items/{id:guid}/discovery")]
     public IActionResult DiscoveryStatus(Guid id) => Item(id) == null ? NotFound() : Payload(id, discovery.Status(id));
     [HttpPost("items/{id:guid}/retry")]
@@ -131,20 +150,40 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
     }
     [HttpPost("items/{id:guid}/reject-matches")]
     public IActionResult RejectMatches(Guid id) { if (!Admin) return Error(403, "permission_denied", "An administrator must reject library matches."); if (Item(id) == null) return NotFound(); selection.Reject(id); return NoContent(); }
-    [HttpPost("items/{id:guid}/import/preview"), RequestSizeLimit(7_000_000)]
+    [HttpPost("items/{id:guid}/import/preview"), RequestSizeLimit(90_000_000)]
     public IActionResult ImportPreview(Guid id, ImportLyricsInput input, CancellationToken token)
     {
         if (!Admin) return Error(403, "permission_denied", "An administrator must import library lyrics.");
         var item = Item(id); if (item == null) return NotFound();
         var imported = selection.PreviewImport(item, input, token);
         var document = query.Build(item, UserId, Admin, new() { State = "ready", Lyrics = imported.Lyrics, Complete = true }, readOnly: true) with { CanSelect = false, CanDeleteVariants = false, CanDeleteOriginals = false };
+        if (imported.Native is { } native)
+        {
+            var overrides = ExportPreferences.Restore(native, Prefs());
+            var effective = overrides.Apply(Prefs());
+            var variants = new List<Variant> {
+                new("import-preview-translation", imported.Lyrics.Hash, "translation", effective.TranslationLanguage, "Imported", "", native.Selected.Translation),
+                new("import-preview-pronunciation", imported.Lyrics.Hash, "pronunciation", "", "Imported", "", native.Selected.Pronunciation)
+            };
+            var displayed = Display.Apply(imported.Lyrics, effective);
+            document = document with
+            {
+                Lyrics = displayed,
+                Preferences = effective,
+                SongOverrides = overrides,
+                Variants = variants,
+                AuxiliaryChoices = new("import-preview-translation", "import-preview-pronunciation"),
+                ResolvedAuxiliary = AuxiliaryResolver.Resolve(displayed, effective, new("import-preview-translation", "import-preview-pronunciation"), variants),
+                TimingCorrection = new(imported.Lyrics.Hash, TimingService.Fingerprint(displayed), native.Playback.TimingSeconds)
+            };
+        }
         return JsonData(new ImportPreview(imported.FileName, imported.Format, imported.Encoding, imported.Timing, imported.LineCount, document, imported.Warnings));
     }
-    [HttpPost("items/{id:guid}/import"), RequestSizeLimit(7_000_000)]
+    [HttpPost("items/{id:guid}/import"), RequestSizeLimit(90_000_000)]
     public async Task<IActionResult> Import(Guid id, ImportLyricsInput input, CancellationToken token)
     {
         if (!Admin) return Error(403, "permission_denied", "An administrator must import library lyrics.");
-        var item = Item(id); if (item == null) return NotFound(); await selection.Import(item, input, token); return NoContent();
+        var item = Item(id); if (item == null) return NotFound(); await selection.Import(item, input, token, UserId, Prefs()); return NoContent();
     }
     [HttpPost("items/{id:guid}/mix")]
     public async Task<IActionResult> Mix(Guid id, MixInput input, CancellationToken token)

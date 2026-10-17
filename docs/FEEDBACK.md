@@ -94,6 +94,22 @@ same job card with **Retry status check**; only confirmed job failure offers
 has not changed. Partial-source failure with usable lyrics is a warning.
 A failed monitoring request does not establish that the background operation failed.
 
+## Workflow dialog layout
+
+Search, Import, Export, and Transcription use the shared non-modal dialog shell:
+header with **Close**, a feedback area, scrollable content, and a fixed action footer.
+Playback remains accessible outside the dialog. Workflow actions place secondary
+controls before one primary action; result and lyric-row actions stay with their targets.
+Progress, warnings, and errors use the shared feedback hosts, with expandable details.
+Use the shared spacing tokens: 8 px within fields and action rows, 12 px between
+content rows and shell regions, and 24 px between sections.
+
+Closing or completing a workflow restores **Versions**, its scroll position, and the
+launching control's focus. Escape invokes only the active dialog's Close behavior,
+including unsaved-change confirmation and save locks. Navigation or account changes
+cancel requests and discard the return destination. Playback preview temporarily hides
+the workflow; returning from playback restores that dialog.
+
 ## Next steps
 
 - [Run frontend and browser checks](CI.md#local-commands), including confirmation and feedback regressions.

@@ -158,6 +158,7 @@ export function createApi<TScope extends TransportScope>(options: ApiOptions<TSc
             };
             throw new BridgeRequestError(details, scope, response.status);
         }
+        if (/^items\/[^/]+\/export$/.test(path)) return response.blob();
         const data: unknown = response.status === 204 ? null : await response.json();
         if (data && typeof data === "object" && order !== undefined) Object.defineProperty(data, options.responseOrder, { value: order });
         return data;

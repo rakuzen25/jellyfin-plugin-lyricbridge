@@ -4,7 +4,8 @@ async function openUpload(
     page,
     file = { name: "lyrics.lrc", mimeType: "text/plain", buffer: Buffer.from("[00:01.00]Uploaded first\n[00:02.00]Uploaded second") },
 ) {
-    await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
+    if (!(await page.getByRole("dialog", { name: "Lyrics settings", exact: true }).isVisible()))
+        await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
     await page.getByRole("tab", { name: "Versions", exact: true }).click();
     const chooser = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "Import lyrics", exact: true }).click();
@@ -35,7 +36,10 @@ test("@layout upload preview shares controls, preserves playback until confirmat
     await panel.getByRole("button", { name: "Playback preview", exact: true }).click();
     await expect(page.locator(".ak-enhanced-line").first()).toContainText("Uploaded first");
     await page.locator("audio").evaluate((audio) => (audio.currentTime = 12));
-    await panel.getByRole("button", { name: "Stop playback preview", exact: true }).click();
+    await page
+        .getByRole("region", { name: "Lyric version playback preview" })
+        .getByRole("button", { name: "Return to upload preview", exact: true })
+        .click();
     expect(await page.evaluate(() => window.LyricBridge.current.lyrics.hash)).toBe(baseline);
     expect(await page.locator("audio").evaluate((audio) => audio.currentTime)).toBeCloseTo(7, 1);
     await panel.getByRole("button", { name: "Playback preview", exact: true }).click();
@@ -261,7 +265,7 @@ test("@workflow final import cannot be dismissed while saving and failure restor
     const hash = await page.evaluate(() => window.LyricBridge.current.lyrics.hash);
     await panel.getByRole("button", { name: "Import", exact: true }).click();
     await expect.poll(() => page.evaluate(() => typeof window.releaseFinalImport)).toBe("function");
-    for (const button of await panel.getByRole("button", { name: "Cancel", exact: true }).all()) await expect(button).toBeDisabled();
+    await expect(panel.getByRole("button", { name: "Close", exact: true })).toBeDisabled();
     await page.keyboard.press("Escape");
     await expect(panel).toBeVisible();
     await page.evaluate(() => window.releaseFinalImport());
@@ -271,6 +275,6 @@ test("@workflow final import cannot be dismissed while saving and failure restor
     await expect(error).toContainText("ytlrc.lyric / Line 2");
     await expect(panel.getByRole("button", { name: "Import", exact: true })).toBeEnabled();
     expect(await page.evaluate(() => window.LyricBridge.current.lyrics.hash)).toBe(hash);
-    await panel.getByRole("button", { name: "Cancel", exact: true }).last().click();
+    await panel.getByRole("button", { name: "Close", exact: true }).click();
     await expect(panel).toHaveCount(0);
 });

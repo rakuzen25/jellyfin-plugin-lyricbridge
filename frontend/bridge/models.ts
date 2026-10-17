@@ -47,6 +47,14 @@ export interface Variant {
     originType: "generated" | "supplied" | "local";
 }
 export interface AuxiliaryDocument {
+    resolvedAuxiliary?: {
+        translationLanguage: string;
+        sourceLanguage: string;
+        originalChineseScript: string;
+        choices: { translation: string; pronunciation: string };
+        translation: Record<string, { text: string; key: string }>;
+        pronunciation: Record<string, { text: string; key: string }>;
+    };
     lyrics?: RichLyrics | null;
     variants?: Variant[];
     auxiliaryChoices?: { translation: string; pronunciation: string };

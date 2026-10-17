@@ -123,6 +123,34 @@ public sealed partial class Store : ISelectionRepository
         }
     }
 
+    public void ApplyImport(Guid item, Guid user, ImportedLyrics imported, SongLanguagePreferences? preferences, string? translationLanguage = null)
+    {
+        lock (writeGate)
+        {
+            if (IsResetting || (operationEpoch.Value is long started && started != Epoch))
+                throw new WorkflowException(409, "reset_in_progress", "The managed lyric library was reset. Reload before importing.", true);
+            using var connection = Open(); using var transaction = connection.BeginTransaction();
+            var lyrics = imported.Lyrics; lyrics.Hash = Codec.ContentHash(lyrics); lyrics.Manual = true;
+            WriteSelection(connection, transaction, item.ToString("N"), new(lyrics, null), imported.Raw);
+            if (imported.Native is { } native)
+            {
+                foreach (var kind in new[] { "translation", "pronunciation" })
+                {
+                    var language = kind == "translation" ? translationLanguage ?? native.Playback.TranslationLanguage : "";
+                    var text = kind == "translation" ? native.Selected.Translation : native.Selected.Pronunciation;
+                    var key = "import:" + Guid.NewGuid().ToString("N");
+                    var variant = new Variant(key, lyrics.Hash, kind, language, "Imported", "Lossless composition", text, OriginType: "supplied");
+                    WriteRecord(connection, transaction, "variant", key, variant);
+                    WriteRecord(connection, transaction, "auxiliary-choice", LanguageVersionService.ChoiceKey(user, lyrics.Hash, kind, language), new AuxiliarySelection(key));
+                }
+                WriteRecord(connection, transaction, "timing-correction", item.ToString("N") + ":" + lyrics.Hash,
+                    new TimingCorrection(lyrics.Hash, TimingService.Fingerprint(lyrics), native.Playback.TimingSeconds));
+                WriteRecord(connection, transaction, "song-preferences", SongKey(user, item), preferences);
+            }
+            transaction.Commit();
+        }
+    }
+
     private static VersionSnapshot ReadSelection(SqliteConnection connection, SqliteTransaction transaction, string id) => new(
         ReadRecord<RichLyrics>(connection, transaction, "selected", id),
         ReadRecord<InstrumentalEvidence>(connection, transaction, "instrumental", id),

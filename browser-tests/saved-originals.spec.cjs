@@ -29,7 +29,8 @@ function fixture(admin = true, delay = false) {
             );
 }
 async function versions(page) {
-    await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
+    if (!(await page.getByRole("dialog", { name: "Lyrics settings", exact: true }).isVisible()))
+        await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
     await page.getByRole("tab", { name: "Versions", exact: true }).click();
 }
 function saved(page) {
@@ -271,9 +272,9 @@ test("@workflow search versions keeps auxiliary donor mapping contextual", async
             .getByRole("button", { name: "Search versions", exact: true })
             .click();
         await page.locator(".lb-result").first().click();
-        await expect(page.locator(".lb-version-preview")).toContainText("Use supplied " + kind);
+        await expect(page.locator(".lb-search .lb-version-preview")).toContainText("Use supplied " + kind);
         await expect(page.getByRole("button", { name: "Use mapped " + kind, exact: true })).toBeVisible();
         await expect(page.getByRole("button", { name: "Use this version", exact: true })).toHaveCount(0);
-        await page.locator(".lb-search-header, .lb-search .lb-popup-header").getByRole("button", { name: "Cancel", exact: true }).click();
+        await page.locator(".lb-search-header, .lb-search .lb-popup-header").getByRole("button", { name: "Close", exact: true }).click();
     }
 });

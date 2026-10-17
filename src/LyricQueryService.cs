@@ -19,7 +19,7 @@ public sealed class LyricQueryService(ILyricManager native, ILyricQueryRepositor
     }
     public string ActiveStoragePath => store.ActiveStoragePath;
     public void SaveDocument(RichLyrics lyrics) => store.SaveDocument(lyrics);
-    public async Task<RichLyrics?> Read(Audio audio, CancellationToken token)
+    public async Task<RichLyrics?> Read(Audio audio, CancellationToken token, bool persist = true)
     {
         if (store.DiscoverySuppressed(audio.Id) || store.Rejection(audio.Id) != null) return null;
         var mark = store.Instrumental(audio.Id); if (mark?.Manual == true) return null;
@@ -30,8 +30,8 @@ public sealed class LyricQueryService(ILyricManager native, ILyricQueryRepositor
         if (found?.Lyrics is { Count: > 0 })
         {
             var doc = new RichLyrics { Source = "Local", Title = audio.Name, Artist = string.Join(", ", audio.Artists), Lines = found.Lyrics.Select((l, i) => new LyricLine { Id = $"l{i}", Text = l.Text, Start = l.Start, Language = Normalization.Detect(l.Text), Cues = l.Cues?.Select(c => new Cue(c.Position, c.EndPosition, c.Start, c.End)).ToList() ?? [] }).ToList() };
-            if (doc.Lines.Count == 1 && Lyricify.Lyrics.Helpers.InstrumentalHelper.IsInstrumental(doc.Lines[0].Text)) { store.RecordInstrumental(audio.Id, new InstrumentalEvidence("Local", "", "Instrumental notice", Expires: DateTime.UtcNow.AddDays(7))); return null; }
-            doc.Hash = Codec.ContentHash(doc); store.SaveAutomaticOriginal(audio.Id, doc, admission); return doc;
+            if (doc.Lines.Count == 1 && Lyricify.Lyrics.Helpers.InstrumentalHelper.IsInstrumental(doc.Lines[0].Text)) { if (persist) store.RecordInstrumental(audio.Id, new InstrumentalEvidence("Local", "", "Instrumental notice", Expires: DateTime.UtcNow.AddDays(7))); return null; }
+            doc.Hash = Codec.ContentHash(doc); if (persist) store.SaveAutomaticOriginal(audio.Id, doc, admission); return doc;
         }
         return selected;
     }
@@ -62,6 +62,6 @@ public sealed class LyricQueryService(ILyricManager native, ILyricQueryRepositor
         var timingCorrection = selectedHash == null ? null : store.Timing(id, selectedHash);
         if (timingCorrection?.Fingerprint != timingFingerprint) timingCorrection = null;
         var suggestedMapping = original == null || outcome.Lyrics == null ? null : LyricComposition.Suggest(original, outcome.Lyrics);
-        return new(suggestedMapping, original == null ? null : Codec.ContentHash(original), timingFingerprint, timingCorrection, track, detectedLanguages, auxiliaryChoices, outcome.Lyrics, variants, preferences, accountPreferences, songOverrides, outcome.State, outcome.Complete, outcome.Finished, outcome.Total, outcome.Errors, outcome.Instrumental, outcome.Better, outcome.Assessment, outcome.Offer == null ? null : new ImprovementSummary(outcome.Offer.BaselineHash, outcome.Offer.Reason, outcome.Offer.Description, outcome.Offer.Candidate.Assessment), outcome.Metrics, pronunciation, administrator, administrator, !readOnly && (administrator || allowRequests()), store.SavedOriginals(id), administrator);
+        return new(suggestedMapping, original == null ? null : Codec.ContentHash(original), timingFingerprint, timingCorrection, track, detectedLanguages, auxiliaryChoices, outcome.Lyrics, variants, preferences, accountPreferences, songOverrides, outcome.State, outcome.Complete, outcome.Finished, outcome.Total, outcome.Errors, outcome.Instrumental, outcome.Better, outcome.Assessment, outcome.Offer == null ? null : new ImprovementSummary(outcome.Offer.BaselineHash, outcome.Offer.Reason, outcome.Offer.Description, outcome.Offer.Candidate.Assessment), outcome.Metrics, pronunciation, administrator, administrator, !readOnly && (administrator || allowRequests()), store.SavedOriginals(id), administrator, AuxiliaryResolver.Resolve(outcome.Lyrics, preferences, auxiliaryChoices, variants));
     }
 }

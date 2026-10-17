@@ -347,6 +347,8 @@ it. Scheduled discovery skips rejected tracks.
 
 **Use Jellyfin lyrics** selects the native version. **Import lyrics** validates an
 uploaded file and retains it in plugin storage; see [supported formats](IMPORT.md).
+
+Export the selected composition from **Versions → Export lyrics** as TXT, LRC, enhanced LRC, or lossless LyricBridge JSON. ZIP bundles can include current translation/pronunciation companions and a lossless copy. Administrators can import JSON or exported bundles; see [export and restore](IMPORT.md#export-and-restore).
 For provider search, inspect **Match details** and **Recommended**, then preview before
 saving. **Sort by best match** explicitly reorders results. Cached opening does not
 rediscover providers; improvements are offered without replacing displayed selections.

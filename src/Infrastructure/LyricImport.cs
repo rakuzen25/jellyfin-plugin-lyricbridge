@@ -31,6 +31,9 @@ public static partial class LyricImport
     public static ImportedLyrics Parse(ImportLyricsInput input, Candidate candidate, CancellationToken token = default)
     {
         token.ThrowIfCancellationRequested();
+        if (input.FileBytes != null && input.Text != null) throw Error("invalid_import", "Supply file bytes or text, not both.");
+        var exported = TryExportImport(input, candidate, token);
+        if (exported is not null) return exported;
         if (input.ExistingLocal) throw Error("invalid_import", "Use Jellyfin lyrics through the existing-local action.");
         if (input.FileBytes != null && input.Text != null) throw Error("invalid_import", "Supply file bytes or text, not both.");
         var choice = input.Format?.ToLowerInvariant() ?? "";
@@ -157,6 +160,8 @@ public static partial class LyricImport
         token.ThrowIfCancellationRequested();
         XDocument? ttml = null;
         if (string.IsNullOrWhiteSpace(text)) throw Error("empty_import", "This file contains no sung lyric lines.");
+        if (text.StartsWith(LyricExport.LrcHeader, StringComparison.Ordinal) && choice is "auto" or "lrc" or "elrc")
+            return ParseExportedLrc(text, candidate, choice, token);
         var type = choice == "auto" ? TypeHelper.GetLyricsTypes(text) : FormatChoices[choice];
         if (choice == "txt") return PlainText(text, candidate);
         if (text.TrimStart().StartsWith('<'))

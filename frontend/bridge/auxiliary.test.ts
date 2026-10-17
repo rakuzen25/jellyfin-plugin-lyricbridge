@@ -77,3 +77,23 @@ test("Automatic fills gaps while choosing the embedded version leaves missing ro
     assert.equal(auxiliary(first, "translation", { ...preferences, translationLanguage: "en" }, doc), null);
     assert.equal(effectiveAuxiliaryChoice(doc, "translation", preferences), "provider");
 });
+
+test("server-resolved playback rows preserve per-row selection and fall back after preference edits", () => {
+    const line = { id: "l0", text: "Original", translations: { en: "Embedded" } };
+    const p = { translationLanguage: "en", sourceLanguage: "auto", originalChineseScript: "Simplified" } as Preferences;
+    const doc = {
+        lyrics: { hash: "hash", lines: [line] },
+        auxiliaryChoices: { translation: "provider", pronunciation: "auto" },
+        resolvedAuxiliary: {
+            translationLanguage: "en",
+            sourceLanguage: "auto",
+            originalChineseScript: "Simplified",
+            choices: { translation: "provider", pronunciation: "auto" },
+            translation: { l0: { text: "Resolved", key: "provider" } },
+            pronunciation: {},
+        },
+    };
+    assert.equal(auxiliary(line, "translation", p, doc)?.text, "Resolved");
+    assert.equal(auxiliary(line, "pronunciation", p, doc), null);
+    assert.equal(auxiliary(line, "translation", { ...p, originalChineseScript: "Traditional" }, doc)?.text, "Embedded");
+});

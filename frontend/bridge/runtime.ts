@@ -1,3 +1,4 @@
+import { createExportPanel } from "./export-panel.ts";
 import { createGenerationController } from "./generation-controller.ts";
 import { PlaybackNotifications } from "./playback-notifications.ts";
 import { FeedbackScope, confirmFeedback, type FeedbackAction, type FeedbackSeverity } from "../shared/feedback.ts";
@@ -61,6 +62,79 @@ export function installBridge() {
         refreshFrame = 0,
         services: ServiceCapability[] = [],
         sources: SourceCapability[] = [];
+    let workflowReturn: {
+        scope: TrackScope;
+        panel: HTMLElement | null;
+        trigger: HTMLElement | null;
+        label: string;
+        section: string;
+        scrollTop: number;
+    } | null = null;
+    function discardWorkflowReturn() {
+        if (workflowReturn?.panel) {
+            feedbackScope.releaseWithin(workflowReturn.panel);
+            workflowReturn.panel.remove();
+        }
+        workflowReturn = null;
+    }
+    function beginWorkflow(): boolean {
+        if (!scope || searchPopup?.getAttribute("aria-busy") === "true" || !importPanel.canClose() || !transcriptionPanel.canClose()) return false;
+        closeSearch(true, false, false);
+        if (popup) {
+            const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            discardWorkflowReturn();
+            workflowReturn = {
+                scope,
+                panel: popup,
+                trigger,
+                label: trigger?.getAttribute("aria-label") || trigger?.textContent?.trim() || "",
+                section: trigger?.closest<HTMLElement>("[data-song-kind]")?.dataset.songKind || "",
+                scrollTop: popup.querySelector(".lb-panel-body")?.scrollTop || 0,
+            };
+            stopLanguagePlayback();
+            // Keep feedback handlers alive while the originating settings view is suspended.
+            popup.hidden = true;
+            popup.classList.remove("lb-popup");
+            popup = null;
+        } else if (!workflowReturn) workflowReturn = { scope, panel: null, trigger: null, label: "", section: "", scrollTop: 0 };
+        return true;
+    }
+    function restoreWorkflowReturn() {
+        const destination = workflowReturn;
+        workflowReturn = null;
+        if (!destination || scope !== destination.scope || destination.scope.controller.signal.aborted || !isLyrics() || lyricViewHidden) {
+            if (destination?.panel) {
+                feedbackScope.releaseWithin(destination.panel);
+                destination.panel.remove();
+            }
+            return;
+        }
+        if (destination.panel) {
+            popup = destination.panel;
+            popup.hidden = false;
+            popup.classList.add("lb-popup");
+            mountDialog(popup);
+            updateSongPanel();
+            buildDisplay(requireValue(popup.querySelector<HTMLElement>(".lb-display-panel")));
+            activateSettingsTab("Versions");
+            updatePanelBounds();
+        } else openPopup("Versions");
+        const panel = popup;
+        if (!panel) return;
+        const body = panel.querySelector<HTMLElement>(".lb-panel-body");
+        if (body) body.scrollTop = destination.scrollTop;
+        const trigger = destination.trigger?.isConnected
+            ? destination.trigger
+            : [...panel.querySelectorAll<HTMLElement>("button")].find(
+                  (node) =>
+                      (node.getAttribute("aria-label") || node.textContent?.trim()) === destination.label &&
+                      (!destination.section || node.closest<HTMLElement>("[data-song-kind]")?.dataset.songKind === destination.section),
+              );
+        (trigger || panel.querySelector<HTMLElement>('[role="tab"][data-tab="Versions"]'))?.focus({ preventScroll: true });
+    }
+    function requestWorkflowClose() {
+        searchPopup?.querySelector<HTMLButtonElement>(".lb-popup-header button")?.click();
+    }
     function documentState(): BridgeDocument {
         if (!current) throw new Error("Lyrics are not ready. Reload the current song.");
         return current;
@@ -102,8 +176,9 @@ export function installBridge() {
         scope = null;
         if (refreshFrame) lifetime.cancelFrame(refreshFrame);
         refreshFrame = 0;
+        discardWorkflowReturn();
         closePopup();
-        closeSearch(false, true);
+        closeSearch(false, true, false);
         settingsButton?.remove();
         settingsButton = null;
         tools?.remove();
@@ -560,6 +635,10 @@ export function installBridge() {
         popup.querySelectorAll<HTMLElement>('[role="tabpanel"]').forEach((panel) => (panel.hidden = panel.dataset.tab !== name));
     }
     function openPopup(tabName = "Song") {
+        if (searchPopup) {
+            requestWorkflowClose();
+            return;
+        }
         if (!importPanel.canClose() || !transcriptionPanel.canClose()) return;
         if (popup) {
             if (typeof tabName === "string") activateSettingsTab(tabName);
@@ -571,7 +650,7 @@ export function installBridge() {
             e("h2", "", current?.track?.title || current?.lyrics?.title || "Lyrics settings"),
             e("p", "lb-settings-artist", current?.track?.artist || current?.lyrics?.artist || ""),
         );
-        popup = createDialog({ label: "Lyrics settings", title: heading, className: "lb-settings-panel", onClose: closePopup }).root;
+        popup = createDialog({ label: "Lyrics settings", workflow: false, title: heading, className: "lb-settings-panel", onClose: closePopup }).root;
         const tabs = e("div", "lb-tabs");
         tabs.setAttribute("role", "tablist");
         tabs.setAttribute("aria-label", "Lyrics settings");
@@ -694,9 +773,10 @@ export function installBridge() {
             ...accountPreferences(),
             ...(overrides?.sourceLanguage != null ? { sourceLanguage: overrides.sourceLanguage } : {}),
             ...(overrides?.translationLanguage != null ? { translationLanguage: overrides.translationLanguage } : {}),
+            ...(overrides?.originalChineseScript != null ? { originalChineseScript: overrides.originalChineseScript } : {}),
         };
     }
-    function songPreference(key: "sourceLanguage" | "translationLanguage", value: string) {
+    function songPreference(key: "sourceLanguage" | "translationLanguage" | "originalChineseScript", value: string) {
         const target = trackScope();
         if (!target || !current) return;
         documentState().songOverrides = { ...current.songOverrides, [key]: value || null };
@@ -835,6 +915,17 @@ export function installBridge() {
             [["", "Use account default (" + name(account.translationLanguage) + ")"], ...languageChoices],
             (v) => songPreference("translationLanguage", v),
         );
+        select(
+            language,
+            "Original Chinese script",
+            overrides.originalChineseScript || "",
+            [
+                ["", "Use account default (" + account.originalChineseScript + ")"],
+                ["Simplified", "Simplified"],
+                ["Traditional", "Traditional"],
+            ],
+            (value) => songPreference("originalChineseScript", value),
+        );
         const save = e("p", "lb-song-save-status");
         save.setAttribute("role", "status");
         language.append(save);
@@ -842,7 +933,7 @@ export function installBridge() {
             "Reset song language overrides",
             async () => {
                 const target = scope;
-                documentState().songOverrides = { sourceLanguage: null, translationLanguage: null };
+                documentState().songOverrides = { sourceLanguage: null, translationLanguage: null, originalChineseScript: null };
                 requireValue(target).overrideDirty = true;
                 requireValue(target).overrideRevision = (requireValue(target).overrideRevision || 0) + 1;
                 mergePreferences();
@@ -1028,6 +1119,7 @@ export function installBridge() {
         openVersions: (...args) => openVersions(...args),
         importLyrics: (...args) => importLyrics(...args),
         transcribeAudio: () => transcriptionPanel.open(),
+        exportLyrics: () => exportPanel.open(),
         capabilities: (...args) => capabilities(...args),
         generate: (...args) => generate(...args),
         mark: (...args) => mark(...args),
@@ -1095,8 +1187,9 @@ export function installBridge() {
         notifications?.refreshBounds();
         searchPlaybackBar.querySelector("button")?.focus();
     }
-    function closeSearch(restore = true, force = false) {
-        if (!force && (!importPanel.canClose() || !transcriptionPanel.canClose())) return;
+    function closeSearch(restore = true, force = false, returnToSettings = true) {
+        if (!force && (searchPopup?.getAttribute("aria-busy") === "true" || !importPanel.canClose() || !transcriptionPanel.canClose())) return;
+        exportPanel.dispose();
         importPanel.dispose();
         transcriptionPanel.dispose();
         if (searchPopup) feedbackScope.releaseWithin(searchPopup);
@@ -1106,7 +1199,28 @@ export function installBridge() {
         searchPopup?.remove();
         searchPopup = null;
         endPlaybackPreview(restore);
-        settingsButton?.focus();
+        if (force) discardWorkflowReturn();
+        else if (returnToSettings) restoreWorkflowReturn();
+        if (!popup && returnToSettings) settingsButton?.focus();
+    }
+    async function finishWorkflow() {
+        const target = scope,
+            panel = searchPopup;
+        let failure: unknown;
+        try {
+            await refreshSong(true);
+        } catch (error) {
+            failure = error;
+        }
+        if (scope !== target || searchPopup !== panel) return;
+        panel?.setAttribute("aria-busy", "false");
+        closeSearch(false);
+        if (failure)
+            showError(failure, popup, () => refreshSong(true), {
+                operation: "action:refresh",
+                secondary: "The change was saved. Refresh lyrics to display the updated selection.",
+                retryLabel: "Refresh lyrics",
+            });
     }
     function endPlaybackPreview(restore = true) {
         if (searchPopup) searchPopup.hidden = false;
@@ -1123,6 +1237,20 @@ export function installBridge() {
         if (ending.pending && scope) accept(ending.pending.data, scope, true, ending.pending.order);
         if (scope && current) updateStatus();
     }
+    const exportPanel = createExportPanel({
+        scope: () => scope,
+        panel: () => searchPopup,
+        documentState,
+        mount: (panel) => {
+            searchPopup = panel;
+            mountDialog(panel);
+        },
+        beginWorkflow,
+        closeSearch,
+        api,
+        feedback: (node, options) => feedbackScope.update(node, options),
+        updatePanelBounds,
+    });
     const importPanel = createImportPanel({
         scope: () => scope,
         panel: () => searchPopup,
@@ -1130,17 +1258,17 @@ export function installBridge() {
             searchPopup = panel;
             mountDialog(panel);
         },
-        closePopup,
+        beginWorkflow,
         closeSearch,
         endPlaybackPreview,
         startPlaybackPreview,
         api,
         defaults,
-        refreshSong: () => refreshSong(true),
         status: (message) => status(message, false, 4000),
         showError,
         updatePanelBounds,
         saved: () => playbackPreview.discard(),
+        finishWorkflow,
         notice: (node, message, severity) => notice(node, message, 0, undefined, severity),
         feedback: (node, options) => feedbackScope.update(node, options),
     });
@@ -1151,7 +1279,7 @@ export function installBridge() {
             searchPopup = panel;
             mountDialog(panel);
         },
-        closePopup,
+        beginWorkflow,
         closeSearch,
         endPlaybackPreview,
         startPlaybackPreview,
@@ -1160,6 +1288,7 @@ export function installBridge() {
         notifications: () => notifications,
         refreshSong: () => refreshSong(true),
         saved: () => playbackPreview.discard(),
+        finishWorkflow,
         updatePanelBounds,
         play: (start, end) => {
             const audio = media();
@@ -1184,8 +1313,7 @@ export function installBridge() {
                 await api("items/" + requireValue(target).itemId + "/import", "POST", { text, existingLocal: existing });
                 if (scope !== target) return;
                 playbackPreview.discard();
-                closeSearch(false);
-                await refreshSong(true);
+                await finishWorkflow();
                 status("Local lyrics selected", false, 4000);
             } catch (error) {
                 if (scope !== target) return;
@@ -1261,6 +1389,11 @@ export function installBridge() {
             button(
                 "Use mapped " + kind,
                 async () => {
+                    const workflow = searchPopup;
+                    if (workflow?.getAttribute("aria-busy") === "true") return;
+                    workflow?.setAttribute("aria-busy", "true");
+                    const close = workflow?.querySelector<HTMLButtonElement>(".lb-popup-header button");
+                    if (close) close.disabled = true;
                     notice(result, "Saving mapped rows…");
                     try {
                         await api("items/" + target.itemId + "/mix", "POST", {
@@ -1270,12 +1403,16 @@ export function installBridge() {
                             language,
                             mapping,
                         });
-                        if (scope !== target) return;
-                        closeSearch(false);
-                        await refreshSong();
+                        if (scope !== target || searchPopup !== workflow) return;
+                        await finishWorkflow();
                         status("Source rows saved", false, 4000);
                     } catch (error) {
-                        showError(error, parent);
+                        if (scope === target && searchPopup === workflow) showError(error, parent);
+                    } finally {
+                        if (searchPopup === workflow) {
+                            workflow?.setAttribute("aria-busy", "false");
+                            if (close) close.disabled = false;
+                        }
                     }
                 },
                 "",
@@ -1337,11 +1474,13 @@ export function installBridge() {
                 searchSession = value;
             },
         },
-        closePopup: (...args) => closePopup(...args),
+        beginWorkflow,
         closeSearch: (...args) => closeSearch(...args),
         documentState: (...args) => documentState(...args),
         api: (...args) => api(...args),
         playbackPreview,
+        finishWorkflow,
+        feedback: (node, options) => feedbackScope.update(node, options),
         refreshSong: (...args) => refreshSong(...args),
         updatePanelBounds: (...args) => updatePanelBounds(...args),
         metrics,
@@ -1421,8 +1560,9 @@ export function installBridge() {
     });
     lifetime.on(document, "keydown", (event) => {
         if (event.key === "Escape") {
-            closePopup();
-            closeSearch();
+            event.preventDefault();
+            if (searchPopup) requestWorkflowClose();
+            else closePopup();
         }
     });
     // Jellyfin can hide a cached view without changing the URL. Its view

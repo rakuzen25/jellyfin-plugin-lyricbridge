@@ -27,19 +27,19 @@ interface Dependencies {
     scope(): TrackScope | null;
     panel(): HTMLElement | null;
     mount(panel: HTMLElement): void;
-    closePopup(): void;
+    beginWorkflow(): boolean;
     closeSearch(restore?: boolean): void;
     endPlaybackPreview(): void;
     startPlaybackPreview(doc: BridgeDocument, label: string, actions: HTMLElement[]): void;
     api(path: string, method?: string, body?: unknown, signal?: AbortSignal): Promise<unknown>;
     defaults: Preferences;
-    refreshSong(): Promise<void>;
     status(message: string): void;
     notice(node: HTMLElement, message: string, severity: FeedbackSeverity): void;
     feedback(node: HTMLElement, options: FeedbackOptions): void;
     showError(error: unknown, parent: HTMLElement, retry?: () => unknown): void;
     updatePanelBounds(): void;
     saved(): void;
+    finishWorkflow(): Promise<void>;
 }
 function parsePreview(value: unknown, defaults: Preferences): UploadPreview {
     if (
@@ -70,28 +70,32 @@ export function createImportPanel(dependencies: Dependencies) {
     let active: { canClose(): boolean; dispose(): void } | null = null;
     function open() {
         if (active && !active.canClose()) return;
-        d.closePopup();
-        d.closeSearch();
+        if (!d.beginWorkflow()) return;
         const target = d.scope();
         if (!target) return;
         const cancel = () => {
             if (!saving) d.closeSearch();
         };
-        const { root: panel, closeButton: close } = createDialog({
+        const {
+            root: panel,
+            body,
+            feedback: feedbackArea,
+            footer: actions,
+            setBusy,
+        } = createDialog({
             label: "Import lyrics",
             className: "lb-import-panel",
-            closeLabel: "Cancel",
             onClose: cancel,
         });
-        const body = e("div", "lb-panel-body");
         const fileGroup = section("Lyric file");
-        const fileLabel = e("p", "lb-help", "Choose a lyric file up to 1 MB. Decoded text must also fit within 1 MB.");
+        const fileLabel = e("p", "lb-help", "Choose a lyric file up to 1 MB, or LyricBridge JSON / ZIP up to 64 MB decoded.");
         fileGroup.append(fileLabel);
         const feedback = e("div");
         const progress = e("p", "lb-help");
         progress.setAttribute("role", "status");
         const summary = e("p", "lb-version-metadata");
         const warnings = feedbackHost();
+        warnings.hidden = true;
         const lyrics = e("div", "lb-version-preview lb-import-preview");
         lyrics.setAttribute("aria-label", "Uploaded lyrics preview");
         let generation = 0,
@@ -118,11 +122,10 @@ export function createImportPanel(dependencies: Dependencies) {
             confirm.disabled = saving || !preview || reading;
             playback.disabled = saving || !preview || reading;
             choose.disabled = saving;
-            encoding.disabled = saving || reading;
+            encoding.disabled =
+                saving || reading || ["lyricbridge", "bundle"].includes(format.value) || /\.(lyricbridge\.json|zip)$/i.test(draft?.fileName || "");
             format.disabled = saving || reading;
-            close.disabled = saving;
-            cancelButton.disabled = saving;
-            panel.setAttribute("aria-busy", String(saving));
+            setBusy(saving);
         };
         const fail = (error: unknown, retry?: () => unknown) => {
             d.notice(progress, "", "info");
@@ -157,6 +160,13 @@ export function createImportPanel(dependencies: Dependencies) {
                 });
                 d.notice(progress, "Review the parsed lyrics before importing.", "info");
                 summary.textContent = `${result.format} · ${result.encoding} · ${result.timing === "word" ? "Word timing" : result.timing === "line" ? "Line timing" : "Untimed lyrics"} · ${result.lineCount} lines`;
+                if (["LyricBridge JSON", "LyricBridge ZIP"].includes(result.format) && result.document.timingCorrection) {
+                    const overrides = result.document.songOverrides;
+                    summary.textContent += ` · Saved timing correction: ${result.document.timingCorrection.seconds}s`;
+                    summary.textContent += ` · Original language: ${overrides?.sourceLanguage || "Account default"}`;
+                    summary.textContent += ` · Translation language: ${overrides?.translationLanguage || "Account default"}`;
+                    summary.textContent += ` · Original script: ${overrides?.originalChineseScript || "Account default"}`;
+                }
                 const lines = result.document.lyrics?.lines || [];
                 let rendered = 0;
                 const more = button("Show more lyrics", () => renderMore());
@@ -224,6 +234,8 @@ export function createImportPanel(dependencies: Dependencies) {
                 ["txt", "TXT · Plain text"],
                 ["lrc", "LRC"],
                 ["elrc", "ELRC · Enhanced LRC"],
+                ["lyricbridge", "LyricBridge JSON · Lossless"],
+                ["bundle", "LyricBridge ZIP bundle"],
                 ["qrc", "QRC"],
                 ["krc", "KRC"],
                 ["yrc", "YRC"],
@@ -232,6 +244,7 @@ export function createImportPanel(dependencies: Dependencies) {
                 ["lys", "Lyricify Syllable"],
             ],
             (value) => {
+                updateActions();
                 if (draft) {
                     draft = Object.freeze({ ...draft, format: value });
                     void validate();
@@ -241,7 +254,7 @@ export function createImportPanel(dependencies: Dependencies) {
         const chooseFile = () => {
             const input = e("input");
             input.type = "file";
-            input.accept = ".txt,.lrc,.elrc,.qrc,.krc,.yrc,.ttml,.xml,.json,.lys,.lyl";
+            input.accept = ".txt,.lrc,.elrc,.qrc,.krc,.yrc,.ttml,.xml,.json,.lys,.lyl,.zip";
             input.onchange = async () => {
                 const file = input.files?.[0];
                 if (!file || !live()) return;
@@ -259,7 +272,9 @@ export function createImportPanel(dependencies: Dependencies) {
                 d.notice(progress, "Reading file…", "progress");
                 updateActions();
                 try {
-                    if (file.size > 1_000_000) throw new Error("Choose a lyric file up to 1 MB.");
+                    const native = /\.(lyricbridge\.json|zip)$/i.test(file.name) || ["lyricbridge", "bundle"].includes(format.value);
+                    if (file.size > (native ? 64_000_000 : 1_000_000))
+                        throw new Error(native ? "Choose a LyricBridge file up to 64 MB." : "Choose a lyric file up to 1 MB.");
                     const bytes = new Uint8Array(await file.arrayBuffer());
                     if (!live() || revision !== generation) return;
                     let binary = "";
@@ -292,8 +307,7 @@ export function createImportPanel(dependencies: Dependencies) {
                     if (!live()) return;
                     saving = false;
                     d.saved();
-                    d.closeSearch(false);
-                    await d.refreshSong();
+                    await d.finishWorkflow();
                     if (d.scope() === target) d.status("Local lyrics selected");
                 } catch (error) {
                     if (live()) fail(error);
@@ -324,11 +338,9 @@ export function createImportPanel(dependencies: Dependencies) {
             "",
             { icon: "preview" },
         );
-        const actions = e("div", "lb-song-actions");
-        const cancelButton = button("Cancel", cancel, "", { icon: "close" });
-        actions.append(confirm, playback, choose, cancelButton);
-        body.append(fileGroup, progress, feedback, summary, warnings, lyrics);
-        panel.append(body, actions);
+        actions.append(choose, playback, confirm);
+        body.append(fileGroup, summary, lyrics);
+        feedbackArea.append(progress, feedback, warnings);
         d.mount(panel);
         d.updatePanelBounds();
         updateActions();

@@ -99,8 +99,24 @@ function parsePreferences(v: unknown, defaults: Preferences): Preferences {
     }
     return result;
 }
+function resolvedRows(value: unknown): boolean {
+    if (value === undefined || value === null) return true;
+    if (
+        !isRecord(value) ||
+        !["translationLanguage", "sourceLanguage", "originalChineseScript"].every((key) => typeof value[key] === "string") ||
+        !isRecord(value.choices) ||
+        typeof value.choices.translation !== "string" ||
+        typeof value.choices.pronunciation !== "string"
+    )
+        return false;
+    return ["translation", "pronunciation"].every((kind) => {
+        const rows = value[kind];
+        return isRecord(rows) && Object.values(rows).every((row) => isRecord(row) && typeof row.text === "string" && typeof row.key === "string");
+    });
+}
 function document(v: unknown): v is BridgeDocument {
     if (!isRecord(v)) return false;
+    if (!resolvedRows(v.resolvedAuxiliary)) return false;
     const songOverrides = v.songOverrides,
         track = v.track,
         improvement = v.improvement;
@@ -126,7 +142,9 @@ function document(v: unknown): v is BridgeDocument {
         (v.detectedLanguages === undefined || strings(v.detectedLanguages)) &&
         (songOverrides === undefined ||
             (isRecord(songOverrides) &&
-                ["sourceLanguage", "translationLanguage"].every((k) => songOverrides[k] == null || typeof songOverrides[k] === "string"))) &&
+                ["sourceLanguage", "translationLanguage", "originalChineseScript"].every(
+                    (k) => songOverrides[k] == null || typeof songOverrides[k] === "string",
+                ))) &&
         (v.auxiliaryChoices === undefined ||
             (isRecord(v.auxiliaryChoices) &&
                 typeof v.auxiliaryChoices.translation === "string" &&

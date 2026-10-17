@@ -32,7 +32,8 @@ function fixture(extra = "") {
         );
 }
 async function open(page) {
-    await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
+    if (!(await page.getByRole("dialog", { name: "Lyrics settings", exact: true }).isVisible()))
+        await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
     await page.getByRole("tab", { name: "Versions", exact: true }).click();
     await page.getByRole("button", { name: "Transcribe audio", exact: true }).click();
     return page.getByRole("dialog", { name: "Transcribe audio", exact: true });
@@ -173,6 +174,14 @@ test("@layout phrase review shares controls, preserves karaoke, and supports man
             return !!document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)?.closest(".lb-transcription-panel");
         }),
     ).toBe(true);
+    const automatic = panel.locator(".lb-transcription-automatic");
+    await automatic.locator("summary").click();
+    const fieldSpacing = await automatic.evaluate((root) => {
+        const fields = root.querySelectorAll(".lb-field");
+        return fields[1].getBoundingClientRect().top - fields[0].getBoundingClientRect().bottom;
+    });
+    expect(fieldSpacing).toBe(12);
+    await automatic.locator("summary").click();
     const baseline = await page.evaluate(() => window.LyricBridge.current.lyrics.hash);
     await panel.getByText("Split phrase 1", { exact: true }).click();
     await expect(panel).toContainText("This may split a grammatical phrase");

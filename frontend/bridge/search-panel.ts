@@ -1,4 +1,5 @@
-import type { FeedbackSeverity } from "../shared/feedback.ts";
+import { feedbackHost } from "./feedback.ts";
+import type { FeedbackOptions, FeedbackSeverity } from "../shared/feedback.ts";
 import { requireValue } from "../shared/invariants.ts";
 import type { LyricLine, RichLyrics } from "../shared/lyrics.ts";
 import type {} from "../shared/runtime.ts";
@@ -23,10 +24,12 @@ interface Context {
     searchSession: SearchSession<SearchQuery, SearchResults> | null;
 }
 interface Dependencies {
+    feedback(node: HTMLElement, options: FeedbackOptions): void;
     canOpen(): boolean;
+    finishWorkflow(): Promise<void>;
     responseOrder: symbol;
     context: Context;
-    closePopup: () => void;
+    beginWorkflow: () => boolean;
     hideImprovement: () => void;
     closeSearch: (restore?: boolean) => void;
     documentState: () => BridgeDocument;
@@ -63,7 +66,7 @@ export function createSearchPanel(dependencies: Dependencies) {
     const {
         responseOrder,
         context,
-        closePopup,
+        beginWorkflow,
         closeSearch,
         documentState,
         api,
@@ -85,14 +88,15 @@ export function createSearchPanel(dependencies: Dependencies) {
     } = dependencies;
     async function openVersions(better: RichLyrics | null | undefined = undefined, mixKind: AuxiliaryKind | undefined = undefined) {
         if (!dependencies.canOpen()) return;
-        closePopup();
-        closeSearch();
+        if (!beginWorkflow()) return;
         const target = context.scope;
+        let saving = false;
         const dialog = createDialog({
             label: better ? "Preview lyric update" : "Search versions",
             wide: true,
-            closeLabel: "Cancel",
-            onClose: () => closeSearch(),
+            onClose: () => {
+                if (!saving) closeSearch();
+            },
         });
         context.searchPopup = dialog.root;
         dependencies.hideImprovement();
@@ -111,7 +115,7 @@ export function createSearchPanel(dependencies: Dependencies) {
             [["", "All enabled"] as const, ...context.sources.map((s) => [s.name, s.name] as const)],
             () => {},
         );
-        const progress = e("p", "lb-search-status", ""),
+        const progress = feedbackHost(),
             list = e("div", "lb-results"),
             preview = e("div", "lb-version-preview lb-task-surface");
         list.tabIndex = 0;
@@ -119,8 +123,10 @@ export function createSearchPanel(dependencies: Dependencies) {
         const body = e("div", "lb-search-body");
         body.append(list, preview);
         const toolbar = e("div", "lb-search-toolbar");
+        progress.classList.add("lb-search-status");
         toolbar.append(progress);
-        const { root: sourceFailures, content: failureContent } = disclosure("Unavailable sources", "lb-search-failures", false);
+        const sourceFailures = feedbackHost();
+        sourceFailures.classList.add("lb-search-failures");
         sourceFailures.hidden = true;
         const querySummary = e("div", "lb-search-query"),
             queryText = e("span");
@@ -131,6 +137,7 @@ export function createSearchPanel(dependencies: Dependencies) {
                 "Edit search",
                 () => {
                     form.hidden = false;
+                    submit.hidden = false;
                     querySummary.hidden = true;
                     title.focus();
                 },
@@ -138,7 +145,8 @@ export function createSearchPanel(dependencies: Dependencies) {
                 { icon: "edit" },
             ),
         );
-        context.searchPopup.append(form, querySummary, toolbar, body);
+        dialog.body.append(form, querySummary, body);
+        dialog.feedback.append(toolbar);
         form.append(
             e(
                 "small",
@@ -155,7 +163,7 @@ export function createSearchPanel(dependencies: Dependencies) {
         );
         mountDialog(context.searchPopup);
         updatePanelBounds();
-        requireValue(context.searchPopup.querySelector("button")).focus();
+        title.focus();
         let picked = null;
         let improvement: SearchImprovement | null = null;
         let finalized = false;
@@ -275,6 +283,9 @@ export function createSearchPanel(dependencies: Dependencies) {
                     preview.append(block);
                 }
                 const saveVersion = async () => {
+                    if (saving) return;
+                    saving = true;
+                    dialog.setBusy(true);
                     const upgrade = improvement?.key === candidate.source + ":" + candidate.id ? improvement : null;
                     try {
                         await api(
@@ -291,8 +302,9 @@ export function createSearchPanel(dependencies: Dependencies) {
                         );
                         if (context.scope !== target || context.searchPopup !== searchPanel) return;
                         playbackPreview.discard();
-                        closeSearch(false);
-                        await refreshSong(true);
+                        saving = false;
+                        dialog.setBusy(false);
+                        await dependencies.finishWorkflow();
                         status("Lyric version saved", false, 4000);
                     } catch (error) {
                         if (context.scope !== target || context.searchPopup !== searchPanel) return;
@@ -312,6 +324,9 @@ export function createSearchPanel(dependencies: Dependencies) {
                                 if (context.scope === target && context.searchPopup === searchPanel) showError(cause, searchPanel);
                             });
                         } else showError(error, context.searchPlaybackBar || preview);
+                    } finally {
+                        saving = false;
+                        if (context.searchPopup === searchPanel) dialog.setBusy(false);
                     }
                 };
                 const previewActions = e("div", "lb-song-actions");
@@ -543,16 +558,11 @@ export function createSearchPanel(dependencies: Dependencies) {
                     data.state === "searching" ? "progress" : "info",
                 );
                 const errors = data.errors || [];
-                sourceFailures.hidden = !errors.length;
-                const failureSignature = JSON.stringify(errors);
-                if (sourceFailures.dataset.signature !== failureSignature) {
-                    sourceFailures.dataset.signature = failureSignature;
-                    requireValue(sourceFailures.querySelector(".lb-disclosure-title")).textContent =
-                        errors.length + " source" + (errors.length === 1 ? "" : "s") + " unavailable";
-                    failureContent.replaceChildren(
-                        ...errors.map((error) => e("p", "lb-help", error.message + (error.diagnosticId ? " · Reference " + error.diagnosticId : ""))),
-                    );
-                }
+                dependencies.feedback(sourceFailures, {
+                    message: errors.length ? errors.length + " source" + (errors.length === 1 ? "" : "s") + " unavailable" : "",
+                    severity: "warning",
+                    details: errors.map((error) => error.message + (error.diagnosticId ? " · Reference " + error.diagnosticId : "")),
+                });
             },
         );
         context.searchSession = session;
@@ -570,11 +580,12 @@ export function createSearchPanel(dependencies: Dependencies) {
             { icon: "close" },
         );
         stopSearch.hidden = true;
-        toolbar.append(stopSearch);
+        dialog.footer.append(stopSearch);
         const collapseFields = (parts: string[]) => {
             queryText.textContent = parts.filter(Boolean).join(" · ");
             const editing = form.contains(document.activeElement);
             form.hidden = true;
+            submit.hidden = true;
             querySummary.hidden = false;
             if (editing) querySummary.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
         };
@@ -593,7 +604,7 @@ export function createSearchPanel(dependencies: Dependencies) {
             return session.start({ title: title.value, artist: artist.value, source: provider.value || null });
         };
         const submit = button("Search", search, "lb-primary lb-search-submit", { icon: "search" });
-        form.insertBefore(submit, form.querySelector<HTMLElement>(".lb-search-context"));
+        dialog.footer.append(submit);
         const { root: advanced, content: advancedBody } = disclosure("Advanced: provider track ID", "lb-advanced", false);
         const id = e("input");
         const idProvider = select(
@@ -621,6 +632,7 @@ export function createSearchPanel(dependencies: Dependencies) {
         form.append(advanced);
         if (better) {
             context.searchPopup.classList.add("lb-offer-preview");
+            submit.hidden = true;
             form.hidden = true;
             querySummary.hidden = true;
             toolbar.hidden = true;

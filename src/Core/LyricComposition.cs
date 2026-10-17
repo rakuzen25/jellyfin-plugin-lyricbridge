@@ -4,7 +4,7 @@ namespace LyricBridge;
 public sealed record MatchRejection(string Reason = "No correct provider match");
 public sealed record ImportLyricsInput(string? Text = null, bool ExistingLocal = false, string? FileName = null, string? FileBytes = null, string Encoding = "auto", string Format = "auto");
 public sealed record ImportIssue(string Code, string Message, string? Location = null);
-public sealed record ImportedLyrics(RichLyrics Lyrics, RawLyrics Raw, string FileName, string Format, string Encoding, string Timing, int LineCount, IReadOnlyList<ImportIssue> Warnings);
+public sealed record ImportedLyrics(RichLyrics Lyrics, RawLyrics Raw, string FileName, string Format, string Encoding, string Timing, int LineCount, IReadOnlyList<ImportIssue> Warnings, NativeLyricDocument? Native = null);
 public sealed record ImportPreview(string FileName, string Format, string Encoding, string Timing, int LineCount, LyricPayload Document, IReadOnlyList<ImportIssue> Warnings);
 public sealed record MixInput(string Hash, string DonorHash, string Kind, string Language, Dictionary<string, string> Mapping);
 public static class LyricComposition

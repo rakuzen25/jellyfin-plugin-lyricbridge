@@ -66,6 +66,7 @@ public interface ISelectionRepository
     string? ApplyUpgrade(Guid item, VersionSnapshot expected, string offerHash, string baselineHash);
     bool SaveTiming(Guid item, VersionSnapshot expected, TimingCorrection correction);
     void ApplySelection(Guid item, VersionSnapshot selection, RawLyrics? raw = null);
+    void ApplyImport(Guid item, Guid user, ImportedLyrics imported, SongLanguagePreferences? preferences, string? translationLanguage = null);
 }
 
 public interface IPreferenceRepository

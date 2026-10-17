@@ -16,6 +16,7 @@ interface SavedOriginal {
     autoSaved?: boolean;
 }
 export interface BridgeDocument {
+    resolvedAuxiliary?: import("./models.ts").AuxiliaryDocument["resolvedAuxiliary"];
     savedOriginals?: SavedOriginal[];
     canDeleteOriginals?: boolean;
     itemId?: string;
@@ -23,7 +24,7 @@ export interface BridgeDocument {
     variants?: Variant[];
     preferences: Preferences;
     accountPreferences?: Preferences;
-    songOverrides?: { sourceLanguage?: string | null; translationLanguage?: string | null };
+    songOverrides?: { sourceLanguage?: string | null; translationLanguage?: string | null; originalChineseScript?: string | null };
     auxiliaryChoices?: { translation: string; pronunciation: string };
     track?: { title: string; artist: string; album: string; durationMs?: number | null } | null;
     state?: string;

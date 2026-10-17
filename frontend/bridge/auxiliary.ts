@@ -63,10 +63,20 @@ export function effectiveAuxiliaryChoice(doc: AuxiliaryDocument, kind: Auxiliary
 }
 export function auxiliary(line: LyricLine, kind: AuxiliaryKind, p: Preferences, doc: AuxiliaryDocument | null) {
     if (!doc?.lyrics) return null;
-    const selected = effectiveAuxiliaryChoice(doc, kind, p);
+    const shared = doc.resolvedAuxiliary;
+    const useShared =
+        shared &&
+        shared.translationLanguage === p.translationLanguage &&
+        shared.sourceLanguage === p.sourceLanguage &&
+        shared.originalChineseScript === p.originalChineseScript &&
+        shared.choices[kind] === effectiveAuxiliaryChoice(doc, kind, p);
+    const resolved = useShared ? shared[kind][line.id] : undefined;
+    if (useShared && !resolved) return null;
+    const selected = resolved?.key || effectiveAuxiliaryChoice(doc, kind, p);
     const supplied = embeddedText(line, kind, p.translationLanguage);
     const provided = hasAuxiliaryText(supplied) ? { text: supplied, provenance: "Provided by " + doc.lyrics.source, key: "provider" } : null;
-    if (selected === "provider") return provided;
+    if (selected === "provider")
+        return resolved ? { text: resolved.text, key: resolved.key, provenance: "Provided by " + doc.lyrics.source } : provided;
     const matches = (doc.variants || []).filter(
         (v) =>
             v.kind === kind &&
@@ -82,7 +92,7 @@ export function auxiliary(line: LyricLine, kind: AuxiliaryKind, p: Preferences, 
               : matches[0];
     if (variant)
         return {
-            text: variant.text[line.id]!,
+            text: resolved?.text ?? variant.text[line.id]!,
             key: variant.key,
             provenance:
                 variant.originType === "supplied"

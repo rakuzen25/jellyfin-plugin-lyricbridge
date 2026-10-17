@@ -16,7 +16,8 @@ function fixture(backgroundOnly = false) {
         );
 }
 async function versions(page) {
-    await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
+    if (!(await page.getByRole("dialog", { name: "Lyrics settings", exact: true }).isVisible()))
+        await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
     await page.getByRole("tab", { name: "Versions", exact: true }).click();
 }
 function table(page, kind) {

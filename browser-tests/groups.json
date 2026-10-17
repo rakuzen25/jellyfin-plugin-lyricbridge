@@ -7,7 +7,9 @@
         "embedded-versions.spec.cjs",
         "workflow-lifecycle.spec.cjs",
         "import-lyrics.spec.cjs",
-        "transcription.spec.cjs"
+        "transcription.spec.cjs",
+        "export-lyrics.spec.cjs",
+        "workflow-dialogs.spec.cjs"
     ],
     "rendering": [
         "artwork-lifecycle.spec.cjs",

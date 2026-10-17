@@ -15,7 +15,8 @@ public sealed class PreferenceService(IPreferenceRepository repository, Func<Pre
     public void SaveSong(Guid user, Guid item, SongLanguagePreferences? preferences)
     {
         if (preferences is not null &&
-            ((preferences.SourceLanguage is not null && !LanguageTag(preferences.SourceLanguage)) ||
+            ((preferences.OriginalChineseScript is not (null or "Simplified" or "Traditional")) ||
+             (preferences.SourceLanguage is not null && !LanguageTag(preferences.SourceLanguage)) ||
              (preferences.TranslationLanguage is not null && (!LanguageTag(preferences.TranslationLanguage) || preferences.TranslationLanguage == "auto"))))
             throw new ArgumentException("Choose a valid original and translation language.");
         repository.SaveSongPreferences(user, item, preferences);

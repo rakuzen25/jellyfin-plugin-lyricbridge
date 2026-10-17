@@ -14,7 +14,7 @@ interface Dependencies {
     scope(): TrackScope | null;
     panel(): HTMLElement | null;
     mount(panel: HTMLElement): void;
-    closePopup(): void;
+    beginWorkflow(): boolean;
     closeSearch(restore?: boolean): void;
     endPlaybackPreview(): void;
     startPlaybackPreview(doc: BridgeDocument, label: string, actions: HTMLElement[]): void;
@@ -23,6 +23,7 @@ interface Dependencies {
     notifications(): PlaybackNotifications | null;
     refreshSong(): Promise<void>;
     saved(): void;
+    finishWorkflow(): Promise<void>;
     updatePanelBounds(): void;
     play(start: number, end: number): () => void;
 }
@@ -236,8 +237,7 @@ export function createTranscriptionPanel(d: Dependencies) {
     }
     function open(transcriptId?: string, reviewResultId?: string) {
         if (active && !active.canClose()) return;
-        d.closePopup();
-        d.closeSearch();
+        if (!d.beginWorkflow()) return;
         const owner = d.scope();
         if (!owner) return;
         const target: TrackScope = owner;
@@ -245,20 +245,24 @@ export function createTranscriptionPanel(d: Dependencies) {
         const abort = () => controller.abort();
         target.controller.signal.addEventListener("abort", abort, { once: true });
         const feedback = new FeedbackScope(glassFeedback);
-        const { root: panel, closeButton } = createDialog({
+        const {
+            root: panel,
+            body: main,
+            feedback: feedbackArea,
+            footer,
+            setBusy,
+        } = createDialog({
             label: "Transcribe audio",
             wide: true,
             className: "lb-transcription-panel",
             onClose: () => close(),
         });
-        const main = e("div", "lb-panel-body");
         const message = feedbackHost();
         const confirmation = feedbackHost("confirmation");
         message.hidden = true;
         confirmation.hidden = true;
-        const feedbackArea = e("div", "lb-transcription-status");
+        feedbackArea.classList.add("lb-transcription-status");
         feedbackArea.append(message, confirmation);
-        const footer = e("div", "lb-song-actions lb-transcription-footer");
         footer.hidden = true;
         let saving = false,
             dirty = false,
@@ -384,7 +388,6 @@ export function createTranscriptionPanel(d: Dependencies) {
                 });
             }
         };
-        panel.append(feedbackArea, main, footer);
         const dispose = () => {
             controller.abort();
             target.controller.signal.removeEventListener("abort", abort);
@@ -489,7 +492,7 @@ export function createTranscriptionPanel(d: Dependencies) {
             if (saving || !history || !review?.canManage) return false;
             saving = true;
             requestRevision++;
-            closeButton.disabled = true;
+            setBusy(true);
             editor();
             try {
                 const saved = await api(path() + "/save", "POST", body());
@@ -511,7 +514,7 @@ export function createTranscriptionPanel(d: Dependencies) {
             } finally {
                 if (live()) {
                     saving = false;
-                    closeButton.disabled = false;
+                    setBusy(false);
                     confirmation.querySelectorAll<HTMLButtonElement>("button").forEach((n) => (n.disabled = false));
                     editor();
                 }
@@ -580,9 +583,8 @@ export function createTranscriptionPanel(d: Dependencies) {
                         }
                     },
                     "",
-                    { icon: "generate" },
+                    { icon: "generate", appearance: "primary" },
                 );
-                main.append(generate);
                 transcriptDelete(main, source.id, review.deletion, review.savedEntries.length);
                 footer.replaceChildren(
                     button(
@@ -595,6 +597,7 @@ export function createTranscriptionPanel(d: Dependencies) {
                         { icon: "back" },
                     ),
                 );
+                footer.append(generate);
                 footer.hidden = false;
                 return;
             }
@@ -1032,7 +1035,10 @@ export function createTranscriptionPanel(d: Dependencies) {
                     { icon: "back" },
                 ),
             );
-            const saveButton = button("Save line breaks", () => void saveDraft(), "", { icon: "check" });
+            const saveButton = button("Save line breaks", () => void saveDraft(), "", {
+                icon: "check",
+                ...(review.canUse ? {} : { appearance: "primary" as const }),
+            });
             saveButton.disabled = saving || !dirty || !review.canManage;
             footer.append(saveButton);
             const use = button(
@@ -1040,7 +1046,7 @@ export function createTranscriptionPanel(d: Dependencies) {
                 async () => {
                     if (saving) return;
                     saving = true;
-                    closeButton.disabled = true;
+                    setBusy(true);
                     footer.querySelectorAll<HTMLButtonElement>("button").forEach((n) => (n.disabled = true));
                     main.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>("button,input,select").forEach(
                         (n) => (n.disabled = true),
@@ -1052,12 +1058,11 @@ export function createTranscriptionPanel(d: Dependencies) {
                         saving = false;
                         dirty = false;
                         d.saved();
-                        d.closeSearch(false);
-                        await d.refreshSong();
+                        await d.finishWorkflow();
                     } catch (cause) {
                         if (live()) {
                             saving = false;
-                            closeButton.disabled = false;
+                            setBusy(false);
                             editor();
                             feedback.update(message, {
                                 message: description(cause),
@@ -1086,7 +1091,7 @@ export function createTranscriptionPanel(d: Dependencies) {
                     } finally {
                         if (live()) {
                             saving = false;
-                            closeButton.disabled = false;
+                            setBusy(false);
                         }
                     }
                 },
@@ -1117,6 +1122,7 @@ export function createTranscriptionPanel(d: Dependencies) {
                 if (!isRecord(capabilities) || !Array.isArray(results)) throw new Error("Invalid transcription capabilities.");
                 feedback.releaseWithin(main);
                 main.replaceChildren();
+                footer.replaceChildren();
                 footer.hidden = true;
                 main.classList.remove("lb-transcription-editor");
                 main.classList.add("lb-transcription-overview");
@@ -1181,6 +1187,7 @@ export function createTranscriptionPanel(d: Dependencies) {
                         return;
                     }
                     submitting = true;
+                    updateChoice();
                     const languageValue = language.value.trim() || "auto";
                     main.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>("button,input,select").forEach((node) => {
                         node.disabled = true;
@@ -1256,7 +1263,12 @@ export function createTranscriptionPanel(d: Dependencies) {
                 const updateChoice = () => choiceButtons.forEach((b) => (b.disabled = !choice.value || submitting));
                 choice.onchange = updateChoice;
                 updateChoice();
-                requestForm.append(actions);
+                if (canTranscribe) {
+                    const primary = actions.querySelector(".lb-primary");
+                    if (primary) actions.append(primary);
+                    footer.append(...actions.children);
+                    footer.hidden = false;
+                }
                 const retained = e("section", "lb-transcription-results");
                 const heading = e("div", "lb-transcription-results-heading");
                 heading.append(

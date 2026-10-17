@@ -36,7 +36,7 @@ public sealed class SelectionService(ISelectionRepository repository, Retrieval 
         applied.Manual = true; return applied;
     }
     public ImportedLyrics PreviewImport(Audio item, ImportLyricsInput input, CancellationToken token) => LyricImport.Parse(input, new("Imported", "local", item.Name, string.Join(", ", item.Artists), item.Album, null, 100), token);
-    public async Task Import(Audio item, ImportLyricsInput input, CancellationToken token)
+    public async Task Import(Audio item, ImportLyricsInput input, CancellationToken token, Guid user = default, Preferences? accountPreferences = null)
     {
         RichLyrics lyrics;
         RawLyrics? raw = null;
@@ -50,6 +50,11 @@ public sealed class SelectionService(ISelectionRepository repository, Retrieval 
         {
             var imported = PreviewImport(item, input, token);
             lyrics = imported.Lyrics; raw = imported.Raw;
+            token.ThrowIfCancellationRequested();
+            var restored = imported.Native is null ? null : ExportPreferences.Restore(imported.Native, accountPreferences ?? new());
+            repository.ApplyImport(item.Id, user, imported, restored, restored?.Apply(accountPreferences ?? new()).TranslationLanguage);
+            discovery.Invalidate(item.Id);
+            return;
         }
         if (lyrics.Lines.Count == 0) throw new WorkflowException(422, "empty_import", "This file contains no sung lyric lines.");
         lyrics.Hash = Codec.ContentHash(lyrics); lyrics.Manual = true;

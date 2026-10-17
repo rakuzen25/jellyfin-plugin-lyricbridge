@@ -4,7 +4,8 @@ function intercept(code) {
     return (html) => html.replace("const path = new URL(request.url).pathname;", "const path = new URL(request.url).pathname;\n" + code);
 }
 async function versions(page) {
-    await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
+    if (!(await page.getByRole("dialog", { name: "Lyrics settings", exact: true }).isVisible()))
+        await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
     await page.getByRole("tab", { name: "Versions", exact: true }).click();
 }
 async function search(page) {
@@ -25,14 +26,14 @@ test("@workflow late search admission is released without replacing a reopened s
     });
     await search(page);
     await page.waitForFunction(() => window.firstAdmissionStarted);
-    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByRole("button", { name: "Close", exact: true }).click();
     await search(page);
     await expect(page.locator(".lb-result")).toHaveCount(1);
     await page.evaluate(() => window.releaseFirstAdmission());
     await expect.poll(() => page.evaluate(() => window.releasedSearches || [])).toContain("old-session");
     await expect(page.locator(".lb-search")).toBeVisible();
     await expect(page.locator(".lb-result")).toHaveCount(1);
-    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByRole("button", { name: "Close", exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.releasedSearches || [])).toContain("new-session");
 });
 
@@ -219,11 +220,11 @@ test("@layout stopped search keeps source failures compact and expandable", asyn
     await search(page);
     await expect(page.locator(".lb-search-status")).toContainText("search stopped");
     const failures = page.locator(".lb-search-failures");
-    await expect(failures.locator("summary")).toContainText("1 source unavailable");
+    await expect(failures).toContainText("1 source unavailable");
     expect(await failures.evaluate((element) => getComputedStyle(element).marginBlockStart)).toBe("0px");
     expect(await failures.evaluate((element) => getComputedStyle(element).flexBasis)).toBe("auto");
     await failures.locator("summary").click();
-    await expect(failures).toHaveAttribute("open", "");
+    await expect(failures.locator("details")).toHaveAttribute("open", "");
     await expect(failures).toContainText("Fixture provider timed out");
 });
 
@@ -559,7 +560,7 @@ test("@layout icon and text controls share vertical centers", async ({ page }) =
     await check();
     await page.locator('[data-song-kind="pronunciation"]').getByRole("button", { name: "Generate pronunciation", exact: true }).click();
     await check();
-    await page.locator(".lb-popup-header").getByRole("button", { name: "Close", exact: true }).click();
+    await page.locator(".lb-popup > .lb-popup-header").getByRole("button", { name: "Close", exact: true }).click();
     await page.locator(".ak-lyrics-timing-chip").click();
     await check();
 });

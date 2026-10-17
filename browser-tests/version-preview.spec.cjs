@@ -11,7 +11,8 @@ test("preview cancel restores playback and focus; apply saves the selected versi
     });
     await expect.poll(() => page.locator("audio").evaluate((audio) => audio.currentTime)).toBe(7);
     async function search() {
-        await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
+        if (!(await page.getByRole("dialog", { name: "Lyrics settings", exact: true }).isVisible()))
+            await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
         await page.getByRole("tab", { name: "Versions", exact: true }).click();
         await page.locator('[data-song-kind="original"]').getByRole("button", { name: "Search versions", exact: true }).click();
         await page.locator(".lb-result").first().click();
@@ -27,7 +28,7 @@ test("preview cancel restores playback and focus; apply saves the selected versi
     });
     await page.getByRole("button", { name: "Cancel preview", exact: true }).click();
     expect(await page.locator("audio").evaluate((audio) => Math.abs(audio.currentTime - 7))).toBeLessThan(0.2);
-    await expect(page.locator(".lb-settings-trigger")).toBeFocused();
+    await expect(page.locator('[data-song-kind="original"]').getByRole("button", { name: "Search versions", exact: true })).toBeFocused();
     await expect(page.locator(".ak-enhanced-line")).toHaveCount(6);
     await search();
     await page.getByRole("button", { name: "Use this version", exact: true }).click();

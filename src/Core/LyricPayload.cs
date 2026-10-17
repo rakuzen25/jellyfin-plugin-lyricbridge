@@ -13,4 +13,4 @@ public sealed record LyricPayload(
     string State, bool Complete, int Finished, int Total, List<SafeError> Errors,
     List<InstrumentalEvidence> Instrumental, RichLyrics? Better, MatchAssessment? MatchAssessment,
     ImprovementSummary? Improvement, MatchingMetrics? MatchingMetrics, LocalState? Pronunciation,
-    bool CanSelect, bool CanDeleteVariants, bool CanGenerate, IReadOnlyList<SavedOriginal> SavedOriginals, bool CanDeleteOriginals);
+    bool CanSelect, bool CanDeleteVariants, bool CanGenerate, IReadOnlyList<SavedOriginal> SavedOriginals, bool CanDeleteOriginals, ResolvedAuxiliary? ResolvedAuxiliary = null);

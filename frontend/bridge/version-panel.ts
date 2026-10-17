@@ -40,6 +40,7 @@ interface Dependencies {
     openVersions: (better?: RichLyrics | null | undefined, mixKind?: AuxiliaryKind | undefined) => Promise<void>;
     importLyrics: (existing: boolean) => Promise<void>;
     transcribeAudio: () => void;
+    exportLyrics: () => void;
     capabilities: () => Promise<void>;
     generate: (kind: AuxiliaryKind, service: string, parent: HTMLElement, forceNew?: boolean) => Promise<void>;
 }
@@ -600,6 +601,7 @@ export function createVersionPanel(dependencies: Dependencies) {
                 button("Import lyrics", () => importLyrics(false), "", { icon: "import" }),
                 button("Use Jellyfin lyrics", () => importLyrics(true), "", { icon: "library" }),
             );
+        if (currentOriginal) originalActions.append(button("Export lyrics", dependencies.exportLyrics, "", { icon: "export" }));
         original.append(originalActions, e("div", "lb-original-feedback"));
         if (documentState().canSelect) {
             const classification = e("div", "lb-version-classification");
