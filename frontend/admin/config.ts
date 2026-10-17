@@ -1,14 +1,19 @@
-import { settingsActionGroup, settingsRowHeader } from "./settings-row.ts";
+import { revealSelectedTab } from "./ui.ts";
+import { createRequestsPanel } from "./requests-panel.ts";
+import type { DataHost } from "./data-contracts.ts";
+import { credentialAvailable, credentialEditor } from "./credentials.ts";
+import { rebaseSettings, same } from "./settings-draft.ts";
+import { createDataPanel } from "./data-panel.ts";
+import { settingsActionGroup, settingsRowHeader, rowAction } from "./settings-row.ts";
 import { adminButton as button } from "./controls.ts";
 import { renderServices } from "./services-panel.ts";
 import { FeedbackScope } from "../shared/feedback.ts";
 import { materialFeedback } from "./feedback.ts";
 import { icon } from "../shared/icons.ts";
-import type { Configuration, JobSummary, WebRendererStatus } from "./contracts.ts";
+import type { Configuration, WebRendererStatus } from "./contracts.ts";
 import { hostFailure } from "./contracts.ts";
 (() => {
-    const id = "70a9d327-7e98-4201-88a5-724d39366c40",
-        page = document.querySelector<HTMLElement>("#LyricBridgeConfig")!,
+    const page = document.querySelector<HTMLElement>("#LyricBridgeConfig")!,
         status = query("#lb-config-status");
 
     interface Controls {
@@ -16,26 +21,18 @@ import { hostFailure } from "./contracts.ts";
         "#lb-web-repair": HTMLButtonElement;
         "#lb-approval": HTMLInputElement;
         "#lb-scheduled": HTMLInputElement;
-        "#lb-reset-status": HTMLElement;
         "#lb-defaults": HTMLElement;
         "#lb-score": HTMLInputElement;
-        "#lb-reset-submit": HTMLButtonElement;
         form: HTMLElement;
         "#lb-sources": HTMLElement;
         "#lb-queue": HTMLElement;
         "#lb-services": HTMLElement;
         ".content-primary": HTMLElement;
-        "#lb-refresh": HTMLButtonElement;
-        "#lb-queue-status": HTMLElement;
-        "#lb-reset-word": HTMLInputElement;
         "#lb-config-status": HTMLElement;
         "#lb-storage-warning": HTMLElement;
         "#lb-daily": HTMLInputElement;
-        "#lb-reset-open": HTMLButtonElement;
         "#lb-default-language-options": HTMLElement;
-        "#lb-reset-cancel": HTMLButtonElement;
         "#lb-storage": HTMLInputElement;
-        "#lb-reset-confirm": HTMLElement;
         "#lb-active": HTMLInputElement;
         "#lb-effective-storage": HTMLElement;
         "#lb-config-tabs": HTMLElement & {
@@ -52,7 +49,18 @@ import { hostFailure } from "./contracts.ts";
         if (!element) throw new Error("Missing configuration control: " + selector);
         return element as S extends keyof Controls ? Controls[S] : HTMLElement;
     }
+    interface SettingsSnapshot {
+        configuration: Configuration;
+        revision: string;
+    }
     let config: Configuration, savedConfig: Configuration;
+    let settingsRevision = "",
+        saving = false;
+    const conflictPanel = node("section");
+    conflictPanel.className = "lb-settings-surface";
+    conflictPanel.hidden = true;
+    conflictPanel.setAttribute("aria-label", "Settings conflict");
+    query("#lb-config-tabs").after(conflictPanel);
     let rendererRuntime: WebRendererStatus | undefined;
     let storageRuntime: { activeStoragePath?: string; configuredStoragePath?: string; restartRequired?: boolean } = {};
     let dirty = false,
@@ -61,8 +69,12 @@ import { hostFailure } from "./contracts.ts";
         loading = false;
     const saveButton = query(".lb-config-footer .button-submit");
     let activeEditor: "source" | "service" | null = null;
-    let sourceDraft: { name: string; credential: string } | null = null;
+    let sourceDraft: Configuration["Sources"][number] | null = null;
     function editing(owner: "source" | "service", value: boolean, resume?: () => void) {
+        if (value && saving) {
+            notice(status, "Wait for settings to finish saving before opening an editor.");
+            return false;
+        }
         if (value && activeEditor !== null) {
             const previousOwner = activeEditor;
             const current = page.querySelector<HTMLElement>((activeEditor === "source" ? "#lb-sources" : "#lb-services") + " .lb-service-editor");
@@ -112,7 +124,8 @@ import { hostFailure } from "./contracts.ts";
         }
         activeEditor = value ? owner : null;
         saveButton.disabled = value || !loaded;
-        notice(status, value ? "Apply or cancel editor changes before saving." : dirty ? "Unsaved changes" : "");
+        notice(status, value ? "Apply adds this edit to your draft. Save settings persists all changes." : dirty ? "Unsaved changes" : "");
+        updateDirtyMarkers();
         return true;
     }
     const names: Record<string, string> = {
@@ -168,15 +181,17 @@ import { hostFailure } from "./contracts.ts";
     }
     page.addEventListener("viewhide", () => {
         feedbackVisible = false;
-        queueRevision++;
+        requestsPanel.hide();
         window.removeEventListener("resize", positionFooter);
         feedbackScope.dispose();
     });
     function changed(event?: Event) {
         if (event?.target instanceof Element && event.target.closest("[data-config-transient]")) return;
-        dirty = true;
+        syncFields();
+        dirty = !same(config, savedConfig);
         configRevision++;
-        notice(status, "Unsaved changes");
+        updateDirtyMarkers();
+        notice(status, dirty ? "Unsaved changes" : "");
         refreshDependentControls();
     }
     const sourceHelp: Record<string, string[]> = {
@@ -301,7 +316,7 @@ import { hostFailure } from "./contracts.ts";
                     : code === 403
                       ? "This action requires administrator permissions."
                       : "The request failed. Check the service setup and retry this action.");
-            const failure = Object.assign(new Error(message), { details: body?.error });
+            const failure = Object.assign(new Error(body?.error?.message || error.message || message), { details: body?.error, status: code });
             throw failure;
         }
     }
@@ -321,11 +336,17 @@ import { hostFailure } from "./contracts.ts";
             });
             checkbox.setAttribute("aria-label", "Enable " + s.Name);
             function refreshSourceState() {
-                const missing = requiresCredential && !s.Credential?.trim();
+                const missing = requiresCredential && !credentialAvailable(s, s.Credential);
                 checkbox.disabled = missing;
                 checkbox.checked = !!s.Enabled && !missing;
                 const badge = header.title.querySelector<HTMLElement>(".lb-config-badge")!;
-                badge.textContent = missing ? "Needs setup" : s.Credential?.trim() ? "Configured" : "Built in";
+                badge.textContent = missing
+                    ? "Needs setup"
+                    : credentialAvailable(s, s.Credential)
+                      ? "Configured"
+                      : s.Name === "Musixmatch"
+                        ? "Token optional"
+                        : "No setup needed";
                 const enabledLabel = checkbox.closest<HTMLElement>("label")!;
                 enabledLabel.title = missing ? "Choose Edit to configure credentials before enabling this source." : "";
                 if (missing) {
@@ -361,21 +382,23 @@ import { hostFailure } from "./contracts.ts";
             }
             if (["Spotify", "AppleMusic", "Musixmatch"].includes(s.Name)) {
                 header.description.textContent =
-                    s.Name === "Spotify" ? "Spotify cookie" : s.Name === "AppleMusic" ? "Media-user token" : "Optional token";
+                    s.Name === "Spotify" ? "Spotify cookie" : s.Name === "AppleMusic" ? "Media-user token" : "Works without a token.";
+                if (requiresCredential && !credentialAvailable(s, s.Credential))
+                    header.description.textContent += " required. Choose Edit to configure.";
                 header.description.hidden = false;
                 header.actions.append(
-                    button(
+                    rowAction(
                         "Edit",
                         function openSourceEditor() {
                             if (!editing("source", true, openSourceEditor)) return;
-                            sourceDraft = { name: s.Name, credential: s.Credential || "" };
+                            sourceDraft = structuredClone(s);
                             sources();
                             target.querySelector<HTMLInputElement>("[data-config-transient] input")?.focus();
                         },
                         "quiet",
                     ),
                 );
-                if (sourceDraft?.name === s.Name) {
+                if (sourceDraft?.Name === s.Name) {
                     const draft = sourceDraft;
                     const form = node("div");
                     form.className = "lb-service-editor";
@@ -383,9 +406,15 @@ import { hostFailure } from "./contracts.ts";
                     const title = node("h4", "Edit " + s.Name);
                     title.className = "lb-settings-editor-title";
                     form.append(title);
-                    field(form, "Credential", draft.credential, "password", (value) => {
-                        draft.credential = value;
-                    });
+                    form.append(node("p", "Apply adds changes to the draft; Save settings persists them."));
+                    credentialEditor(
+                        form,
+                        draft,
+                        () => draft.Credential,
+                        (value) => {
+                            draft.Credential = value;
+                        },
+                    );
                     const instructions = node("details");
                     instructions.append(node("summary", "Setup instructions"));
                     guidance(instructions, sourceHelp[s.Name] || []);
@@ -395,10 +424,18 @@ import { hostFailure } from "./contracts.ts";
                         sourceDraft = null;
                         editing("source", false);
                         sources();
+                        target.querySelector<HTMLElement>('[data-source="' + s.Name + '"] .lb-settings-row-actions button')?.focus();
                     };
                     actions.append(
                         button("Apply", () => {
-                            s.Credential = draft.credential;
+                            if (draft.CredentialAction === "replace" && !draft.Credential.trim()) {
+                                const error = node("p");
+                                form.append(error);
+                                failure(error, "Enter a replacement credential, or choose Keep or Clear.");
+                                return;
+                            }
+                            s.Credential = draft.Credential;
+                            s.CredentialAction = draft.CredentialAction;
                             changed();
                             close();
                         }),
@@ -411,15 +448,11 @@ import { hostFailure } from "./contracts.ts";
                 header.description.textContent = "Availability varies by region.";
                 header.description.hidden = false;
             }
-            if (!["Spotify", "AppleMusic", "Musixmatch"].includes(s.Name)) {
-                const edit = button("Edit", null, "quiet");
-                edit.title = "This source has no editable settings.";
-                header.actions.append(edit);
-            }
             target.append(row);
         });
     }
     function positionFooter() {
+        revealSelectedTab(query("#lb-config-tabs"));
         const content = query(".content-primary"),
             rect = content.getBoundingClientRect(),
             style = getComputedStyle(content);
@@ -570,6 +603,7 @@ import { hostFailure } from "./contracts.ts";
         renderServices({
             target: query("#lb-services"),
             setup: config.ServiceSetup,
+            savedSetup: savedConfig.ServiceSetup,
             localPolicy: page.querySelector<HTMLElement>("#lb-local-pronunciation")!,
             changed,
             active: () => feedbackVisible,
@@ -591,50 +625,48 @@ import { hostFailure } from "./contracts.ts";
             feedback: (target, text, error) => (error ? failure(target, text) : notice(target, text)),
         });
     }
-    const resetOpen = query("#lb-reset-open"),
-        resetConfirm = query("#lb-reset-confirm"),
-        resetWord = query("#lb-reset-word"),
-        resetSubmit = query("#lb-reset-submit"),
-        resetStatus = query("#lb-reset-status");
-    resetOpen.onclick = () => {
-        resetConfirm.hidden = false;
-        resetOpen.hidden = true;
-        resetWord.focus();
+    let dataMaintenance = false;
+    const dataHost: DataHost = {
+        call,
+        feedback: (target, message, error) => (error ? failure(target, message) : notice(target, message)),
+        unsaved: () => dirty || activeEditor !== null,
+        busy: () => loading || !loaded || saving,
+        discard: async () => {
+            // Confirm successful retrieval before disposing unfinished drafts.
+            const snapshot = await call<SettingsSnapshot>("admin/settings");
+            activeEditor = null;
+            sourceDraft = null;
+            config = snapshot.configuration;
+            savedConfig = structuredClone(snapshot.configuration);
+            settingsRevision = snapshot.revision;
+            render();
+            dirty = false;
+            loaded = true;
+            updateDirtyMarkers();
+            notice(status, "");
+        },
+        maintenance: (value) => {
+            dataMaintenance = value;
+            saveButton.disabled = value || !loaded || activeEditor !== null;
+            page.querySelectorAll<HTMLElement>("[data-tab]").forEach((panel) => {
+                if (panel.dataset.tab !== "Data") panel.inert = value;
+            });
+            page.querySelectorAll<HTMLButtonElement>('[role="tab"]').forEach((tab) => {
+                tab.disabled = value;
+            });
+        },
+        reload: loadSettings,
+        settings: (index) => activateTab(index, true),
     };
-    resetWord.oninput = () => {
-        resetSubmit.disabled = resetWord.value !== "RESET";
-    };
-    query("#lb-reset-cancel").onclick = () => {
-        resetConfirm.hidden = true;
-        resetOpen.hidden = false;
-        resetWord.value = "";
-        resetSubmit.disabled = true;
-        notice(resetStatus, "");
-        resetOpen.focus();
-    };
-    resetSubmit.onclick = async () => {
-        resetSubmit.disabled = true;
-        resetWord.disabled = true;
-        query("#lb-reset-cancel").disabled = true;
-        notice(resetStatus, "Resetting managed lyric library…");
-        try {
-            await call("admin/reset", "POST", { confirmation: resetWord.value });
-            notice(resetStatus, "Managed lyric library reset. Settings and source-library files were retained.", 4000);
-            resetConfirm.hidden = true;
-            resetOpen.hidden = false;
-            resetWord.value = "";
-            resetOpen.focus();
-        } catch (caught) {
-            const error = hostFailure(caught);
-            failure(resetStatus, error.message || "Reset failed. Try again.");
-            resetSubmit.disabled = resetWord.value !== "RESET";
-        } finally {
-            resetWord.disabled = false;
-            query("#lb-reset-cancel").disabled = false;
-        }
-    };
+    const dataPanel = createDataPanel(query("#lb-data-manager"), dataHost);
+    const requestsPanel = createRequestsPanel(
+        query("#lb-queue"),
+        dataHost,
+        () => feedbackVisible && !page.querySelector<HTMLElement>('[data-tab="Requests"]')!.hidden,
+    );
+    page.addEventListener("viewhide", () => dataPanel.hide());
     const tabs = query("#lb-config-tabs");
-    const tabNames = ["General", "Sources", "Services", "Display defaults", "Requests"];
+    const tabNames = ["General", "Sources", "Services", "Display defaults", "Requests", "Data"];
     function activateTab(index: number, focus = false) {
         if (typeof tabs.selectedIndex === "function") tabs.selectedIndex(index, false);
         page.querySelectorAll<HTMLElement>("[data-tab]").forEach((panel, i) => (panel.hidden = i !== index));
@@ -642,9 +674,17 @@ import { hostFailure } from "./contracts.ts";
             tab.setAttribute("aria-selected", String(i === index));
             tab.classList.toggle("emby-tab-button-active", i === index);
             tab.tabIndex = i === index ? 0 : -1;
-            if (i === index && focus) tab.focus();
+            if (i === index) {
+                if (focus) tab.focus();
+                tab.scrollIntoView({ block: "nearest", inline: "nearest" });
+            }
         });
+        query(".lb-config-footer").hidden = index === 5;
+        page.classList.toggle("lb-data-active", index === 5);
         if (index === 4 && loaded && feedbackVisible) void loadRequests();
+        else requestsPanel.hide();
+        if (index === 5 && loaded && feedbackVisible) dataPanel.show();
+        else dataPanel.hide();
     }
     tabs.replaceChildren(
         ...tabNames.map((name, i) => {
@@ -668,6 +708,7 @@ import { hostFailure } from "./contracts.ts";
     activateTab(0);
     tabs.addEventListener("keydown", (event) => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        if (!(event.target instanceof Element) || event.target.closest('[role="tablist"]') !== tabs) return;
         event.preventDefault();
         const current = Number((event.target as HTMLElement).closest<HTMLElement>("[role=tab]")?.dataset.index || 0);
         activateTab(
@@ -700,7 +741,10 @@ import { hostFailure } from "./contracts.ts";
         saveButton.disabled = true;
         notice(status, "Loading settings…");
         try {
-            config = await ApiClient.getPluginConfiguration(id);
+            const snapshot = await call<SettingsSnapshot>("admin/settings");
+            config = snapshot.configuration;
+            settingsRevision = snapshot.revision;
+            conflictPanel.hidden = true;
             config.Transcription ??= {
                 Enabled: false,
                 Endpoint: "https://api.groq.com/openai/v1",
@@ -729,9 +773,11 @@ import { hostFailure } from "./contracts.ts";
             render();
             dirty = false;
             loaded = true;
+            updateDirtyMarkers();
             if (feedbackVisible && !page.querySelector<HTMLElement>('[data-tab="Requests"]')!.hidden) void loadRequests();
-            saveButton.disabled = false;
+            saveButton.disabled = dataMaintenance;
             notice(status, "");
+            if (feedbackVisible && !dataMaintenance && !page.querySelector<HTMLElement>('[data-tab="Data"]')!.hidden) dataPanel.show();
         } catch (caught) {
             hostFailure(caught);
             console.error("LyricBridge configuration could not be loaded.");
@@ -750,14 +796,13 @@ import { hostFailure } from "./contracts.ts";
             refreshDependentControls();
             notice(status, dirty ? "Unsaved changes" : "");
             if (!page.querySelector<HTMLElement>('[data-tab="Requests"]')!.hidden) void loadRequests();
+            if (!page.querySelector<HTMLElement>('[data-tab="Data"]')!.hidden && !dataMaintenance) dataPanel.show();
         }
     });
     query("form").addEventListener("input", changed);
     query("form").addEventListener("change", changed);
-    query("form").onsubmit = async (event) => {
-        event.preventDefault();
-        if (!loaded || loading || saveButton.disabled) return;
-        saveButton.disabled = true;
+    function syncFields() {
+        if (!config) return;
         config.StoragePath = query("#lb-storage").value.trim();
         config.MinimumMatch = Number(query("#lb-score").value);
         config.UserRequestDailyQuota = Number(query("#lb-daily").value);
@@ -770,224 +815,189 @@ import { hostFailure } from "./contracts.ts";
             ["AutoApproveUserRequests", "#lb-approval"],
         ] as const)
             config[key] = query(selector).checked;
-        notice(status, "Saving…");
-        try {
-            const revision = configRevision,
-                snapshot = JSON.parse(JSON.stringify(config));
-            const storageChanged = snapshot.StoragePath !== savedConfig.StoragePath;
-            await ApiClient.updatePluginConfiguration(id, snapshot);
-            savedConfig = snapshot;
-            storageRuntime = await call<typeof storageRuntime>("admin/runtime").catch(() => ({
-                ...storageRuntime,
-                restartRequired: storageRuntime.restartRequired || storageChanged,
-            }));
-            rendererRuntime = await call<WebRendererStatus>("admin/web-renderer/repair", "POST").catch(() => undefined);
-            refreshDependentControls();
-            dirty = revision !== configRevision;
-            notice(status, dirty ? "Unsaved changes" : "Settings saved", dirty ? 0 : 4000);
-        } catch {
-            dirty = true;
-            failure(status, "Settings were not saved. Check the values and try again.");
-        } finally {
-            saveButton.disabled = !loaded;
-        }
-    };
-    const queueStatus = query("#lb-queue-status");
-    let queueOffset = 0;
-    let queueRevision = 0;
-    async function loadRequests() {
-        const revision = ++queueRevision;
-        const current = () => feedbackVisible && revision === queueRevision;
-        query("#lb-refresh").setAttribute("aria-busy", "true");
-        notice(queueStatus, "Loading requests…");
-        try {
-            const jobs = await call<JobSummary[]>("jobs?offset=" + queueOffset + "&limit=50");
-            if (!current()) return;
-            notice(queueStatus, "");
-            const target = query("#lb-queue");
-            target.replaceChildren();
-            const retention = node("p", "Finished requests are kept for 30 days.");
-            retention.className = "fieldDescription";
-            const cleanup = node("div");
-            cleanup.className = "lb-actions";
-            const cleanupStatus = node("div");
-            let removing = false;
-            const remove = async (ids: string[]) => {
-                if (removing || !feedbackVisible) return;
-                removing = true;
-                const controls = Array.from(target.querySelectorAll<HTMLButtonElement>("button")).map((control) => ({
-                    control,
-                    disabled: control.disabled,
-                }));
-                controls.forEach(({ control }) => {
-                    control.disabled = true;
-                });
-                notice(cleanupStatus, "Removing finished requests…");
-                cleanupStatus.setAttribute("aria-busy", "true");
-                try {
-                    for (let first = 0; first < ids.length; first += 500) {
-                        if (!feedbackVisible) return;
-                        await call("jobs/history/remove", "POST", { ids: ids.slice(first, first + 500) });
-                    }
-                    if (!feedbackVisible || !target.isConnected) return;
-                    queueOffset = 0;
-                    query("#lb-refresh").click();
-                } catch (error) {
-                    failure(cleanupStatus, hostFailure(error).message ?? "History could not be removed.");
-                } finally {
-                    removing = false;
-                    cleanupStatus.setAttribute("aria-busy", "false");
-                    controls.forEach(({ control, disabled }) => {
-                        if (control.isConnected) control.disabled = disabled;
-                    });
+    }
+    function updateDirtyMarkers() {
+        if (!config || !savedConfig) return;
+        const groups = [
+            ["EnableWebRenderer", "StoragePath", "ScheduledRetrieval"],
+            ["Sources", "MinimumMatch"],
+            ["ServiceSetup", "AutoGeneratePronunciation"],
+            ["Defaults"],
+            ["AllowUserRequests", "AutoApproveUserRequests", "UserRequestDailyQuota", "UserRequestActiveCap"],
+            [],
+        ];
+        page.querySelectorAll<HTMLElement>('#lb-config-tabs [role="tab"]').forEach((tab, index) => {
+            const changed =
+                groups[index]!.some((key) => !same(config[key], savedConfig[key])) ||
+                activeEditor === (index === 1 ? "source" : index === 2 ? "service" : "none");
+            tab.querySelector(".lb-dirty-marker")?.remove();
+            if (changed) {
+                const marker = node("span", " •");
+                marker.className = "lb-dirty-marker";
+                marker.setAttribute("aria-hidden", "true");
+                tab.append(marker);
+            }
+            tab.setAttribute("aria-description", changed ? "Unsaved changes" : "");
+        });
+    }
+    async function compareSettings() {
+        const latest = await call<SettingsSnapshot>("admin/settings");
+        const choices = new Map<string, "local" | "latest">();
+        const areas: Record<string, string> = {
+            Sources: "Sources",
+            MinimumMatch: "Sources",
+            ServiceSetup: "Services",
+            AutoGeneratePronunciation: "Services",
+            Defaults: "Display defaults",
+            AllowUserRequests: "Requests",
+            AutoApproveUserRequests: "Requests",
+            UserRequestDailyQuota: "Requests",
+            UserRequestActiveCap: "Requests",
+        };
+        const remoteAreas = [
+            ...new Set(
+                Object.keys(latest.configuration)
+                    .filter((key) => !same(savedConfig[key], latest.configuration[key]))
+                    .map((key) => areas[key] || "General"),
+            ),
+        ];
+        conflictPanel.hidden = false;
+        function show() {
+            const result = rebaseSettings(savedConfig, config, latest.configuration, choices);
+            conflictPanel.replaceChildren(
+                node("h3", "Saved settings changed"),
+                node("p", "Changed elsewhere: " + remoteAreas.join(", ") + "."),
+                node("p", "Your draft is preserved. Review conflicting changes before rebasing; nothing is saved automatically."),
+            );
+            for (const item of result.conflicts) {
+                const row = node("div");
+                row.className = "lb-settings-row";
+                const heading = settingsRowHeader(item.label);
+                const describe = (value: unknown) => (value === undefined ? "Removed" : typeof value === "object" ? "Changed item" : String(value));
+                heading.description.hidden = false;
+                heading.description.textContent = "Draft: " + describe(item.local) + " · Latest: " + describe(item.latest);
+                for (const choice of ["local", "latest"] as const)
+                    heading.actions.append(
+                        rowAction(
+                            choice === "local" ? "Use draft" : "Use latest",
+                            () => {
+                                choices.set(item.path, choice);
+                                show();
+                            },
+                            "quiet",
+                        ),
+                    );
+                row.append(heading.root);
+                if (typeof item.local === "object" || typeof item.latest === "object") {
+                    const details = node("details");
+                    details.append(
+                        node("summary", "Compare draft and latest"),
+                        node("h4", "Draft"),
+                        node("pre", JSON.stringify(item.local, null, 2)),
+                        node("h4", "Latest saved"),
+                        node("pre", JSON.stringify(item.latest, null, 2)),
+                    );
+                    heading.body.append(details);
                 }
-            };
-            const confirmRemoval = (ids: string[]) =>
-                feedbackScope.update(cleanupStatus, {
-                    message:
-                        "Remove " +
-                        ids.length +
-                        " finished request" +
-                        (ids.length === 1 ? "" : "s") +
-                        " from history? Saved results remain. These requests will no longer be retryable.",
-                    severity: "warning",
-                    actions: [
-                        { label: "Remove from history", destructive: true, run: () => remove(ids) },
-                        { label: "Cancel", run: () => notice(cleanupStatus, "") },
-                    ],
-                });
-            cleanup.append(
+                conflictPanel.append(row);
+            }
+            const actions = node("div");
+            actions.className = "lb-actions";
+            actions.append(
                 button(
-                    "Clear finished history",
-                    async () => {
-                        try {
-                            const result = await call<{ ids: string[] }>("jobs/history/finished");
-                            if (!feedbackVisible || !cleanupStatus.isConnected) return;
-                            if (result.ids.length) confirmRemoval(result.ids);
-                            else notice(cleanupStatus, "No finished requests to remove.");
-                        } catch (error) {
-                            failure(cleanupStatus, hostFailure(error).message ?? "History could not be loaded.");
-                        }
+                    "Rebase draft",
+                    result.conflicts.length
+                        ? null
+                        : () => {
+                              const final = rebaseSettings(savedConfig, config, latest.configuration, choices);
+                              if (final.conflicts.length) {
+                                  show();
+                                  return;
+                              }
+                              config = final.configuration;
+                              savedConfig = structuredClone(latest.configuration);
+                              settingsRevision = latest.revision;
+                              conflictPanel.hidden = true;
+                              render();
+                              changed();
+                              saveButton.disabled = !loaded || activeEditor !== null || dataMaintenance || !conflictPanel.hidden;
+                              notice(status, "Draft rebased. Review it, then Save settings.");
+                          },
+                ),
+                button(
+                    "Discard draft and load latest",
+                    () => {
+                        activeEditor = null;
+                        sourceDraft = null;
+                        void loadSettings();
                     },
                     "quiet",
                 ),
             );
-            if (!jobs.length) {
-                target.append(node("p", queueOffset ? "No more requests" : "No requests yet"));
-            }
-            for (const job of jobs) {
-                const row = node("div");
-                row.className = "lb-settings-row";
-                const heading = settingsRowHeader(
-                    job.request.kind + (job.request.language ? " · " + job.request.language : ""),
-                    job.progress + "%" + (job.stage ? " · " + job.stage : ""),
-                    job.state,
-                );
-                row.append(heading.root);
-                if (job.audio?.allowChunking) row.append(node("p", "Chunking requested · " + job.audio.chunkCount + " chunks · one request"));
-
-                if (job.outputDeleted)
-                    row.append(
-                        node(
-                            "p",
-                            "Output deleted" +
-                                (job.outputDeletedAt ? " · " + new Date(job.outputDeletedAt).toLocaleString() : "") +
-                                " · Job history retained",
-                        ),
-                    );
-                if (job.error) {
-                    const error = node("div");
-                    error.className = "fieldDescription lb-action-status";
-                    error.dataset.state = "error";
-                    error.setAttribute("role", "alert");
-                    feedbackScope.update(error, {
-                        message: job.error,
-                        severity: "error",
-                        details: job.failure?.diagnosticId ? ["Diagnostic ID: " + job.failure.diagnosticId] : [],
-                    });
-                    row.append(error);
-                }
-                const actions = job.outputDeleted
-                    ? []
-                    : job.state === "pending"
-                      ? ["approve", "reject", "cancel"]
-                      : ["queued", "running"].includes(job.state)
-                        ? ["cancel"]
-                        : ["failed", "settings_changed"].includes(job.state)
-                          ? ["retry"]
-                          : [];
-                let retryPlan: { identity: string; requestCount: number } | null = null;
-                for (const action of actions) {
-                    const actionButton = button(
-                        action.charAt(0).toUpperCase() + action.slice(1),
-                        async () => {
-                            try {
-                                await call(
-                                    "jobs/" + job.id + "/" + action + (retryPlan ? "?planIdentity=" + encodeURIComponent(retryPlan.identity) : ""),
-                                    "POST",
-                                );
-                                query("#lb-refresh").click();
-                            } catch (caught) {
-                                const error = hostFailure(caught);
-                                failure(queueStatus, error.message ?? "Request failed.");
-                            }
-                        },
-                        "quiet",
-                    );
-                    heading.actions.append(actionButton);
-                    if (action === "retry" && job.taskKind === "boundary-review") {
-                        actionButton.disabled = true;
-                        void call<{ identity: string; requestCount: number }>("jobs/" + job.id + "/review-plan", "POST")
-                            .then((plan) => {
-                                if (!actionButton.isConnected) return;
-                                retryPlan = plan;
-                                actionButton.textContent =
-                                    "Retry · " + plan.requestCount + (plan.requestCount === 1 ? " AI request" : " AI requests");
-                                actionButton.disabled = false;
-                            })
-                            .catch(() => {
-                                actionButton.title = "Could not plan retry. Refresh requests after checking the service configuration.";
-                            });
-                    }
-                }
-
-                if (["complete", "failed", "cancelled", "rejected", "settings_changed"].includes(job.state))
-                    heading.actions.append(button("Remove from history", () => confirmRemoval([job.id]), "quiet"));
-                if (job.reviewPlan)
-                    row.append(node("p", job.reviewPlan.requestCount + (job.reviewPlan.requestCount === 1 ? " AI request" : " AI requests")));
-                const edit = button("Edit", null, "quiet");
-                edit.title = "Request history has no editable settings.";
-                heading.actions.append(edit);
-                row.querySelectorAll(":scope > p").forEach((note) => note.classList.add("fieldDescription", "lb-settings-row-description"));
-                target.append(row);
-            }
-            const navigation = node("div");
-            navigation.className = "lb-actions";
-            if (queueOffset > 0)
-                navigation.append(
-                    button("Newer requests", () => {
-                        queueOffset = Math.max(0, queueOffset - 50);
-                        query("#lb-refresh").click();
-                    }),
-                );
-            if (jobs.length === 50)
-                navigation.append(
-                    button("Older requests", () => {
-                        queueOffset += 50;
-                        query("#lb-refresh").click();
-                    }),
-                );
-            if (jobs.some((job) => ["complete", "failed", "cancelled", "rejected", "settings_changed"].includes(job.state))) target.append(cleanup);
-            target.append(cleanupStatus);
-            if (jobs.length) target.append(retention);
-            if (navigation.childElementCount) target.append(navigation);
-        } catch (caught) {
-            if (!current()) return;
-            const error = hostFailure(caught);
-            failure(queueStatus, (error.message || "Requests could not be loaded.") + " Select Refresh to retry.");
-        } finally {
-            if (current()) query("#lb-refresh").setAttribute("aria-busy", "false");
+            conflictPanel.append(actions);
         }
+        show();
+        conflictPanel.scrollIntoView({ block: "nearest" });
+        conflictPanel.querySelector<HTMLButtonElement>("button")?.focus();
     }
-    query("#lb-refresh").onclick = () => void loadRequests();
+    query("form").onsubmit = async (event) => {
+        event.preventDefault();
+        if (!loaded || loading || saving || dataMaintenance || activeEditor !== null) return;
+        syncFields();
+        saving = true;
+        saveButton.disabled = true;
+        notice(status, "Saving…");
+        const revision = configRevision,
+            snapshot = structuredClone(config);
+        const payload = structuredClone(snapshot);
+        const credentials = [
+            ...payload.Sources.map((value) => ({
+                kind: "source",
+                id: value.Name,
+                action: value.CredentialAction || "keep",
+                value: value.Credential,
+            })),
+            ...payload.ServiceSetup.Connections.map((value) => ({
+                kind: "connection",
+                id: value.Id,
+                action: value.CredentialAction || "keep",
+                value: value.ApiKey,
+            })),
+        ].filter((value) => value.action !== "keep");
+        for (const value of payload.Sources) value.Credential = "";
+        for (const value of payload.ServiceSetup.Connections) value.ApiKey = "";
+        try {
+            const saved = await call<SettingsSnapshot>("admin/settings", "PUT", { configuration: payload, revision: settingsRevision, credentials });
+            settingsRevision = saved.revision;
+            if (revision === configRevision) {
+                config = structuredClone(saved.configuration);
+                savedConfig = structuredClone(saved.configuration);
+                render();
+            } else {
+                config = rebaseSettings(snapshot, config, saved.configuration).configuration;
+                savedConfig = structuredClone(saved.configuration);
+            }
+            storageRuntime = await call<typeof storageRuntime>("admin/runtime").catch(() => storageRuntime);
+            rendererRuntime = await call<WebRendererStatus>("admin/web-renderer/repair", "POST").catch(() => undefined);
+            refreshDependentControls();
+            dirty = !same(config, savedConfig);
+            updateDirtyMarkers();
+            notice(status, dirty ? "Unsaved changes" : "Settings saved", dirty ? 0 : 4000);
+        } catch (caught) {
+            dirty = true;
+            if (hostFailure(caught).status === 409) {
+                try {
+                    await compareSettings();
+                } catch {
+                    failure(status, "Latest settings could not load. Your draft is preserved; retry Save settings.");
+                }
+            } else failure(status, hostFailure(caught).message || "Settings were not saved. Your draft is preserved; try again.");
+        } finally {
+            saving = false;
+            saveButton.disabled = !loaded || activeEditor !== null || dataMaintenance || !conflictPanel.hidden;
+        }
+    };
+    async function loadRequests() {
+        await requestsPanel.refresh();
+    }
 })();

@@ -25,12 +25,18 @@ public sealed class StoreOperationFilter(Store store) : IAsyncActionFilter
 {
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
+        if (store.IsResetting && context.HttpContext.Request.Method is not ("GET" or "HEAD"))
+            throw new WorkflowException(409, "reset_in_progress", "Plugin data is being reset. Retry when maintenance finishes.", true);
         if (context.ActionArguments.TryGetValue("id", out var id) && id is Guid item)
         {
             using var operation = store.Operation(store.Admit(item));
             await next();
         }
-        else await next();
+        else
+        {
+            using var operation = store.Operation();
+            await next();
+        }
     }
 }
 [ApiController, Authorize, Route("LyricBridge"), TypeFilter(typeof(SafeExceptionFilter)), TypeFilter(typeof(StoreOperationFilter))]
@@ -145,8 +151,13 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
     {
         if (!Admin) return Error(403, "permission_denied", "Only an administrator can reset the managed lyric library.");
         if (input.Confirmation != "RESET") return Error(400, "confirmation_required", "Type RESET to confirm deleting the managed lyric library.");
-        var deleted = await maintenance.Reset();
-        return deleted is null ? Error(409, "reset_in_progress", "A managed lyric reset is already running.") : JsonData(new { deleted });
+        plugin.Value.BeginDataMaintenance();
+        try
+        {
+            var deleted = await maintenance.Reset();
+            return deleted is null ? Error(409, "reset_in_progress", "A managed lyric reset is already running.") : JsonData(new { deleted });
+        }
+        finally { plugin.Value.EndDataMaintenance(); }
     }
     [HttpPost("items/{id:guid}/reject-matches")]
     public IActionResult RejectMatches(Guid id) { if (!Admin) return Error(403, "permission_denied", "An administrator must reject library matches."); if (Item(id) == null) return NotFound(); selection.Reject(id); return NoContent(); }

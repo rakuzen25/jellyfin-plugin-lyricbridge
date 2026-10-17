@@ -347,6 +347,76 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         assert plugin["Status"] == "Active", "Installed plugin is not active"
         configuration = call_json(f"/Plugins/{PLUGIN}/Configuration")
 
+        settings_api = "/LyricBridge/admin/settings"
+        initial_settings = call_json(settings_api)
+        assert (
+            initial_settings["configuration"]["StoragePath"]
+            == configuration["StoragePath"]
+        )
+        saved_settings = call_json(
+            settings_api,
+            "PUT",
+            {
+                "revision": initial_settings["revision"],
+                "configuration": initial_settings["configuration"],
+                "credentials": [
+                    {
+                        "kind": "source",
+                        "id": "Spotify",
+                        "action": "replace",
+                        "value": "fixture-admin-settings-secret",
+                    }
+                ],
+            },
+        )
+        assert "fixture-admin-settings-secret" not in json.dumps(saved_settings)
+        spotify = next(
+            source
+            for source in saved_settings["configuration"]["Sources"]
+            if source["Name"] == "Spotify"
+        )
+        assert spotify["CredentialPresent"] and spotify["Credential"] == ""
+        try:
+            call(
+                settings_api,
+                "PUT",
+                {
+                    "revision": initial_settings["revision"],
+                    "configuration": initial_settings["configuration"],
+                },
+            )
+            raise AssertionError("Stale settings revision accepted")
+        except urllib.error.HTTPError as error:
+            assert error.code == 409
+        saved_settings = call_json(
+            settings_api,
+            "PUT",
+            {
+                "revision": saved_settings["revision"],
+                "configuration": saved_settings["configuration"],
+                "credentials": [],
+            },
+        )
+        restart_server()
+        persisted_settings = call_json(settings_api)
+        assert next(
+            source
+            for source in persisted_settings["configuration"]["Sources"]
+            if source["Name"] == "Spotify"
+        )["CredentialPresent"]
+        call(
+            settings_api,
+            "PUT",
+            {
+                "revision": persisted_settings["revision"],
+                "configuration": persisted_settings["configuration"],
+                "credentials": [{"kind": "source", "id": "Spotify", "action": "clear"}],
+            },
+        )
+        assert isinstance(
+            call_json("/LyricBridge/admin/requests?group=finished")["items"], list
+        )
+
         def renderer_index():
             with urllib.request.urlopen(base + "/web/index.html") as response:
                 return response.read().decode()
@@ -570,17 +640,19 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         choice = {
             "transcriptId": source_job["resultId"],
             "endTokenIds": ["t0", "t1"],
-            "settings": transcript["versions"][0]["settings"],
+            "settings": {"characters": None, "seconds": 3, "keepShortReplies": True},
             "expectedSelection": transcript["selection"],
         }
         preview = call_json(transcript_api + "/preview", "POST", choice)
         assert len(preview["lines"]) == 2
         assert call_json(public_api + "/lyrics")["lyrics"]["hash"] == original_hash
+        review_input = {**choice, "optionId": review_option}
+        review_plan = call_json(transcript_api + "/review-plan", "POST", review_input)
         completed(
             call_json(
                 transcript_api + "/review",
                 "POST",
-                {**choice, "optionId": review_option},
+                {**review_input, "planIdentity": review_plan["identity"]},
             )
         )
         call(transcript_api + "/use", "POST", choice)
@@ -631,7 +703,23 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         call("/LyricBridge/preferences", "PUT", preferences)
         assert call_json("/LyricBridge/preferences")["originalSize"] == 51
         for path, method, body in [
+            ("/LyricBridge/admin/settings", "GET", None),
+            (
+                "/LyricBridge/admin/settings",
+                "PUT",
+                {"revision": "invalid", "configuration": {}},
+            ),
+            ("/LyricBridge/admin/requests?group=active", "GET", None),
             ("/LyricBridge/admin/runtime", "GET", None),
+            ("/LyricBridge/admin/data/overview", "GET", None),
+            ("/LyricBridge/admin/data/configuration", "GET", None),
+            ("/LyricBridge/admin/data/records", "GET", None),
+            ("/LyricBridge/admin/data/preview", "POST", {"action": "factory-reset"}),
+            (
+                "/LyricBridge/admin/data/execute",
+                "POST",
+                {"token": "invalid", "confirmed": True},
+            ),
             ("/LyricBridge/admin/web-renderer", "GET", None),
             ("/LyricBridge/admin/web-renderer/repair", "POST", {}),
             ("/LyricBridge/admin/reset", "POST", {"confirmation": "RESET"}),
@@ -683,6 +771,49 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
             "PASS: official Linux x64 catalog installation, restart, dependency loading, authenticated API and anonymous rejection.",
             flush=True,
         )
+        data_api = "/LyricBridge/admin/data"
+        try:
+            call(data_api + "/overview", anonymous=True)
+            raise AssertionError("Anonymous Data API access accepted")
+        except urllib.error.HTTPError as error:
+            assert error.code == 401
+        saved_records = call_json(
+            data_api + "/records?category=originals&itemId=" + public_id
+        )
+        saved_target = next(
+            record["target"]
+            for record in saved_records["items"]
+            if record["target"]["kind"] == "saved-original"
+        )
+        inspected_original = call_json(
+            data_api + "/detail?" + urllib.parse.urlencode(saved_target)
+        )
+        assert inspected_original["readableText"]
+        assert inspected_original["displayType"] == "Original lyrics"
+        assert inspected_original["inspection"]["lines"]
+        assert all(
+            line.get("startSeconds") is None or line["startSeconds"] < 86400
+            for line in inspected_original["inspection"]["lines"]
+        )
+        assert any(
+            link["role"] == "source" and link["target"]["kind"] == "document"
+            for link in inspected_original["inspection"]["relationships"]
+        )
+        listener_preferences = {
+            "kind": "preferences",
+            "id": listener["Id"].replace("-", "").lower(),
+        }
+        targeted = call_json(
+            data_api + "/preview", "POST", {"targets": [listener_preferences]}
+        )
+        removed_preferences = call_json(
+            data_api + "/execute",
+            "POST",
+            {"token": targeted["token"], "confirmed": True},
+        )
+        assert removed_preferences["complete"]
+        assert removed_preferences["outcomes"][0]["status"] == "deleted"
+        assert call_json("/LyricBridge/preferences") == admin_preferences
         call("/LyricBridge/admin/reset", "POST", {"confirmation": "RESET"})
         assert call_json("/LyricBridge/preferences") == admin_preferences, (
             "Reset changed preferences"
@@ -694,6 +825,49 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         } == media_before, "Media files changed"
         print(
             "PASS: native lyrics, packaged dictionary, restricted libraries, rejection preservation, reset boundaries and read-only media.",
+            flush=True,
+        )
+        data_api = "/LyricBridge/admin/data"
+        overview = call_json(data_api + "/overview")
+        assert overview["activeStoragePath"] == runtime["activeStoragePath"]
+        assert call_json(data_api + "/accounts")["total"] >= 1
+        assert isinstance(call_json(data_api + "/records")["items"], list)
+        configuration["StoragePath"] = "/config/data/unused-pending-path"
+        configuration["Sources"][0]["Credential"] = "fixture-factory-reset-secret"
+        call(f"/Plugins/{PLUGIN}/Configuration", "POST", configuration)
+        inspected = call_json(data_api + "/configuration")
+        assert "fixture-factory-reset-secret" not in json.dumps(inspected)
+        assert inspected["sources"][0]["credentialPresent"]
+        preview = call_json(data_api + "/preview", "POST", {"action": "factory-reset"})
+        assert preview["confirmation"] == "FACTORY RESET"
+        result = call_json(
+            data_api + "/execute",
+            "POST",
+            {
+                "token": preview["token"],
+                "confirmation": "FACTORY RESET",
+                "confirmed": True,
+            },
+        )
+        assert result["complete"], result
+        assert call_json(data_api + "/records")["total"] == 0
+        restored = call_json(f"/Plugins/{PLUGIN}/Configuration")
+        assert restored["StoragePath"] in ("", overview["activeStoragePath"])
+        assert all(not source["Credential"] for source in restored["Sources"])
+        assert all(not service["ApiKey"] for service in restored["Services"])
+        assert not restored["Transcription"]["ApiKey"]
+        assert not call_json("/LyricBridge/admin/runtime")["restartRequired"]
+        restart_server()
+        restarted = call_json(f"/Plugins/{PLUGIN}/Configuration")
+        assert restarted["StoragePath"] == restored["StoragePath"]
+        assert all(not source["Credential"] for source in restarted["Sources"])
+        assert call_json(data_api + "/records")["total"] == 0
+        # Restore disabled synthetic sources before the remaining uninstall checks.
+        configuration = restarted
+        for source in configuration["Sources"]:
+            source["Enabled"] = False
+        print(
+            "PASS: administrator Data API, credential exclusion, factory reset, active-path retention and restart persistence.",
             flush=True,
         )
         configuration["EnableWebRenderer"] = False

@@ -64,13 +64,13 @@ public sealed partial class Store
     }
     private bool CanWrite<T>(SqliteConnection c, SqliteTransaction tx, string kind, string id, T? value)
     {
-        if (kind is "preferences" or "song-preferences") return true;
         if (IsResetting || operationEpoch.Value is long epoch && epoch != Epoch) return false;
         if (admission.Value is { } ticket)
         {
-            var hashes = value is null ? [] : Hashes(JsonSerializer.SerializeToElement(value, Codec.Json)).Distinct().ToList();
+            var hashes = value is null ? new List<string>() : Hashes(JsonSerializer.SerializeToElement(value, Codec.Json)).Distinct().ToList();
+            hashes.Add("record:" + kind + ":" + id);
             if (kind == "auxiliary-choice" && id.Split(':') is { Length: >= 2 } parts) hashes.Add(parts[1]);
-            if (!ValidAdmission(c, tx, ticket, hashes)) return false;
+            if (!ValidAdmission(c, tx, ticket, hashes, songScope: kind is not ("preferences" or "song-preferences"))) return false;
         }
         if (kind == "job" && value is Job job)
         {

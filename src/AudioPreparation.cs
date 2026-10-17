@@ -13,25 +13,78 @@ public sealed record AudioUpload(string Id, Guid ItemId, Guid UserId, long Bytes
 public sealed class AudioPreparation(Store store, Func<ILibraryManager> libraryFactory, Func<IMediaEncoder> encoderFactory) : IAudioPreparation
 {
     private readonly object uploadGate = new();
+    private sealed record UploadWork(CancellationTokenSource Cancellation, TaskCompletionSource Completion);
+    private readonly Dictionary<string, UploadWork> uploads = new(StringComparer.Ordinal);
+    public bool IsUploading(string id) { lock (uploadGate) return uploads.ContainsKey(id); }
+    public async Task StopUploads()
+    {
+        UploadWork[] active;
+        lock (uploadGate) active = uploads.Values.ToArray();
+        foreach (var work in active)
+            try { work.Cancellation.Cancel(); }
+            catch (ObjectDisposedException) { /* The upload completed after the snapshot. */ }
+        await Task.WhenAll(active.Select(w => w.Completion.Task));
+    }
+    private void CheckStagingPath(string? id = null)
+    {
+        foreach (var path in id == null ? new[] { Root } : new[] { Root, Path.Combine(Root, id) })
+            if (Directory.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+                throw new WorkflowException(409, "unsafe_staging_path", "Audio staging must not contain symbolic directory links.");
+    }
+    public static bool OwnsStagingFile(string name) => name is "input" or "upload.json" or "prepared.json"
+        || Regex.IsMatch(name, @"^(prepared|chunk-[0-9]+)\.(opus|wav|flac)$", RegexOptions.CultureInvariant);
+    private void DeleteStagingDirectory(string directory)
+    {
+        if (!Directory.Exists(directory)) return;
+        CheckStagingPath(Path.GetFileName(directory));
+        foreach (var file in Directory.EnumerateFiles(directory).Where(path => OwnsStagingFile(Path.GetFileName(path))))
+        {
+            if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0) throw new WorkflowException(409, "unsafe_staging_path", "Audio staging files must not be symbolic links.");
+            File.Delete(file);
+        }
+        if (!Directory.EnumerateFileSystemEntries(directory).Any()) Directory.Delete(directory);
+    }
+    public void DeleteUnused(string id)
+    {
+        var path = DirectoryFor(id);
+        lock (uploadGate)
+        {
+            CheckStagingPath(id);
+            if (uploads.ContainsKey(id) || store.InspectData().Where(r => r.Kind == "job").Select(r => Codec.Deserialize<Job>(r.Payload.GetRawText())!)
+                .Any(j => (j.Id == id || j.Audio?.UploadId == id) && (!JobLifecycle.Terminal(j.State) || j.State is "failed" or "settings_changed" && (j.TerminalAt == null || j.TerminalAt > DateTimeOffset.UtcNow.AddDays(-7)))))
+                throw new WorkflowException(409, "audio_in_use", "Audio is required by an upload, active request, or retry window.");
+            DeleteStagingDirectory(path);
+        }
+    }
     private string Root => Path.Combine(store.ActiveStoragePath, "audio-staging");
     private string DirectoryFor(string id)
     {
         if (!Guid.TryParseExact(id, "N", out _)) throw new WorkflowException(400, "invalid_audio_id", "Choose a valid audio upload.");
+        CheckStagingPath(id);
         return Path.Combine(Root, id);
     }
     public async Task<AudioUpload> Upload(Guid item, Guid user, Stream stream, long limit, CancellationToken token)
     {
         Cleanup();
         var id = Guid.NewGuid().ToString("N"); var dir = DirectoryFor(id);
-        lock (uploadGate)
+        var epoch = store.Epoch;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+        token = cancellation.Token;
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        store.WithDataWriteLock(() =>
         {
-            Directory.CreateDirectory(Root);
-            var reserved = Directory.EnumerateFiles(Root, "upload.json", SearchOption.AllDirectories)
-                .Select(path => Codec.Deserialize<AudioUpload>(File.ReadAllText(path))).Count(upload => upload?.UserId == user);
-            if (reserved >= 3) throw new WorkflowException(409, "audio_staging_limit", "Three audio uploads are already staged for this account. Finish or cancel their requests before uploading another.");
-            Directory.CreateDirectory(dir);
-            File.WriteAllText(Path.Combine(dir, "upload.json"), Codec.Serialize(new AudioUpload(id, item, user, 0, DateTimeOffset.UtcNow)));
-        }
+            lock (uploadGate)
+            {
+                Directory.CreateDirectory(Root);
+                var reserved = Directory.EnumerateFiles(Root, "upload.json", SearchOption.AllDirectories)
+                    .Select(path => Codec.Deserialize<AudioUpload>(File.ReadAllText(path))).Count(upload => upload?.UserId == user);
+                if (reserved >= 3) throw new WorkflowException(409, "audio_staging_limit", "Three audio uploads are already staged for this account. Finish or cancel their requests before uploading another.");
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, "upload.json"), Codec.Serialize(new AudioUpload(id, item, user, 0, DateTimeOffset.UtcNow)));
+                uploads[id] = new(cancellation, completion);
+            }
+            return true;
+        });
         try
         {
             await using var output = new FileStream(Path.Combine(dir, "input"), FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true);
@@ -45,10 +98,16 @@ public sealed class AudioPreparation(Store store, Func<ILibraryManager> libraryF
             if (bytes == 0) throw new WorkflowException(400, "empty_audio", "Choose a nonempty audio file.");
             var result = new AudioUpload(id, item, user, bytes, DateTimeOffset.UtcNow);
             token.ThrowIfCancellationRequested();
-            lock (uploadGate) File.WriteAllText(Path.Combine(dir, "upload.json"), Codec.Serialize(result));
+            lock (uploadGate)
+            {
+                token.ThrowIfCancellationRequested();
+                if (store.IsResetting || epoch != store.Epoch) throw new OperationCanceledException("The plugin data was reset.");
+                File.WriteAllText(Path.Combine(dir, "upload.json"), Codec.Serialize(result));
+            }
             return result;
         }
-        catch { Directory.Delete(dir, true); throw; }
+        catch { DeleteStagingDirectory(dir); throw; }
+        finally { lock (uploadGate) uploads.Remove(id); completion.TrySetResult(); }
     }
     public IReadOnlyList<AudioUpload> Uploads(Guid item, Guid user)
     {
@@ -67,7 +126,7 @@ public sealed class AudioPreparation(Store store, Func<ILibraryManager> libraryF
         {
             CheckUpload(id, item, user);
             if (store.ActiveJobs().Any(job => job.Audio?.UploadId == id)) throw new WorkflowException(409, "upload_in_use", "Cancel the audio request before discarding its input.");
-            Directory.Delete(DirectoryFor(id), true);
+            DeleteStagingDirectory(DirectoryFor(id));
         }
     }
     public void CheckUpload(string id, Guid item, Guid user)
@@ -158,19 +217,37 @@ public sealed class AudioPreparation(Store store, Func<ILibraryManager> libraryF
     public void Release(Job job)
     {
         var own = DirectoryFor(job.Id);
-        if (Directory.Exists(own)) Directory.Delete(own, true);
+        DeleteStagingDirectory(own);
         if (job.Audio is not { Source: "upload", UploadId: { } uploadId } || store.AudioUploadInUse(uploadId, job.Id)) return;
         var upload = DirectoryFor(uploadId);
         if (!Directory.Exists(upload)) return;
         CheckUpload(uploadId, job.ItemId, job.UserId);
-        Directory.Delete(upload, true);
+        DeleteStagingDirectory(upload);
     }
-    public void Clear() { if (Directory.Exists(Root)) Directory.Delete(Root, true); }
+    public void Clear()
+    {
+        lock (uploadGate)
+        {
+            CheckStagingPath();
+            if (uploads.Count != 0) throw new InvalidOperationException("Stop uploads before clearing audio staging.");
+            if (Directory.Exists(Root))
+            {
+                foreach (var directory in Directory.EnumerateDirectories(Root))
+                    if (Guid.TryParseExact(Path.GetFileName(directory), "N", out _)) DeleteStagingDirectory(directory);
+                if (!Directory.EnumerateFileSystemEntries(Root).Any()) Directory.Delete(Root);
+            }
+        }
+    }
     public void Cleanup()
     {
-        if (!Directory.Exists(Root)) return;
+        if (store.IsResetting || !Directory.Exists(Root)) return;
+        CheckStagingPath();
         var active = store.ActiveJobs().SelectMany(j => new[] { j.Id, j.Audio?.UploadId }).Where(id => id != null).ToHashSet();
         foreach (var dir in Directory.EnumerateDirectories(Root))
-            if (!active.Contains(Path.GetFileName(dir)) && Directory.GetLastWriteTimeUtc(dir) < DateTime.UtcNow.AddDays(-7)) { Directory.Delete(dir, true); store.DiscardChunks(Path.GetFileName(dir)); }
+            if (!active.Contains(Path.GetFileName(dir)) && Directory.GetLastWriteTimeUtc(dir) < DateTime.UtcNow.AddDays(-7))
+            {
+                try { DeleteUnused(Path.GetFileName(dir)); store.DiscardChunks(Path.GetFileName(dir)); }
+                catch (WorkflowException) { /* Active inputs and retry windows remain protected. */ }
+            }
     }
 }

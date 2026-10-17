@@ -5,12 +5,16 @@ public sealed class ManagedLibraryMaintenance(Store store, Discovery discovery, 
     public OriginalDeletion DeleteOriginal(Guid item, string hash, long? expectedRevision = null)
     {
         var result = store.DeleteOriginal(item, hash, expectedRevision);
+        NotifyOriginalDeletion(item, result);
+        return result;
+    }
+    public void NotifyOriginalDeletion(Guid item, OriginalDeletion result)
+    {
         using var operation = store.Operation(store.FreshAdmission(item));
         discovery.InvalidateDeleted(item, result.Revision);
         generation.CancelDeleted(result.CancelledJobs);
         foreach (var deletedHash in result.DeletedHashes) local.InvalidateDeleted(deletedHash);
         retrieval.ClearMissingCache();
-        return result;
     }
     public async Task<int?> Reset()
     {
@@ -20,7 +24,7 @@ public sealed class ManagedLibraryMaintenance(Store store, Discovery discovery, 
             await discovery.StopAll();
             await generation.StopAll();
             await local.StopAll();
-            audio?.Clear();
+            if (audio != null) { await audio.StopUploads(); audio.Clear(); }
             var deleted = store.ResetManagedLibrary();
             retrieval.ClearMissingCache();
             return deleted;

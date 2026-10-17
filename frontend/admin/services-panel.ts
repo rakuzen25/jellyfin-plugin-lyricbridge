@@ -1,10 +1,13 @@
-import { settingsRowHeader } from "./settings-row.ts";
+import { credentialAvailable, credentialEditor } from "./credentials.ts";
+import { same } from "./settings-draft.ts";
+import { settingsRowHeader, rowAction } from "./settings-row.ts";
 import { adminButton as action } from "./controls.ts";
 import type { ServiceConnection, ServiceOption, ServiceSetup } from "./contracts.ts";
 
 interface Dependencies {
     target: HTMLElement;
     setup: ServiceSetup;
+    savedSetup: ServiceSetup;
     localPolicy: HTMLElement;
     changed(): void;
     active(): boolean;
@@ -92,7 +95,7 @@ export function renderServices(d: Dependencies) {
         }
     };
     const connectionReady = (c: ServiceConnection | undefined) =>
-        !!c && (c.Provider === "DeepL" ? !!c.ApiKey.trim() && (!c.Endpoint || validEndpoint(c.Endpoint)) : validEndpoint(c.Endpoint));
+        !!c && (c.Provider === "DeepL" ? credentialAvailable(c, c.ApiKey) && (!c.Endpoint || validEndpoint(c.Endpoint)) : validEndpoint(c.Endpoint));
     const setupReason = (o: ServiceOption) => {
         if (o.Provider === "Google" || o.Provider === "Kawazu") return "";
         if (!connection(o)) return "Choose a connection";
@@ -104,9 +107,18 @@ export function renderServices(d: Dependencies) {
     const status = (o: ServiceOption) =>
         o.Provider === "Google" || o.Provider === "Kawazu" ? "Built in" : configured(o) ? "Configured" : "Needs setup";
     function closeEditor() {
+        const previous = editor;
         editor = null;
         d.editing(false);
         render();
+        if (previous) {
+            const row = d.target.querySelector<HTMLElement>(
+                previous.kind === "connection" ? '[data-connection-id="' + previous.value.Id + '"]' : '[data-option-id="' + previous.value.Id + '"]',
+            );
+            Array.from(row?.querySelectorAll<HTMLButtonElement>("button") || [])
+                .find((button) => button.textContent === "Edit")
+                ?.focus();
+        }
     }
     function begin(value: NonNullable<typeof editor>) {
         if (!d.editing(true, () => begin(value))) return;
@@ -171,8 +183,9 @@ export function renderServices(d: Dependencies) {
                     enabled.setAttribute("aria-description", unavailableReason);
                 }
                 enabledLabel.title = !configured(o) ? unavailableReason + ". Choose Edit to complete setup." : unavailableReason;
-                heading.actions.append(action("Edit", () => begin({ kind: "option", value: structuredClone(o), isNew: false }), "quiet"));
+                heading.actions.append(rowAction("Edit", () => begin({ kind: "option", value: structuredClone(o), isNew: false }), "quiet"));
                 row.append(heading.root);
+                if (unavailableReason) heading.body.append(node("p", unavailableReason + ".", "fieldDescription"));
                 body.append(row);
                 if (editor?.kind === "option" && editor.value.Id === o.Id) body.append(optionEditor(editor));
             }
@@ -228,7 +241,7 @@ export function renderServices(d: Dependencies) {
                 providers[c.Provider] + " · " + (used.length ? "Used by " + used.join(", ") : "Not assigned to a capability"),
                 connectionReady(c) ? "Configured" : "Needs setup",
             );
-            heading.actions.append(action("Edit", () => begin({ kind: "connection", value: structuredClone(c), isNew: false }), "quiet"));
+            heading.actions.append(rowAction("Edit", () => begin({ kind: "connection", value: structuredClone(c), isNew: false }), "quiet"));
             row.append(heading.root);
             connections.append(row);
             if (editor?.kind === "connection" && editor.value.Id === c.Id) connections.append(connectionEditor(editor));
@@ -244,6 +257,7 @@ export function renderServices(d: Dependencies) {
         const o = edit.value,
             form = node("div", undefined, "lb-service-editor");
         form.dataset.configTransient = "true";
+        form.append(node("p", "Apply adds changes to the draft; Save settings persists them.", "fieldDescription"));
         form.append(node("h4", edit.isNew ? "Add option" : "Edit " + o.Name, "lb-settings-editor-title"));
         const errors = node("div", undefined, "lb-service-editor-feedback");
         let scheduleLimits: (() => void) | undefined;
@@ -457,19 +471,38 @@ export function renderServices(d: Dependencies) {
                     closeEditor();
                 }),
             );
-        if (!edit.isNew && o.Provider !== "Kawazu" && (o.Capability === "translation" || o.Capability === "pronunciation"))
-            buttons.append(
-                action("Test connection", async () => {
-                    try {
-                        d.feedback(errors, "Testing with synthetic text…");
-                        await d.test(o.Id);
-                        if (errors.isConnected) d.feedback(errors, "Connection succeeded using synthetic text.");
-                    } catch {
-                        if (errors.isConnected)
-                            d.feedback(errors, "Connection test failed. Save settings first, then check endpoint, credentials and model.", true);
-                    }
-                }),
+        if (!edit.isNew && o.Provider !== "Kawazu" && (o.Capability === "translation" || o.Capability === "pronunciation")) {
+            const saved = d.savedSetup.Options.find((value) => value.Id === o.Id);
+            const savedConnection = d.savedSetup.Connections.find((value) => value.Id === o.ConnectionId);
+            const canTest = same(o, saved) && same(connection(o), savedConnection);
+            const test = action(
+                "Test saved settings",
+                canTest
+                    ? async () => {
+                          test.disabled = true;
+                          try {
+                              d.feedback(errors, "Testing saved settings with synthetic text…");
+                              await d.test(o.Id);
+                              d.feedback(errors, "Saved connection succeeded using synthetic text.");
+                          } catch {
+                              d.feedback(errors, "Saved connection test failed. Check endpoint, credentials and model.", true);
+                          } finally {
+                              if (test.isConnected) test.disabled = false;
+                          }
+                      }
+                    : null,
             );
+            buttons.append(test);
+            const explanation = node("p", "Apply and Save settings before testing changes to this option or its connection.", "fieldDescription");
+            explanation.hidden = canTest;
+            form.append(explanation);
+            const markDraft = () => {
+                test.disabled = true;
+                explanation.hidden = false;
+            };
+            form.addEventListener("input", markDraft);
+            form.addEventListener("change", markDraft);
+        }
         form.append(buttons, errors);
         return form;
     }
@@ -477,6 +510,7 @@ export function renderServices(d: Dependencies) {
         const c = edit.value,
             form = node("div", undefined, "lb-service-editor");
         form.dataset.configTransient = "true";
+        form.append(node("p", "Apply adds changes to the draft; Save settings persists them.", "fieldDescription"));
         form.append(node("h4", edit.isNew ? "Add connection" : "Edit " + c.Name, "lb-settings-editor-title"));
         const errors = node("div", undefined, "lb-service-editor-feedback"),
             used = setup.Options.some((o) => o.ConnectionId === c.Id);
@@ -489,7 +523,14 @@ export function renderServices(d: Dependencies) {
             (v) => (c.Provider = v),
         ).disabled = used;
         field(form, "API base URL", c.Endpoint, (v) => (c.Endpoint = v), "url");
-        field(form, "API key (if required)", c.ApiKey, (v) => (c.ApiKey = v), "password");
+        credentialEditor(
+            form,
+            c,
+            () => c.ApiKey,
+            (value) => {
+                c.ApiKey = value;
+            },
+        );
         form.append(
             node(
                 "p",
@@ -512,6 +553,10 @@ export function renderServices(d: Dependencies) {
         const buttons = node("div", undefined, "lb-actions");
         buttons.append(
             action("Apply", () => {
+                if (c.CredentialAction === "replace" && !c.ApiKey.trim()) {
+                    d.feedback(errors, "Enter a replacement credential, or choose Keep or Clear.", true);
+                    return;
+                }
                 if (!c.Name.trim() || setup.Connections.some((v) => v.Id !== c.Id && v.Name.trim().toLowerCase() === c.Name.trim().toLowerCase())) {
                     d.feedback(errors, "Enter a unique connection name.", true);
                     return;

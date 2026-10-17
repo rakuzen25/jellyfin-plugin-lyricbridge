@@ -54,6 +54,7 @@ public sealed record ReviewDocument(Transcript Transcript, List<BoundaryVersion>
 public sealed record PreparedAudio(string Path, long DurationTicks, long StartTicks = 0);
 public interface IAudioPreparation
 {
+    Task StopUploads() => Task.CompletedTask;
     Task<PreparedAudio> Prepare(Job job, TranscriptionConfig settings, IProgress<int> progress, CancellationToken token);
     Task<List<PreparedAudio>> PlanChunks(Job job, PreparedAudio audio, TranscriptionConfig settings, CancellationToken token);
     void Release(Job job);

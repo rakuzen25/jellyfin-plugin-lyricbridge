@@ -101,7 +101,7 @@ public sealed partial class Store : IJobRepository, IDisposable
     {
         lock (writeGate)
         {
-            if (kind is not ("preferences" or "song-preferences") && (IsResetting || (operationEpoch.Value is long started && started != Epoch)))
+            if (IsResetting || (operationEpoch.Value is long started && started != Epoch))
                 return;
             using var c = Open();
             using var tx = c.BeginTransaction();
@@ -141,10 +141,12 @@ public sealed partial class Store : IJobRepository, IDisposable
     {
         lock (writeGate)
         {
-            if (kind is not ("preferences" or "song-preferences") && (IsResetting || (operationEpoch.Value is long started && started != Epoch)))
+            if (IsResetting || (operationEpoch.Value is long started && started != Epoch))
                 return;
             using var c = Open();
             using var tx = c.BeginTransaction();
+            if (admission.Value is { } ticket && !ValidAdmission(c, tx, ticket, ["record:" + kind + ":" + id], songScope: kind is not ("preferences" or "song-preferences")))
+                throw DeletedConflict();
             if (kind is not ("preferences" or "song-preferences"))
                 RequireAdmission(c, tx);
             using var cmd = c.CreateCommand();
@@ -183,6 +185,14 @@ public sealed partial class Store : IJobRepository, IDisposable
             origin.CommandText = "DELETE FROM records WHERE kind='mixed-origin' AND id=$k";
             origin.Parameters.AddWithValue("$k", key);
             origin.ExecuteNonQuery();
+            FenceRecord(c, transaction, "variant", key);
+            foreach (var job in ReadRecords(c, transaction).Where(r => r.Kind == "job").Select(r => Codec.Deserialize<Job>(r.Payload)!))
+            {
+                if (job.VariantKey != key) continue;
+                job.OutputDeleted = true; job.OutputDeletedAt = DateTimeOffset.UtcNow;
+                if (!JobLifecycle.Terminal(job.State)) job.State = "cancelled";
+                WriteUnchecked(c, transaction, "job", job.Id, job);
+            }
             transaction.Commit();
             return true;
         }
@@ -202,7 +212,7 @@ public sealed partial class Store : IJobRepository, IDisposable
         }
     }
     public void EndReset() => Volatile.Write(ref resetting, 0);
-    public int ResetManagedLibrary()
+    public int ResetManagedLibrary(bool factory = false)
     {
         lock (writeGate)
         {
@@ -213,6 +223,11 @@ public sealed partial class Store : IJobRepository, IDisposable
             // User display preferences and plugin XML configuration are intentionally preserved.
             cmd.CommandText = "PRAGMA secure_delete=ON; DELETE FROM retained_documents; DELETE FROM transient_records; DELETE FROM records WHERE kind NOT IN ('preferences','song-preferences')";
             var count = cmd.ExecuteNonQuery();
+            if (factory)
+            {
+                cmd.CommandText = "DELETE FROM deletion_revisions; UPDATE deletion_clock SET revision=0 WHERE id=1";
+                cmd.ExecuteNonQuery();
+            }
             tx.Commit();
             // Clear deleted payloads from reusable pages and checkpoint the WAL.
             using var compact = c.CreateCommand();

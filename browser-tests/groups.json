@@ -1,6 +1,7 @@
 {
     "workflow": [
         "admin-configuration.spec.cjs",
+        "admin-data.spec.cjs",
         "preference-lifecycle.spec.cjs",
         "retrieval-states.spec.cjs",
         "saved-originals.spec.cjs",

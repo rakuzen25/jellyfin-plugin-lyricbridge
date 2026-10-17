@@ -17,6 +17,55 @@ public sealed class AudioPreparationTests : TestHost
         if (OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Audio process fixtures target the supported Linux host.");
         File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute); return path;
     }
+    private sealed class WaitingUpload : MemoryStream
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            Entered.TrySetResult();
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return 0;
+        }
+    }
+    [Fact]
+    public async Task ResetCancelsInFlightUploadsBeforeClearingStaging()
+    {
+        var store = Own(new Store(Path.Combine(Root, "store"))); var audio = Create(store, "unused");
+        await using var input = new WaitingUpload();
+        var upload = audio.Upload(Guid.NewGuid(), Guid.NewGuid(), input, 100, TestContext.Current.CancellationToken);
+        await input.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        var id = Path.GetFileName(Directory.GetDirectories(Path.Combine(store.ActiveStoragePath, "audio-staging")).Single());
+        Assert.Throws<WorkflowException>(() => audio.DeleteUnused(id));
+        Assert.True(store.BeginReset());
+        await audio.StopUploads().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        audio.Clear(); store.EndReset();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => upload);
+        Assert.False(Directory.Exists(Path.Combine(store.ActiveStoragePath, "audio-staging")));
+    }
+    [Fact]
+    public void StagingMaintenanceRejectsDirectoryLinks()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var store = Own(new Store(Path.Combine(Root, "store"))); var audio = Create(store, "unused");
+        var outside = Path.Combine(Root, "outside"); Directory.CreateDirectory(outside); File.WriteAllText(Path.Combine(outside, "keep"), "media");
+        Directory.CreateSymbolicLink(Path.Combine(store.ActiveStoragePath, "audio-staging"), outside);
+        Assert.Throws<WorkflowException>(() => audio.Clear());
+        Assert.Equal("media", File.ReadAllText(Path.Combine(outside, "keep")));
+    }
+    [Fact]
+    public void StagingResetPreservesUnrelatedFilesInsideItsDirectory()
+    {
+        var store = Own(new Store(Path.Combine(Root, "store"))); var audio = Create(store, "unused");
+        var staging = Path.Combine(store.ActiveStoragePath, "audio-staging"); var directory = Path.Combine(staging, Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "prepared.flac"), "owned audio");
+        File.WriteAllText(Path.Combine(directory, "music.flac"), "unrelated media");
+        File.WriteAllText(Path.Combine(staging, "sidecar.lrc"), "unrelated lyrics");
+        audio.Clear();
+        Assert.False(File.Exists(Path.Combine(directory, "prepared.flac")));
+        Assert.Equal("unrelated media", File.ReadAllText(Path.Combine(directory, "music.flac")));
+        Assert.Equal("unrelated lyrics", File.ReadAllText(Path.Combine(staging, "sidecar.lrc")));
+    }
     [Fact]
     public async Task UploadOwnershipLimitsAndPreparationUseOnlyOpaqueIds()
     {

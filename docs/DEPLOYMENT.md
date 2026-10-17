@@ -34,6 +34,9 @@ container user. Entering an unmounted host path does not create a bind mount.
 The directory contains a SQLite index with original provider responses, rich lyric
 documents, selections, language versions, preferences, generation requests, and retained
 transcripts/boundary versions. Temporary audio staging lives alongside the index.
+Use the admin **Data** tab to inspect usage, browse saved records, and preview cleanup
+or resets. Its actions apply to the active directory, including while a path change
+is waiting for restart. Factory reset retains that active location.
 Back up the complete directory alongside Jellyfin's configuration. To relocate it:
 
 1. Stop Jellyfin.

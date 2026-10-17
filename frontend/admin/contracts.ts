@@ -1,4 +1,5 @@
-export interface ServiceConnection {
+import type { CredentialState } from "./credentials.ts";
+export interface ServiceConnection extends CredentialState {
     Id: string;
     Name: string;
     Provider: string;
@@ -29,7 +30,7 @@ export interface ServiceSetup {
     Connections: ServiceConnection[];
     Options: ServiceOption[];
 }
-interface SourceConfiguration {
+interface SourceConfiguration extends CredentialState {
     Name: string;
     Enabled: boolean;
     Credential: string;
@@ -88,6 +89,8 @@ export interface Configuration {
     Defaults: DisplayDefaults;
 }
 export interface JobSummary {
+    title?: string;
+    artist?: string;
     outputDeleted?: boolean;
     outputDeletedAt?: string | null;
     id: string;

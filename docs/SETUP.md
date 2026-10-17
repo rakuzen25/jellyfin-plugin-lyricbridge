@@ -6,18 +6,27 @@ Save configuration before testing services. Playback choices live under
 
 ## Configure administrator settings
 
-The five tabs group configuration by task:
+The tabs group configuration and data management by task:
 
 | Tab              | Settings                                                                      |
 | ---------------- | ----------------------------------------------------------------------------- |
-| General          | Writable storage, scheduled retrieval, web renderer, maintenance               |
+| General          | Writable storage, scheduled retrieval, web renderer               |
 | Sources          | Provider order, credentials, advanced matching                                 |
 | Services         | Remote transcription, AI boundary review, Kawazu, translation and pronunciation |
 | Display defaults | Defaults for accounts without saved preferences                                |
 | Requests         | User permissions, approvals, quotas, request history                           |
+| Data             | Storage overview, saved content, accounts, configuration inspection, cleanup and resets |
 
 **Save settings** applies configuration edits across tabs. Switching tabs preserves
-edits; failed saves retain values. Failed initial loads offer **Retry**.
+edits; failed saves retain values. Tab markers identify unfinished changes. Inline
+**Apply** updates the draft; **Cancel** discards that editor's changes. The save footer
+is hidden in Data, where actions apply independently. Failed initial loads offer **Retry**.
+If settings change elsewhere, saving stops for comparison. Rebase non-conflicting edits,
+choose draft or latest for conflicts, then explicitly save again.
+
+Credential editors show whether a value is configured without displaying the saved
+value. **Replace credential** and **Clear credential** stage changes; unchanged values
+are retained. Connection tests are disabled until relevant drafts are applied and saved.
 Connection tests use saved settings and synthetic text; they do not generate library
 lyrics. Results stay beside the service. Ready indicates required fields are present, separately from successful live access.
 
@@ -382,11 +391,53 @@ Corrections belong to a track/original timeline fingerprint. Auxiliary changes r
 timing; switching originals loads that version's correction, including when restored.
 Shared corrections affect web playback, leaving native-client lyric files unchanged.
 
+## Manage stored data
+
+Open **Data** to inspect storage usage and browse songs, accounts, saved configuration,
+and maintenance categories. Missing Jellyfin songs/accounts remain available using
+stored names and IDs. Category payload sizes describe JSON content; database, WAL,
+and staged-audio sizes describe physical disk usage. Shared records are counted once
+in overview totals. Inspection never retrieves or generates lyrics.
+
+Inspect a record for readable lines with normalized timestamps, saved values, and
+labeled ownership, source, and blocking relationships. IDs and sanitized payloads
+are expandable under **Technical details**. Dependency inspection from a deletion
+review is read-only; Back preserves its confirmation and original expiry. Requests
+also provide **Inspect stored request** without leaving their list position. Delete individual records
+or select records across pages, then use **Review selected**. Selections stay within
+one song, account, or maintenance category; leaving that context clears them. Search
+filters apply only through **Search** or Enter. Back restores the previous filters,
+page, and position. A dedicated review shows exact targets and effects; results separate
+deleted, skipped, and failed items. Failed targets remain selected for a fresh preview.
+Confirmation applies to that snapshot; changed
+content requires a new preview. Category clears require `DELETE`. Blocked items are
+reported and skipped. Deleting shared language versions affects every listed owner;
+automatic local pronunciation remains controlled through Display settings.
+
+Song content cleanup removes its originals, transcripts/reviews, and removable
+supporting results. Preferences, classifications, and finished history have separate
+actions. Original deletion follows the lyrics window: the newest surviving original
+becomes selected, or automatic retrieval is suppressed when none remains. Referenced
+transcripts and reviews must be released by their owning originals first.
+
+**Maintenance** offers expired-data cleanup, unused temporary-data cleanup, and separate
+library and preference resets (`RESET`). Current automatic retention periods remain
+unchanged. Active uploads, active-job inputs, and retry data are protected; history
+removal preserves rolling request quota accounting.
+
+**Factory reset plugin** requires `FACTORY RESET` and explicit disposal of unsaved
+settings edits. It clears managed content, preferences, history, settings, and
+credentials, but retains the active storage directory and cancels pending relocation.
+Default provider settings can retrieve lyrics again. A partial failure identifies its
+phase; refresh, inspect the remaining data, and preview a retry. Data actions execute
+independently of **Save settings**. Media files, Jellyfin-managed lyrics, other plugins,
+and previous storage locations remain untouched.
+
 ## Reset the managed lyric library
 
 Back up [plugin storage](DEPLOYMENT.md#configure-and-back-up-storage) before this
-irreversible operation. In **General → Maintenance → Reset managed lyric library**,
-type `RESET`, then select **Delete managed lyric library**.
+irreversible operation. In **Data → Maintenance → Resets**, select
+**Reset managed lyric library**, review its targets, type `RESET`, and confirm deletion.
 
 Reset stops active discovery/generation and deletes audio staging, transcripts,
 boundary versions, managed originals/raw lyrics,
@@ -403,7 +454,10 @@ Completed, failed, cancelled, rejected, and settings-changed requests are remove
 are retained. Cleanup runs at startup and daily; existing terminal history receives
 a full retention window when first upgraded.
 
-The **Requests** tab loads recent activity when opened; **Refresh** reloads it.
+The **Requests** tab separates settings, active requests, and finished history, with
+independent paging. Refresh preserves the current pages. Approve and Retry apply
+immediately; Reject and Cancel require confirmation. History removal uses the same
+snapshot review/results flow as Data.
 Empty history hides cleanup actions. **Remove from history** removes one finished request; **Clear finished
 history** confirms a snapshot of finished requests and skips any that have become active.
 Removal ends retry availability and clears job-owned temporary data. Generated lyric
