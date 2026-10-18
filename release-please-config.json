@@ -26,6 +26,11 @@
                 },
                 {
                     "type": "json",
+                    "path": "tests/backend/Infrastructure/packages.lock.json",
+                    "jsonpath": "$..dependencies[?(@property === 'LyricBridge.Core' || @property === 'LyricBridge.Infrastructure')]"
+                },
+                {
+                    "type": "json",
                     "path": "tests/backend/Host/packages.lock.json",
                     "jsonpath": "$..dependencies[?(@property === 'LyricBridge.Core' || @property === 'LyricBridge.Infrastructure')]"
                 }
