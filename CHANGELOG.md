@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.2.0...v0.2.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* fix ci ([f402782](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/f4027822022f45e7b3d0ad5963dcd0c765bb3998))
+
 ## [0.2.0](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.1.3...v0.2.0) (2026-10-18)
 
 
