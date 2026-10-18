@@ -525,14 +525,6 @@ export function renderServices(d: Dependencies) {
             (v) => (c.Provider = v),
         ).disabled = used;
         field(form, "API base URL", c.Endpoint, (v) => (c.Endpoint = v), "url");
-        credentialEditor(
-            form,
-            c,
-            () => c.ApiKey,
-            (value) => {
-                c.ApiKey = value;
-            },
-        );
         form.append(
             node(
                 "p",
@@ -543,6 +535,14 @@ export function renderServices(d: Dependencies) {
                       : "Use the server base URL; LyricBridge appends /translate.",
                 "fieldDescription",
             ),
+        );
+        credentialEditor(
+            form,
+            c,
+            () => c.ApiKey,
+            (value) => {
+                c.ApiKey = value;
+            },
         );
         if (used)
             form.append(
@@ -556,7 +556,7 @@ export function renderServices(d: Dependencies) {
         buttons.append(
             action("Apply", () => {
                 if (c.CredentialAction === "replace" && !c.ApiKey.trim()) {
-                    d.feedback(errors, "Enter a replacement credential, or choose Keep or Clear.", true);
+                    d.feedback(errors, "Enter a replacement credential, or cancel the replacement.", true);
                     return;
                 }
                 if (!c.Name.trim() || setup.Connections.some((v) => v.Id !== c.Id && v.Name.trim().toLowerCase() === c.Name.trim().toLowerCase())) {

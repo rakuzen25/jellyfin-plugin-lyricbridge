@@ -26,49 +26,54 @@ export function credentialEditor(parent: HTMLElement, value: CredentialState, re
         value.CredentialAction = "replace";
     };
     wrap.append(input);
-    const update = () => {
-        status.textContent =
-            value.CredentialAction === "clear"
-                ? "Credential will be cleared when settings are saved."
-                : value.CredentialAction === "replace"
-                  ? "Replacement will be stored when settings are saved."
-                  : value.CredentialPresent
-                    ? "Credential configured. Saved values are never displayed."
-                    : "No credential configured.";
-        wrap.hidden = value.CredentialAction !== "replace";
+    const reset = () => {
+        value.CredentialAction = "keep";
+        write("");
+        input.value = "";
+        update();
     };
-    actions.append(
-        adminButton(
-            "Replace credential",
-            () => {
-                value.CredentialAction = "replace";
-                update();
-                input.focus();
-            },
-            "quiet",
-        ),
-        adminButton(
-            "Clear credential",
-            () => {
-                value.CredentialAction = "clear";
-                write("");
-                input.value = "";
-                update();
-            },
-            "quiet",
-        ),
-        adminButton(
-            "Keep saved credential",
-            () => {
-                value.CredentialAction = "keep";
-                write("");
-                input.value = "";
-                update();
-            },
-            "quiet",
-        ),
+    const replace = adminButton(
+        "Replace credential",
+        () => {
+            value.CredentialAction = "replace";
+            update();
+            input.focus();
+        },
+        "quiet",
     );
-    root.append(status, actions, wrap);
+    const clear = adminButton(
+        "Clear credential",
+        () => {
+            value.CredentialAction = "clear";
+            write("");
+            input.value = "";
+            update();
+        },
+        "quiet",
+    );
+    const cancel = adminButton("Cancel replacement", reset, "quiet");
+    const undo = adminButton("Undo clear", reset, "quiet");
+    const update = () => {
+        const replacing = value.CredentialAction === "replace";
+        const clearing = value.CredentialAction === "clear";
+        status.textContent = clearing
+            ? "Credential will be cleared when settings are saved."
+            : replacing
+              ? "The new credential will be stored when settings are saved."
+              : value.CredentialPresent
+                ? "Credential configured. Saved values are never displayed."
+                : "No credential configured.";
+        wrap.hidden = !replacing;
+        replace.hidden = replacing || clearing;
+        replace.querySelector("span")!.textContent = value.CredentialPresent ? "Replace credential" : "Add credential";
+        clear.hidden = replacing || clearing || !value.CredentialPresent;
+        cancel.hidden = !replacing;
+        undo.hidden = !clearing;
+    };
+    const heading = document.createElement("h4");
+    heading.textContent = "Credential";
+    actions.append(replace, clear, cancel, undo);
+    root.append(heading, wrap, status, actions);
     parent.append(root);
     update();
 }
