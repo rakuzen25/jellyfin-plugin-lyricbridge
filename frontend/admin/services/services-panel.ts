@@ -165,7 +165,7 @@ export function renderServices(d: Dependencies) {
                         ? "Local · NMeCab / IpaDic"
                         : o.Provider === "Google"
                           ? "Built in · No connection required"
-                          : [connection(o)?.Name || "Choose a connection", o.Model.trim(), setupReason(o)].filter(Boolean).join(" · "),
+                          : [connection(o)?.Name, o.Model.trim(), setupReason(o)].filter(Boolean).join(" · "),
                     status(o),
                 );
                 const enabled = check(heading.actions, "Enabled", o.Enabled && configured(o), (value) => {
@@ -187,7 +187,7 @@ export function renderServices(d: Dependencies) {
                 enabledLabel.title = !configured(o) ? unavailableReason + ". Choose Edit to complete setup." : unavailableReason;
                 heading.actions.append(rowAction("Edit", () => begin({ kind: "option", value: structuredClone(o), isNew: false }), "quiet"));
                 row.append(heading.root);
-                if (unavailableReason) heading.body.append(node("p", unavailableReason + ".", "fieldDescription"));
+                if (editor !== null && configured(o)) heading.body.append(node("p", "Finish current edit.", "fieldDescription"));
                 body.append(row);
                 if (editor?.kind === "option" && editor.value.Id === o.Id) body.append(optionEditor(editor));
             }
