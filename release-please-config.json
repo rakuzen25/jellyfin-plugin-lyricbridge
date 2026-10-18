@@ -16,7 +16,7 @@
                 },
                 {
                     "type": "json",
-                    "path": "src/packages.lock.json",
+                    "path": "src/Host/packages.lock.json",
                     "jsonpath": "$..dependencies[?(@property === 'LyricBridge.Core' || @property === 'LyricBridge.Infrastructure')]"
                 },
                 {
@@ -26,7 +26,7 @@
                 },
                 {
                     "type": "json",
-                    "path": "tests/packages.lock.json",
+                    "path": "tests/backend/Host/packages.lock.json",
                     "jsonpath": "$..dependencies[?(@property === 'LyricBridge.Core' || @property === 'LyricBridge.Infrastructure')]"
                 }
             ]

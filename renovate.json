@@ -89,7 +89,7 @@
     "customManagers": [
         {
             "customType": "regex",
-            "managerFilePatterns": ["/^scripts\\/test-browser\\.sh$/"],
+            "managerFilePatterns": ["/^scripts\\/checks\\/test-browser\\.sh$/"],
             "matchStrings": [
                 "image=(?<depName>mcr\\.microsoft\\.com/playwright):(?<currentValue>v\\d+\\.\\d+\\.\\d+-noble)@(?<currentDigest>sha256:[a-f0-9]{64})"
             ],

@@ -10,6 +10,6 @@
         "verbatimModuleSyntax": true,
         "allowImportingTsExtensions": true
     },
-    "include": ["bridge/**/*.ts", "renderer/**/*.ts", "admin/**/*.ts", "shared/**/*.ts", "*.ts"],
-    "exclude": ["**/*.test.ts"]
+    "include": ["**/*.ts"],
+    "exclude": ["**/*.test.ts", "node_modules"]
 }

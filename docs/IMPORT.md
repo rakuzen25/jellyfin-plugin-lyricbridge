@@ -28,7 +28,7 @@ Ordinary imports retain original file bytes, filename, selected encoding and for
 
 ## Validation
 
-Backend coverage is in `LyricImportTests`, `ImportGuardrailTests` and `ImportWorkflowTests`. Browser import workflow/layout coverage is in `browser-tests/import-lyrics.spec.cjs`. The expansion fixture intentionally accepts 200 repeated timestamps plus 2,000 ASCII text characters: 4,000 input bytes produce 400,000 lyric text characters. It records permitted expansion rather than enforcing a new size or duration threshold.
+Backend coverage is in `LyricImportTests`, `ImportGuardrailTests` and `ImportWorkflowTests`. Browser import workflow/layout coverage is in `tests/browser/workflow/import-lyrics.spec.cjs`. The expansion fixture intentionally accepts 200 repeated timestamps plus 2,000 ASCII text characters: 4,000 input bytes produce 400,000 lyric text characters. It records permitted expansion rather than enforcing a new size or duration threshold.
 
 
 ## Export and restore

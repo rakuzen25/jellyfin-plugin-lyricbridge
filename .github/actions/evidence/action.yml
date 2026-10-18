@@ -14,7 +14,7 @@ runs:
         path: |
           dist/evidence/
           dist/reproducibility-*.log
-          browser-tests/results/
-          browser-tests/results-report/
-          browser-tests/results-run.*/
+          tests/browser/results/
+          tests/browser/results-report/
+          tests/browser/results-run.*/
         if-no-files-found: warn

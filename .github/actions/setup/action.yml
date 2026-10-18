@@ -28,10 +28,10 @@ runs:
         node-version-file: .node-version
         cache: true
         cache-dependency-path: pnpm-lock.yaml
-    - run: node scripts/check-toolchain.mjs && pnpm install --frozen-lockfile
+    - run: node scripts/checks/check-toolchain.mjs && pnpm install --frozen-lockfile
       shell: bash
       if: inputs.node == 'true'
-    - run: python scripts/check-pip.py && python -m pip install --uploaded-prior-to=P1D -r requirements-check.txt
+    - run: python -m scripts.checks.check_pip && python -m pip install --uploaded-prior-to=P1D -r requirements-check.txt
       shell: bash
       if: inputs.python == 'true'
     - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
@@ -44,13 +44,13 @@ runs:
       if: inputs.references == 'true'
       with:
         path: .build/jellyfin
-        key: official-jellyfin-linux-amd64-${{ hashFiles('scripts/bootstrap-references.sh', 'scripts/reference-cache.py') }}
+        key: official-jellyfin-linux-amd64-${{ hashFiles('scripts/dev/bootstrap-references.sh', 'scripts/dev/reference_cache.py') }}
     - name: Verify official reference cache or bootstrap
       if: inputs.references == 'true'
       shell: bash
       run: |
-        if ! python3 scripts/reference-cache.py verify; then
+        if ! python3 -m scripts.dev.reference_cache verify; then
           rm -rf .build/jellyfin
-          scripts/bootstrap-references.sh
-          python3 scripts/reference-cache.py record
+          scripts/dev/bootstrap-references.sh
+          python3 -m scripts.dev.reference_cache record
         fi

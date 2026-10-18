@@ -84,7 +84,7 @@ For an independently hosted Jellyfin Web client, extract the web ZIP and back up
 chosen web root. From the source checkout, run with permission to update that root:
 
 ```sh
-python3 scripts/web-assets.py --web-root /path/to/jellyfin-web --assets /path/to/web-assets
+python3 -m scripts.build.web_assets --web-root /path/to/jellyfin-web --assets /path/to/web-assets
 ```
 
 Replace `/path/to/jellyfin-web` with the installed web root and `/path/to/web-assets`
@@ -101,7 +101,7 @@ controls and restart. A disabled plugin cannot clean up tags after restart.
 To remove a separate installation or leftover marked tags, run against that web root:
 
 ```sh
-python3 scripts/web-assets.py --web-root /path/to/jellyfin-web --uninstall
+python3 -m scripts.build.web_assets --web-root /path/to/jellyfin-web --uninstall
 ```
 
 Replace `/path/to/jellyfin-web` with the web root being cleaned. Uninstall removes only

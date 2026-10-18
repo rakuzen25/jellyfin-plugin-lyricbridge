@@ -1,17 +1,17 @@
-import { revealSelectedTab } from "./ui.ts";
-import { createRequestsPanel } from "./requests-panel.ts";
-import type { DataHost } from "./data-contracts.ts";
-import { credentialAvailable, credentialEditor } from "./credentials.ts";
-import { rebaseSettings, same } from "./settings-draft.ts";
-import { createDataPanel } from "./data-panel.ts";
-import { settingsActionGroup, settingsRowHeader, rowAction } from "./settings-row.ts";
-import { adminButton as button } from "./controls.ts";
-import { renderServices } from "./services-panel.ts";
 import { FeedbackScope } from "../shared/feedback.ts";
-import { materialFeedback } from "./feedback.ts";
-import { icon } from "../shared/icons.ts";
-import type { Configuration, WebRendererStatus } from "./contracts.ts";
-import { hostFailure } from "./contracts.ts";
+import type { DataHost } from "./data/data-contracts.ts";
+import { createDataPanel } from "./data/data-panel.ts";
+import { createRequestsPanel } from "./requests/requests-panel.ts";
+import { renderServices } from "./services/services-panel.ts";
+import type { Configuration, WebRendererStatus } from "./settings/contracts.ts";
+import { hostFailure } from "./settings/contracts.ts";
+import { SettingsController, type SettingsSnapshot } from "./settings/settings-controller.ts";
+import { same } from "./settings/settings-draft.ts";
+import { createSourcesSection } from "./sources/source-section.ts";
+import { adminButton as button } from "./ui/controls.ts";
+import { materialFeedback } from "./ui/feedback.ts";
+import { rowAction, settingsRowHeader } from "./ui/settings-row.ts";
+import { revealSelectedTab } from "./ui/ui.ts";
 (() => {
     const page = document.querySelector<HTMLElement>("#LyricBridgeConfig")!,
         status = query("#lb-config-status");
@@ -49,13 +49,9 @@ import { hostFailure } from "./contracts.ts";
         if (!element) throw new Error("Missing configuration control: " + selector);
         return element as S extends keyof Controls ? Controls[S] : HTMLElement;
     }
-    interface SettingsSnapshot {
-        configuration: Configuration;
-        revision: string;
-    }
     let config: Configuration, savedConfig: Configuration;
-    let settingsRevision = "",
-        saving = false;
+    let saving = false;
+    const settings = new SettingsController(call);
     const conflictPanel = node("section");
     conflictPanel.className = "lb-settings-surface";
     conflictPanel.hidden = true;
@@ -64,12 +60,25 @@ import { hostFailure } from "./contracts.ts";
     let rendererRuntime: WebRendererStatus | undefined;
     let storageRuntime: { activeStoragePath?: string; configuredStoragePath?: string; restartRequired?: boolean } = {};
     let dirty = false,
-        configRevision = 0,
         loaded = false,
         loading = false;
     const saveButton = query(".lb-config-footer .button-submit");
     let activeEditor: "source" | "service" | null = null;
-    let sourceDraft: Configuration["Sources"][number] | null = null;
+    const sourcesSection = createSourcesSection({
+        query: (...args) => query(...args),
+        get config() {
+            return config;
+        },
+        set config(value) {
+            config = value;
+        },
+        node: (...args) => node(...args),
+        check: (...args) => check(...args),
+        changed: (...args) => changed(...args),
+        editing: (...args) => editing(...args),
+        failure: (...args) => failure(...args),
+    });
+    const { sources } = sourcesSection;
     function editing(owner: "source" | "service", value: boolean, resume?: () => void) {
         if (value && saving) {
             notice(status, "Wait for settings to finish saving before opening an editor.");
@@ -188,42 +197,13 @@ import { hostFailure } from "./contracts.ts";
     function changed(event?: Event) {
         if (event?.target instanceof Element && event.target.closest("[data-config-transient]")) return;
         syncFields();
-        dirty = !same(config, savedConfig);
-        configRevision++;
+        settings.replaceDraft(config);
+        dirty = settings.snapshot().dirty;
         updateDirtyMarkers();
         notice(status, dirty ? "Unsaved changes" : "");
         refreshDependentControls();
     }
-    const sourceHelp: Record<string, string[]> = {
-        QQ: ["No setup required. Enable QQ and save settings; LyricBridge searches QQ Music automatically."],
-        NetEase: ["No setup required. Enable NetEase and save settings; lyrics may include supplied translations and pronunciation."],
-        Kugou: ["No setup required. Enable Kugou and save settings; word timing is used when the recording supplies it."],
-        Soda: ["No setup required. Enable Soda and save settings; availability depends on the recording and region."],
-        LRCLIB: ["No setup required. Enable LRCLIB and save settings. This adapter uses the public LRCLIB service; no custom endpoint is needed."],
-        Musixmatch: [
-            "Leave Credential blank to let the helper obtain a token automatically. An optional existing Musixmatch usertoken can be pasted here; this is not a developer API key. Musixmatch may require CAPTCHA/verification during automatic token acquisition; LyricBridge then waits five minutes before retrying. A valid token from your own client may help but is not guaranteed to remove the challenge. Disable this source if you prefer to avoid these failures.",
-        ],
-        Spotify: [
-            "Sign in to open.spotify.com in your browser. Open Developer Tools → Application (or Storage) → Cookies → open.spotify.com. Copy only the value of sp_dc into Credential, without sp_dc= or other cookies. Enable Spotify and save settings. Replace the value if your session expires; a Spotify developer client ID or access token will not work here.",
-        ],
-        AppleMusic: [
-            "Sign in to music.apple.com with your own account. In Developer Tools → Network, inspect an authenticated Apple Music API request and copy the media-user-token request-header value. Paste only that value into Credential, enable AppleMusic, and save settings. This is not an Apple developer token. If your account sends no such header, leave this source disabled.",
-        ],
-    };
-    function guidance(parent: HTMLElement, steps: string[], link?: string[]) {
-        const list = node("ol");
-        list.className = "fieldDescription lb-setup-guide";
-        for (const text of steps) list.append(node("li", text));
-        parent.append(list);
-        if (link) {
-            const a = node("a", link[0]);
-            a.href = link[1] ?? "";
-            a.target = "_blank";
-            a.rel = "noopener noreferrer";
-            a.className = "button-link";
-            parent.append(a);
-        }
-    }
+
     function field<T extends string | number | boolean>(
         parent: HTMLElement,
         label: string | undefined,
@@ -320,137 +300,7 @@ import { hostFailure } from "./contracts.ts";
             throw failure;
         }
     }
-    function sources() {
-        const target = query("#lb-sources");
-        target.replaceChildren();
-        config.Sources.forEach((s, index) => {
-            const row = node("div");
-            row.dataset.source = s.Name;
-            row.className = "lb-source-row lb-settings-row";
-            const header = settingsRowHeader(s.Name, "", "");
-            row.append(header.root);
-            const requiresCredential = ["Spotify", "AppleMusic"].includes(s.Name);
-            const checkbox = check(header.actions, "Enabled", s.Enabled, (v) => {
-                s.Enabled = v;
-                refreshSourceState();
-            });
-            checkbox.setAttribute("aria-label", "Enable " + s.Name);
-            function refreshSourceState() {
-                const missing = requiresCredential && !credentialAvailable(s, s.Credential);
-                checkbox.disabled = missing;
-                checkbox.checked = !!s.Enabled && !missing;
-                const badge = header.title.querySelector<HTMLElement>(".lb-config-badge")!;
-                badge.textContent = missing
-                    ? "Needs setup"
-                    : credentialAvailable(s, s.Credential)
-                      ? "Configured"
-                      : s.Name === "Musixmatch"
-                        ? "Token optional"
-                        : "No setup needed";
-                const enabledLabel = checkbox.closest<HTMLElement>("label")!;
-                enabledLabel.title = missing ? "Choose Edit to configure credentials before enabling this source." : "";
-                if (missing) {
-                    checkbox.setAttribute("aria-description", "Setup required");
-                } else {
-                    checkbox.removeAttribute("aria-description");
-                }
-            }
-            refreshSourceState();
-            const move = (delta: number) => {
-                const next = index + delta;
-                if (next < 0 || next >= config.Sources.length) return;
-                [config.Sources[index], config.Sources[next]] = [config.Sources[next]!, config.Sources[index]!];
-                sources();
-                changed();
-            };
-            const ordering = settingsActionGroup("Reorder " + s.Name);
-            ordering.classList.add("lb-settings-row-ordering");
-            header.root.classList.add("lb-settings-row-orderable");
-            header.root.prepend(ordering);
-            for (const [delta, glyph, label] of [
-                [-1, "up", "Move up"],
-                [1, "down", "Move down"],
-            ] as const) {
-                const b = button(label, () => move(delta), "quiet");
-                b.classList.add("paper-icon-button-light", "lb-settings-icon-action");
-                b.setAttribute("aria-label", label + " " + s.Name);
-                b.title = label;
-                b.dataset.tooltip = label;
-                b.disabled = index + delta < 0 || index + delta >= config.Sources.length;
-                b.replaceChildren(icon(glyph));
-                ordering.append(b);
-            }
-            if (["Spotify", "AppleMusic", "Musixmatch"].includes(s.Name)) {
-                header.description.textContent =
-                    s.Name === "Spotify" ? "Spotify cookie" : s.Name === "AppleMusic" ? "Media-user token" : "Works without a token.";
-                if (requiresCredential && !credentialAvailable(s, s.Credential))
-                    header.description.textContent += " required. Choose Edit to configure.";
-                header.description.hidden = false;
-                header.actions.append(
-                    rowAction(
-                        "Edit",
-                        function openSourceEditor() {
-                            if (!editing("source", true, openSourceEditor)) return;
-                            sourceDraft = structuredClone(s);
-                            sources();
-                            target.querySelector<HTMLInputElement>("[data-config-transient] input")?.focus();
-                        },
-                        "quiet",
-                    ),
-                );
-                if (sourceDraft?.Name === s.Name) {
-                    const draft = sourceDraft;
-                    const form = node("div");
-                    form.className = "lb-service-editor";
-                    form.dataset.configTransient = "true";
-                    const title = node("h4", "Edit " + s.Name);
-                    title.className = "lb-settings-editor-title";
-                    form.append(title);
-                    form.append(node("p", "Apply adds changes to the draft; Save settings persists them."));
-                    credentialEditor(
-                        form,
-                        draft,
-                        () => draft.Credential,
-                        (value) => {
-                            draft.Credential = value;
-                        },
-                    );
-                    const instructions = node("details");
-                    instructions.append(node("summary", "Setup instructions"));
-                    guidance(instructions, sourceHelp[s.Name] || []);
-                    const actions = node("div");
-                    actions.className = "lb-actions";
-                    const close = () => {
-                        sourceDraft = null;
-                        editing("source", false);
-                        sources();
-                        target.querySelector<HTMLElement>('[data-source="' + s.Name + '"] .lb-settings-row-actions button')?.focus();
-                    };
-                    actions.append(
-                        button("Apply", () => {
-                            if (draft.CredentialAction === "replace" && !draft.Credential.trim()) {
-                                const error = node("p");
-                                form.append(error);
-                                failure(error, "Enter a replacement credential, or choose Keep or Clear.");
-                                return;
-                            }
-                            s.Credential = draft.Credential;
-                            s.CredentialAction = draft.CredentialAction;
-                            changed();
-                            close();
-                        }),
-                        button("Cancel", close),
-                    );
-                    form.append(instructions, actions);
-                    row.append(form);
-                }
-            } else if (s.Name === "Soda") {
-                header.description.textContent = "Availability varies by region.";
-                header.description.hidden = false;
-            }
-            target.append(row);
-        });
-    }
+
     function positionFooter() {
         revealSelectedTab(query("#lb-config-tabs"));
         const content = query(".content-primary"),
@@ -635,10 +485,10 @@ import { hostFailure } from "./contracts.ts";
             // Confirm successful retrieval before disposing unfinished drafts.
             const snapshot = await call<SettingsSnapshot>("admin/settings");
             activeEditor = null;
-            sourceDraft = null;
+            sourcesSection.replaceSourceDraft(null);
             config = snapshot.configuration;
             savedConfig = structuredClone(snapshot.configuration);
-            settingsRevision = snapshot.revision;
+            settings.accept(snapshot);
             render();
             dirty = false;
             loaded = true;
@@ -741,9 +591,14 @@ import { hostFailure } from "./contracts.ts";
         saveButton.disabled = true;
         notice(status, "Loading settings…");
         try {
-            const snapshot = await call<SettingsSnapshot>("admin/settings");
-            config = snapshot.configuration;
-            settingsRevision = snapshot.revision;
+            if (!(await settings.load())) {
+                loaded = !!settings.snapshot().configuration;
+                saveButton.disabled = !loaded || dataMaintenance || activeEditor !== null;
+                notice(status, dirty ? "Unsaved changes" : "");
+                return;
+            }
+            const snapshot = settings.snapshot();
+            config = snapshot.configuration!;
             conflictPanel.hidden = true;
             config.Transcription ??= {
                 Enabled: false,
@@ -767,7 +622,8 @@ import { hostFailure } from "./contracts.ts";
                     ReasoningEffort: "",
                 },
             };
-            savedConfig = JSON.parse(JSON.stringify(config));
+            settings.accept({ configuration: config, revision: snapshot.revision });
+            savedConfig = settings.snapshot().baseline!;
             storageRuntime = await call<typeof storageRuntime>("admin/runtime").catch(() => ({}));
             rendererRuntime = await call<WebRendererStatus>("admin/web-renderer").catch(() => undefined);
             render();
@@ -841,7 +697,10 @@ import { hostFailure } from "./contracts.ts";
         });
     }
     async function compareSettings() {
-        const latest = await call<SettingsSnapshot>("admin/settings");
+        settings.replaceDraft(config);
+        const comparison = await settings.compare();
+        if (!comparison) return;
+        const latest = comparison.latest;
         const choices = new Map<string, "local" | "latest">();
         const areas: Record<string, string> = {
             Sources: "Sources",
@@ -856,14 +715,14 @@ import { hostFailure } from "./contracts.ts";
         };
         const remoteAreas = [
             ...new Set(
-                Object.keys(latest.configuration)
-                    .filter((key) => !same(savedConfig[key], latest.configuration[key]))
+                Object.keys(latest)
+                    .filter((key) => !same(savedConfig[key], latest[key]))
                     .map((key) => areas[key] || "General"),
             ),
         ];
         conflictPanel.hidden = false;
         function show() {
-            const result = rebaseSettings(savedConfig, config, latest.configuration, choices);
+            const result = settings.comparison(choices)!;
             conflictPanel.replaceChildren(
                 node("h3", "Saved settings changed"),
                 node("p", "Changed elsewhere: " + remoteAreas.join(", ") + "."),
@@ -909,14 +768,13 @@ import { hostFailure } from "./contracts.ts";
                     result.conflicts.length
                         ? null
                         : () => {
-                              const final = rebaseSettings(savedConfig, config, latest.configuration, choices);
-                              if (final.conflicts.length) {
+                              if (!settings.rebase(choices)) {
                                   show();
                                   return;
                               }
-                              config = final.configuration;
-                              savedConfig = structuredClone(latest.configuration);
-                              settingsRevision = latest.revision;
+                              const rebased = settings.snapshot();
+                              config = rebased.configuration!;
+                              savedConfig = rebased.baseline!;
                               conflictPanel.hidden = true;
                               render();
                               changed();
@@ -928,7 +786,7 @@ import { hostFailure } from "./contracts.ts";
                     "Discard draft and load latest",
                     () => {
                         activeEditor = null;
-                        sourceDraft = null;
+                        sourcesSection.replaceSourceDraft(null);
                         void loadSettings();
                     },
                     "quiet",
@@ -947,40 +805,17 @@ import { hostFailure } from "./contracts.ts";
         saving = true;
         saveButton.disabled = true;
         notice(status, "Saving…");
-        const revision = configRevision,
-            snapshot = structuredClone(config);
-        const payload = structuredClone(snapshot);
-        const credentials = [
-            ...payload.Sources.map((value) => ({
-                kind: "source",
-                id: value.Name,
-                action: value.CredentialAction || "keep",
-                value: value.Credential,
-            })),
-            ...payload.ServiceSetup.Connections.map((value) => ({
-                kind: "connection",
-                id: value.Id,
-                action: value.CredentialAction || "keep",
-                value: value.ApiKey,
-            })),
-        ].filter((value) => value.action !== "keep");
-        for (const value of payload.Sources) value.Credential = "";
-        for (const value of payload.ServiceSetup.Connections) value.ApiKey = "";
+        settings.replaceDraft(config);
         try {
-            const saved = await call<SettingsSnapshot>("admin/settings", "PUT", { configuration: payload, revision: settingsRevision, credentials });
-            settingsRevision = saved.revision;
-            if (revision === configRevision) {
-                config = structuredClone(saved.configuration);
-                savedConfig = structuredClone(saved.configuration);
-                render();
-            } else {
-                config = rebaseSettings(snapshot, config, saved.configuration).configuration;
-                savedConfig = structuredClone(saved.configuration);
-            }
+            const unchanged = await settings.save();
+            const saved = settings.snapshot();
+            config = saved.configuration!;
+            savedConfig = saved.baseline!;
+            if (unchanged) render();
             storageRuntime = await call<typeof storageRuntime>("admin/runtime").catch(() => storageRuntime);
             rendererRuntime = await call<WebRendererStatus>("admin/web-renderer/repair", "POST").catch(() => undefined);
             refreshDependentControls();
-            dirty = !same(config, savedConfig);
+            dirty = settings.snapshot().dirty;
             updateDirtyMarkers();
             notice(status, dirty ? "Unsaved changes" : "Settings saved", dirty ? 0 : 4000);
         } catch (caught) {

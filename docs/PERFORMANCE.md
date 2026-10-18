@@ -1,6 +1,6 @@
 # Playback performance validation
 
-The maintained comparison uses `browser-tests/compare-playback-performance.cjs`,
+The maintained comparison uses `tests/browser/compare-playback-performance.cjs`,
 synthetic seekable audio, and a pinned official Playwright image with external
 networking disabled. It alternates three trials of the a supplied baseline asset directory
 and the current build for each viewport. Each short trial measures three seconds of multilingual playback after fonts, lyric rows and uploaded artwork are ready. The current tool uses DPR 2 and compares the supplied baseline, current Standard mode and current Low power mode. Graphics renderer, style/task time, retained heap and frame intervals are recorded.
@@ -16,9 +16,9 @@ improvement claim. It accepts local asset directories only; it cannot target a
 running Jellyfin installation or call lyric providers.
 
 The pre-extraction asset hashes are recorded in
-`browser-tests/visual-baseline-provenance.json`. The same assets supplied the
+`tests/browser/visual-baseline-provenance.json`. The same assets supplied the
 committed desktop/mobile Chromium, Firefox and WebKit screenshot baselines.
-Normal browser acceptance uses `scripts/test-browser.sh`; intentional screenshot
+Normal browser acceptance uses `scripts/checks/test-browser.sh`; intentional screenshot
 updates require visual review. 
 
 ## Sustained playback and ownership

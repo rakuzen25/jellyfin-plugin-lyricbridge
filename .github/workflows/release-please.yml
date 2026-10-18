@@ -42,7 +42,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-        run: python3 scripts/release.py resume-draft --repository "$REPOSITORY" --environment "$GITHUB_OUTPUT"
+        run: python3 -m scripts.release resume-draft --repository "$REPOSITORY" --environment "$GITHUB_OUTPUT"
   validate:
     needs: release-please
     if: needs.release-please.outputs.release_created != 'true'

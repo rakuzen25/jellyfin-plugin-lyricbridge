@@ -4,10 +4,10 @@ export function feedbackFixture(directory) {
     return buildSync({
         stdin: {
             contents: `import { FeedbackScope } from './shared/feedback.ts';
-import { glassFeedback } from './bridge/feedback.ts';
-import { materialFeedback } from './admin/feedback.ts';
-import { PlaybackNotifications } from './bridge/playback-notifications.ts';
-import { PlaybackPreview } from './bridge/playback-preview.ts';
+import { glassFeedback } from './bridge/ui/feedback.ts';
+import { materialFeedback } from './admin/ui/feedback.ts';
+import { PlaybackNotifications } from './bridge/ui/playback-notifications.ts';
+import { PlaybackPreview } from './bridge/preview/playback-preview.ts';
 window.fixture = {FeedbackScope, glassFeedback, materialFeedback, PlaybackNotifications, PlaybackPreview};`,
             resolveDir: directory,
         },

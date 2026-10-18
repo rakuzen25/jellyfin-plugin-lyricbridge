@@ -39,7 +39,7 @@ export function showSaveFailure(panel: HTMLElement, retry: () => unknown): () =>
 }
 ```
 
-For administrator views, pass `materialFeedback` from `frontend/admin/feedback.ts`
+For administrator views, pass `materialFeedback` from `frontend/admin/ui/feedback.ts`
 and use the existing native status host. Glass confirmation surfaces use
 `feedbackHost("confirmation")`. Do not add feature-specific severity CSS or notification
 markup. Version metadata, timing readouts, classifications, and ordinary descriptions
@@ -73,7 +73,7 @@ See [import contracts](IMPORT.md) for validation and request lifetime.
 
 ## Use playback notifications
 
-`PlaybackNotifications` in `frontend/bridge/playback-notifications.ts` owns one collection
+`PlaybackNotifications` in `frontend/bridge/ui/playback-notifications.ts` owns one collection
 per visible lyrics view. Mount its overlay under `document.body`; its bounds follow the
 lyrics host/visual viewport while excluding player/header controls and safe areas.
 Dispose it when the view closes and create a fresh collection on song/account changes.

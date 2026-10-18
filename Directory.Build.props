@@ -23,11 +23,12 @@
   <PropertyGroup Condition="'$(MSBuildProjectName)' != 'Lyricify.Lyrics.Helper'">
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <Nullable>enable</Nullable>
     <Version>$(LyricBridgeVersion)</Version>
   </PropertyGroup>
   <PropertyGroup
-    Condition="'$(MSBuildProjectName)' != 'Lyricify.Lyrics.Helper' and '$(MSBuildProjectName)' != 'StorageTests'">
+    Condition="'$(MSBuildProjectName)' != 'Lyricify.Lyrics.Helper'">
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest</AnalysisLevel>
   </PropertyGroup>

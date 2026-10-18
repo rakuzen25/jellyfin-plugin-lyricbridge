@@ -1,0 +1,29 @@
+{
+    "workflow": [
+        "workflow/admin-configuration.spec.cjs",
+        "workflow/admin-data.spec.cjs",
+        "workflow/preference-lifecycle.spec.cjs",
+        "workflow/retrieval-states.spec.cjs",
+        "workflow/saved-originals.spec.cjs",
+        "workflow/embedded-versions.spec.cjs",
+        "workflow/workflow-lifecycle.spec.cjs",
+        "workflow/import-lyrics.spec.cjs",
+        "workflow/transcription.spec.cjs",
+        "workflow/export-lyrics.spec.cjs",
+        "workflow/workflow-dialogs.spec.cjs"
+    ],
+    "rendering": [
+        "rendering/artwork-lifecycle.spec.cjs",
+        "rendering/injected-renderer.spec.cjs",
+        "rendering/playback.spec.cjs",
+        "rendering/playback-stability.spec.cjs",
+        "rendering/render-quality.spec.cjs",
+        "rendering/renderer-lifecycle.spec.cjs",
+        "rendering/short-lyrics.spec.cjs",
+        "rendering/version-preview.spec.cjs",
+        "rendering/visual-parity.spec.cjs",
+        "rendering/feedback.spec.cjs",
+        "rendering/playback-notifications.spec.cjs"
+    ],
+    "performance": ["performance/full-song-performance.spec.cjs", "performance/long-session.spec.cjs"]
+}

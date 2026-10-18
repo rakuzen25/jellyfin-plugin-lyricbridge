@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Support/*.cs" Link="Support/%(Filename)%(Extension)" />
+    <ProjectReference Include="../../../src/Host/LyricBridge.csproj" />
+    <Reference Include="$(JellyfinReferenceDir)/Microsoft.Data.Sqlite.dll" />
+    <Reference Include="$(JellyfinReferenceDir)/SQLitePCLRaw.*.dll" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(JellyfinReferenceDir)/libe_sqlite3.so" CopyToOutputDirectory="PreserveNewest"
+      Link="libe_sqlite3.so" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="$(JellyfinReferenceDir)/MediaBrowser.*.dll" />
+    <Reference Include="$(JellyfinReferenceDir)/Jellyfin.Data.dll" />
+    <Reference Include="$(JellyfinReferenceDir)/Jellyfin.Api.dll" />
+    <Reference Include="$(JellyfinReferenceDir)/Jellyfin.Database.Implementations.dll" />
+    <Reference Include="$(JellyfinReferenceDir)/Jellyfin.Extensions.dll" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" Version="4.0.2" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

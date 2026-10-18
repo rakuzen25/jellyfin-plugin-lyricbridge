@@ -2,16 +2,16 @@
     "$schema": "https://unpkg.com/knip@6/schema.json",
     "workspaces": {
         ".": {
-            "entry": ["scripts/*.test.mjs"],
-            "project": ["*.mjs", "scripts/*.mjs"]
+            "entry": ["tests/tooling/**/*.test.mjs"],
+            "project": ["*.mjs", "scripts/**/*.mjs", "tests/tooling/**/*.mjs"]
         },
         "frontend": {
             "entry": ["bridge.ts", "renderer.ts", "admin/config.ts", "**/*.test.ts"],
             "project": ["**/*.{ts,mjs}"]
         },
-        "browser-tests": {
-            "entry": ["playwright.config.cjs", "*.spec.cjs", "compare-playback-performance.cjs", "check-image.mjs"],
-            "project": ["*.cjs", "*.mjs"]
+        "tests/browser": {
+            "entry": ["playwright.config.cjs", "**/*.spec.cjs", "compare-playback-performance.cjs", "check-image.mjs"],
+            "project": ["**/*.cjs", "**/*.mjs"]
         }
     }
 }

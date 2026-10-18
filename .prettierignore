@@ -6,7 +6,7 @@ vendor/
 **/bin/
 **/obj/
 .venv/
-browser-tests/results*/
+tests/browser/results*/
 # Demo fixture scripts use exact textual hooks in browser tests.
 frontend/assets/demo.html
 pnpm-lock.yaml

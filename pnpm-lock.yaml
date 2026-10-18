@@ -197,12 +197,6 @@ importers:
         specifier: 8.71.2
         version: 8.71.2(@typescript/typescript6@6.0.2)(eslint@10.13.0(jiti@2.7.0))
 
-  browser-tests:
-    dependencies:
-      playwright:
-        specifier: 1.64.1
-        version: 1.64.1
-
   frontend:
     dependencies:
       lucide:
@@ -218,6 +212,12 @@ importers:
       typescript:
         specifier: npm:@typescript/typescript6@6.0.2
         version: '@typescript/typescript6@6.0.2'
+
+  tests/browser:
+    dependencies:
+      playwright:
+        specifier: 1.64.1
+        version: 1.64.1
 
 packages:
 

@@ -1,0 +1,32 @@
+"""Concrete source/release boundary checks; no provider or running-server calls."""
+
+from pathlib import Path
+
+root = Path(__file__).resolve().parents[2]
+core = "\n".join(
+    p.read_text()
+    for p in (root / "src/Core").rglob("*.cs")
+    if "obj" not in p.parts and "bin" not in p.parts
+)
+infra = "\n".join(
+    p.read_text()
+    for p in (root / "src/Infrastructure").rglob("*.cs")
+    if "obj" not in p.parts and "bin" not in p.parts
+)
+for token in ("Plugin.Instance", "Microsoft.Data.Sqlite", "MediaBrowser.", "Jellyfin."):
+    assert token not in core, "Core boundary violation: " + token
+assert "Plugin.Instance" not in infra, "Infrastructure configuration must be injected"
+controller = (root / "src/Host/Api/Api.cs").read_text()
+for token in ("store.Get<", "store.Set(", '"selected"', '"variants"'):
+    assert token not in controller, (
+        "Controller contains generic persistence workflow: " + token
+    )
+assert (
+    "installLyricTransport" not in (root / "frontend/renderer/runtime.ts").read_text()
+)
+assert not list((root / "dist" / "web").glob("*.ts")), (
+    "Generated assets must preserve the distributed JavaScript filenames"
+)
+print(
+    "PASS: Core/Infrastructure/controller boundaries, one transport owner, public asset filenames."
+)

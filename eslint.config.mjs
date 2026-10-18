@@ -6,7 +6,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default defineConfig(
-    { ignores: ["dist/**", ".build/**", "**/node_modules/**", "vendor/**", "**/bin/**", "**/obj/**", "browser-tests/results*/**", ".venv/**"] },
+    { ignores: ["dist/**", ".build/**", "**/node_modules/**", "vendor/**", "**/bin/**", "**/obj/**", "**/results*/**", ".venv/**"] },
     {
         files: ["**/*.{mjs,cjs,ts}"],
         extends: [js.configs.recommended],
@@ -17,6 +17,7 @@ export default defineConfig(
         files: ["frontend/**/*.ts"],
         extends: [tseslint.configs.recommended],
         rules: {
+            "@typescript-eslint/consistent-type-imports": "error",
             "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" }],
         },
     },

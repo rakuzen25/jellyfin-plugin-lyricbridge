@@ -5,7 +5,7 @@
     "scripts": {
         "typecheck": "pnpm run check:boundaries && tsc --noEmit",
         "build": "pnpm run typecheck && node build.mjs",
-        "test": "node --experimental-strip-types --test admin/*.test.ts bridge/*.test.ts renderer/*.test.ts",
+        "test": "node --experimental-strip-types --test",
         "check:boundaries": "node check-boundaries.mjs"
     },
     "devDependencies": {

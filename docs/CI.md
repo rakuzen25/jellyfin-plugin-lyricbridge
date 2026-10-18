@@ -2,7 +2,7 @@
 
 Use these checks after [toolchain setup](DEVELOPMENT.md#prepare-the-toolchain).
 CI selects check groups conservatively; local commands below let you exercise the
-same boundaries. `scripts/ci.py` is the entrypoint, with classification/fingerprints in
+same boundaries. `scripts/ci/__main__.py` is the entrypoint, with classification/fingerprints in
 `ci_policy.py`, evidence authentication in `ci_evidence.py`, and scheduling in
 `ci_planning.py`. These modules and `source_inventory.py` participate in policy hashes.
 
@@ -21,7 +21,7 @@ The impact summary records classifications and selected, reused, or unneeded gro
 | Performance | Sustained playback, resource ownership, CPU/heap bounds                        | Separate desktop/mobile Chromium jobs, one worker each                    |
 | Artifacts   | Archive/license inventory, advisories, reproducibility, installed integration  | Clean package, independent rebuild and installation; fresh advisories     |
 
-`browser-tests/groups.json` classifies each spec exactly once.
+`tests/browser/groups.json` classifies each spec exactly once.
 `@workflow` cases run only in the workflow project; `@layout` cases also run in the
 rendering matrix. The configuration rejects unclassified specs.
 The maintained browser suite intercepts external requests and uses synthetic
@@ -41,12 +41,12 @@ Keep tests at different boundaries when they protect different contracts:
 | Contract                                                                                   | Primary maintained checks                                                                  |
 | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
 | Toolchain identity, image agreement, upgrade policy                                        | `pnpm test:tooling`, toolchain/browser guards                                              |
-| Ranking, formats/imports, transcription/boundaries, shared generation quotas and deletion transactions | `tests/StorageTests.csproj` scenarios                                                      |
+| Ranking, formats/imports, transcription/boundaries, shared generation quotas and deletion transactions | Core, Infrastructure, and Host projects under `tests/backend`                                                      |
 | Search/preview/generation ownership, account changes, failed writes                        | Frontend unit tests and workflow browser group                                             |
 | Multilingual layout, timing/follow, settings, artwork races, teardown                      | Rendering browser group                                                                    |
 | Five-minute playback, generation/navigation, resource/heap/CPU growth                      | `long-session.spec.cjs` in performance projects                                            |
-| Authentication, libraries, native lyrics, injection, reset, restart, uninstall             | `tests/PackageInstallation.py` (including synthetic remote audio, FFmpeg and native cue ends) |
-| Source classification, receipt trust, archive/source/notices, reproducibility              | `tests/CiPolicy.py`, `ReleaseAutomation.py`, `PackageArtifacts.py`, `ReproducibleBuild.py` |
+| Authentication, libraries, native lyrics, injection, reset, restart, uninstall             | `tests/installation/PackageInstallation.py` (including synthetic remote audio, FFmpeg and native cue ends) |
+| Source classification, receipt trust, archive/source/notices, reproducibility              | `tests/tooling/CiPolicy.py`, `ReleaseAutomation.py`, `PackageArtifacts.py`, `ReproducibleBuild.py` |
 
 Live credentialed providers, ARM64, and physical-device power/thermals need separate
 evidence. [Performance validation](PERFORMANCE.md) distinguishes sustained acceptance
@@ -55,7 +55,7 @@ run artifacts.
 
 ## Selection and evidence
 
-Every tracked file and changed path must match `scripts/ci_policy.py`, including
+Every tracked file and changed path must match `scripts/ci/policy.py`, including
 deletes and both sides of renames. Unknown paths fail early; add an explicit rule and
 regression rather than a catch-all. Documentation-only changes skip application tests.
 Automation metadata gets lightweight checks; runtime, shared browser, backend-contract,
@@ -124,14 +124,14 @@ re-bootstrap. Dependency caches accelerate restoration without providing test ev
 
 The official Playwright image is digest-pinned. Guards check package/image versions
 before execution and browser executables inside the offline container.
-Each `scripts/test-browser.sh` invocation owns a `browser-tests/results-run.*`
+Each `scripts/checks/test-browser.sh` invocation owns a `tests/browser/results-run.*`
 directory. Stress projects disable tracing because DOM snapshots perturb measurements.
 Failures retain screenshots, browser reports, functional traces, incremental performance
 JSON, backend TRX/logs, and separate install/reproducibility logs.
 Bash pipefail prevents logging pipelines from hiding failures.
 
 Screenshot baselines require visual review before intentional updates.
-`browser-tests/visual-baseline-provenance.json` records the assets used for the committed
+`tests/browser/visual-baseline-provenance.json` records the assets used for the committed
 desktop/mobile Chromium, Firefox, and WebKit screenshots.
 
 ## Local commands
@@ -145,25 +145,28 @@ implicit restore. Backend commands use the Microsoft Testing Platform `--project
 pnpm check
 pnpm test:tooling
 pnpm build && pnpm test
-python3 tests/CiPolicy.py
-python3 tests/ReleaseBoundaries.py
-python3 tests/ReleaseAutomation.py
-python3 tests/LocalJellyfin.py
+python3 -m tests.tooling.Architecture
+python3 -m tests.tooling.CiPolicy
+python3 -m tests.tooling.ReleaseBoundaries
+python3 -m tests.tooling.ReleaseAutomation
+python3 -m tests.tooling.LocalJellyfin
 
-dotnet restore tests/StorageTests.csproj --locked-mode
-TESTINGPLATFORM_TELEMETRY_OPTOUT=1 dotnet test --project tests/StorageTests.csproj --no-restore \
-  --results-directory dist/evidence --report-xunit-trx --report-xunit-trx-filename backend.trx \
-  --minimum-expected-tests 1
+for project in Core Infrastructure Host; do
+  dotnet restore "tests/backend/$project/LyricBridge.$project.Tests.csproj" --locked-mode
+  TESTINGPLATFORM_TELEMETRY_OPTOUT=1 dotnet test --project "tests/backend/$project/LyricBridge.$project.Tests.csproj" --no-restore \
+    --results-directory dist/evidence --report-xunit-trx --report-xunit-trx-filename "backend-$project.trx" \
+    --minimum-expected-tests 1
+done
 ```
 
 Choose one browser group, or run the complete suite:
 
 ```sh
-CI_BROWSER_GROUP=workflow scripts/test-browser.sh --project workflow-chromium --workers=2
-CI_BROWSER_GROUP=rendering scripts/test-browser.sh --workers=2
-CI_BROWSER_GROUP=performance scripts/test-browser.sh --project stress-chromium --workers=1
-CI_BROWSER_GROUP=performance scripts/test-browser.sh --project stress-mobile-chromium --workers=1
-scripts/test-browser.sh --workers=1
+CI_BROWSER_GROUP=workflow scripts/checks/test-browser.sh --project workflow-chromium --workers=2
+CI_BROWSER_GROUP=rendering scripts/checks/test-browser.sh --workers=2
+CI_BROWSER_GROUP=performance scripts/checks/test-browser.sh --project stress-chromium --workers=1
+CI_BROWSER_GROUP=performance scripts/checks/test-browser.sh --project stress-mobile-chromium --workers=1
+scripts/checks/test-browser.sh --workers=1
 ```
 
 For native browser debugging instead of the pinned Linux acceptance image:
@@ -177,18 +180,18 @@ For package acceptance, the following commands build a clean candidate, inspect 
 rebuild independently, and install it into a disposable official server:
 
 ```sh
-python3 scripts/clean-package.py
-python3 tests/PackageArtifacts.py
-python3 tests/ReproducibleBuild.py
-python3 tests/PackageInstallation.py
+python3 -m scripts.build.clean_package
+python3 -m tests.tooling.PackageArtifacts
+python3 -m tests.tooling.ReproducibleBuild
+python3 -m tests.installation.PackageInstallation
 ```
 
 Set [release URLs](RELEASING.md#build-local-release-artifacts) and pass `--release` to
-`clean-package.py` for publishable artifacts. Standalone `scripts/package.sh` builds
+`python3 -m scripts.build.clean_package` for publishable artifacts. Standalone `scripts/build/package.sh` builds
 without asserting a clean source root. Prepared-web mode rejects stale inputs/assets.
 Older ZIPs are retained under `dist/previous-*` and do not supply current validation.
 
-Run `python3 scripts/ci.py metadata-check` for automation metadata. It parses JSON,
+Run `python3 -m scripts.ci metadata-check` for automation metadata. It parses JSON,
 formats/parses relevant YAML/Markdown with Prettier, and checks CODEOWNERS syntax/local
 paths; it does not validate remote permissions or the complete Renovate schema.
 

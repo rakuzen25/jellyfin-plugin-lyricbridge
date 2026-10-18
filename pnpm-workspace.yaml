@@ -1,6 +1,6 @@
 packages:
   - frontend
-  - browser-tests
+  - tests/browser
 
 # The compatibility wrapper otherwise resolves a floating TypeScript 6 compiler.
 overrides:

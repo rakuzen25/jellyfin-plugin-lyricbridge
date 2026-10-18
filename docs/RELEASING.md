@@ -109,7 +109,7 @@ the intended HTTPS repository/download URLs:
 ```sh
 LYRICBRIDGE_REPOSITORY_URL=https://github.com/OWNER/REPOSITORY \
 LYRICBRIDGE_DOWNLOAD_BASE_URL=https://github.com/OWNER/REPOSITORY/releases/download/vVERSION \
-  scripts/package.sh --release
+  scripts/build/package.sh --release
 ```
 
 Replace `OWNER`, `REPOSITORY`, and `VERSION` with the intended public repository and

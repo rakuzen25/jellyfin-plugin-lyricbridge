@@ -12,11 +12,10 @@ validation. Recreate the virtual environment after a Python upgrade.
 
 ```sh
 python3.15 -m venv .venv
-.venv/bin/python scripts/check-pip.py
-.venv/bin/python -m pip install --uploaded-prior-to=P1D -r requirements-check.txt
-node scripts/check-toolchain.mjs
+.venv/bin/python -m scripts.checks.check_pip && .venv/bin/python -m pip install --uploaded-prior-to=P1D -r requirements-check.txt
+node scripts/checks/check-toolchain.mjs
 pnpm install --frozen-lockfile
-scripts/bootstrap-references.sh
+scripts/dev/bootstrap-references.sh
 ```
 
 Bootstrap extracts compile references from the pinned official Jellyfin image without
@@ -49,7 +48,7 @@ The helper installs into a pinned official Linux x64 container. After toolchain 
 build the checkout and start the sandbox:
 
 ```sh
-python3 scripts/local-jellyfin.py rebuild
+python3 -m scripts.dev.local_jellyfin rebuild
 ```
 
 Open [local Jellyfin](http://localhost:18096/web/), finish setup, and add `/media` as a
@@ -68,7 +67,7 @@ For media symlinks outside the sample directory, mount each target at its origin
 absolute host path. For example, if a sample symlink targets `/srv/test-music/album`:
 
 ```sh
-python3 scripts/local-jellyfin.py start --media-mount /srv/test-music/album
+python3 -m scripts.dev.local_jellyfin start --media-mount /srv/test-music/album
 ```
 
 Replace that example path with an existing directory accessible to Docker, including
@@ -79,9 +78,9 @@ Mounts persist across stops/rebuilds; a new list replaces them and
 Inspect or stop the owned container with:
 
 ```sh
-python3 scripts/local-jellyfin.py status
-python3 scripts/local-jellyfin.py logs
-python3 scripts/local-jellyfin.py stop
+python3 -m scripts.dev.local_jellyfin status
+python3 -m scripts.dev.local_jellyfin logs
+python3 -m scripts.dev.local_jellyfin stop
 ```
 
 `stop` retains test data and leaves other containers alone. `start --port 18097`
@@ -101,7 +100,7 @@ performance.
 Renovate, pnpm, and pip enforce a 24-hour minimum release age; Renovate adds a
 30-minute companion-package buffer. pnpm enforces 1440 minutes with narrow reviewed
 exact-version exceptions. pip uses `--uploaded-prior-to=P1D`;
-`scripts/check-pip.py` verifies support, and missing upload-time metadata fails
+`scripts/checks/check_pip.py` verifies support, and missing upload-time metadata fails
 installation. NuGet uses locked restoration and Renovate's age policy.
 
 Only esbuild may run dependency lifecycle scripts. Restore explicitly with frozen

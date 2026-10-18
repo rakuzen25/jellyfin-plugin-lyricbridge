@@ -2,8 +2,9 @@
   <ItemGroup>
     <ProjectReference Include="../Core/LyricBridge.Core.csproj" />
     <ProjectReference Include="../../vendor/Lyricify.Lyrics.Helper/Lyricify.Lyrics.Helper.csproj" />
-    <PackageReference Include="Kawazu" Version="1.1.4" />
+    <PackageReference Include="Kawazu" Version="1.1.4" GeneratePathProperty="true" />
     <Reference Include="$(JellyfinReferenceDir)/Microsoft.Data.Sqlite.dll" Private="false" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <None Include="$(PkgKawazu)/content/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Link="KawazuDictionary/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

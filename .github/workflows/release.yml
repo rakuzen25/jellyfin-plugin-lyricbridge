@@ -61,9 +61,7 @@ jobs:
           path: .release-tools
           persist-credentials: false
           sparse-checkout: |
-            scripts/release.py
-            scripts/ci.py
-            scripts/source_inventory.py
+            scripts/
             .python-version
           sparse-checkout-cone-mode: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
@@ -78,15 +76,14 @@ jobs:
       - name: Verify complete release receipt from the authenticated source run
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: python3 .release-tools/scripts/ci.py verify --root . --run-id "${VALIDATED_RUN_ID:-${{ github.run_id }}}"
+        run: PYTHONPATH="$PWD/.release-tools" python3 -P -m scripts.ci verify --root "$PWD" --run-id "${VALIDATED_RUN_ID:-${{ github.run_id }}}"
       - name: Attest the verified validation receipt
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/validation.json
       - name: Verify and attach the tested artifacts
         run: |
-          cp .release-tools/scripts/release.py scripts/release.py
-          python3 scripts/release.py upload --repository "$REPOSITORY" --tag "$RELEASE_TAG"
+          PYTHONPATH="$PWD/.release-tools" python3 -P -m scripts.release --root "$PWD" upload --repository "$REPOSITORY" --tag "$RELEASE_TAG"
       - name: Write handoff
         run: |
           echo "Draft artifacts verified. Review the green validation jobs, then publish the draft in GitHub Releases." >> "$GITHUB_STEP_SUMMARY"

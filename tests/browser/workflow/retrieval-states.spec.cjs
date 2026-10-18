@@ -1,0 +1,22 @@
+const { test, expect } = require("playwright/test");
+const { demo } = require("../fixtures/demo-fixture.cjs");
+test("@workflow retrieval outcomes keep settings usable and preserve lyrics through partial failures", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await demo(page);
+    await expect(page.locator(".ak-enhanced-line")).toHaveCount(6);
+    await page.locator("#demo-scenario").selectOption("partial");
+    await expect(page.locator(".ak-enhanced-line")).toHaveCount(6);
+    await expect(page.locator(".lb-tools")).toContainText("Demo source could not retrieve lyrics");
+    await page.locator("#demo-scenario").selectOption("instrumental");
+    await expect(page.locator(".lb-instrumental-view")).toContainText("Instrumental");
+    await page.getByRole("button", { name: "Lyrics settings", exact: true }).click();
+    await page.getByRole("tab", { name: "Display", exact: true }).click();
+    await expect(page.getByText("Text sizes and layout", { exact: true })).toBeVisible();
+    await page.locator(".lb-popup").getByRole("button", { name: "Close", exact: true }).click();
+    await page.locator("#demo-scenario").selectOption("error");
+    await expect(page.locator(".lb-tools")).toContainText("Demo source timed out");
+    await page.locator("#demo-scenario").selectOption("ready");
+    await expect(page.locator(".ak-enhanced-line")).toHaveCount(6);
+    expect(errors).toEqual([]);
+});

@@ -61,7 +61,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup
-      - run: python3 scripts/release.py prepare --repository "$REPOSITORY" --tag "$RELEASE_TAG" --environment "$GITHUB_ENV"
+      - run: python3 -m scripts.release prepare --repository "$REPOSITORY" --tag "$RELEASE_TAG" --environment "$GITHUB_ENV"
       - id: plan
         env:
           GH_TOKEN: ${{ github.token }}
@@ -81,7 +81,7 @@ jobs:
           if [ "$FULL" = true ]; then args+=(--full); fi
           if [ "$SCHEDULED" = true ]; then args+=(--scheduled); fi
           if [ "$RELEASE_MODE" = true ]; then args+=(--release); fi
-          python3 scripts/ci.py plan "${args[@]}"
+          python3 -m scripts.ci plan "${args[@]}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: validation-plan
@@ -101,7 +101,7 @@ jobs:
         with:
           node: "true"
       - run: mkdir -p dist/evidence
-      - run: python3 scripts/ci.py metadata-check 2>&1 | tee dist/evidence/metadata.log
+      - run: python3 -m scripts.ci metadata-check 2>&1 | tee dist/evidence/metadata.log
       - run: pnpm test:tooling 2>&1 | tee -a dist/evidence/metadata.log
       - name: Validate Renovate configuration with the upstream validator
         run: >-
@@ -130,8 +130,8 @@ jobs:
       - name: Check affected frontend inputs
         if: needs.impact.outputs.frontend == 'true'
         run: (pnpm lint && pnpm format:check && pnpm knip && pnpm test:tooling && pnpm test) 2>&1 | tee dist/evidence/frontend-checks.log
-      - run: (pnpm build && python3 scripts/ci.py web-record) 2>&1 | tee dist/evidence/frontend-build.log
-      - run: python3 tests/WebInstallation.py && sh tests/WebAssetVersions.sh
+      - run: (pnpm build && python3 -m scripts.ci web-record) 2>&1 | tee dist/evidence/frontend-build.log
+      - run: python3 -m tests.installation.WebInstallation && sh tests/installation/WebAssetVersions.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: browser-assets
@@ -161,14 +161,20 @@ jobs:
           references: "true"
       - run: mkdir -p dist/evidence
       - name: Check .NET formatting
-        run: bash scripts/format-dotnet.sh 2>&1 | tee dist/evidence/dotnet-format.log
+        run: bash scripts/checks/format-dotnet.sh 2>&1 | tee dist/evidence/dotnet-format.log
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: browser-assets
           path: dist
-      - run: python3 scripts/ci.py web-verify
-      - run: dotnet restore tests/StorageTests.csproj --locked-mode -m:1 -p:NuGetAudit=false
-      - run: dotnet test --project tests/StorageTests.csproj --no-restore --results-directory dist/evidence --report-xunit-trx --report-xunit-trx-filename backend.trx --minimum-expected-tests 1 2>&1 | tee dist/evidence/backend.log
+      - run: python3 -m scripts.ci web-verify
+      - run: |
+          for project in Core Infrastructure Host; do
+            dotnet restore "tests/backend/$project/LyricBridge.$project.Tests.csproj" --locked-mode -m:1 -p:NuGetAudit=false
+          done
+      - run: |
+          for project in Core Infrastructure Host; do
+            dotnet test --project "tests/backend/$project/LyricBridge.$project.Tests.csproj" --no-restore --results-directory dist/evidence --report-xunit-trx --report-xunit-trx-filename "backend-$project.trx" --minimum-expected-tests 1
+          done 2>&1 | tee dist/evidence/backend.log
       - uses: ./.github/actions/evidence
         if: always()
         with:
@@ -187,8 +193,8 @@ jobs:
         with:
           python: "true"
       - run: mkdir -p dist/evidence
-      - run: LYRICBRIDGE_PYTHON=python sh scripts/check-python.sh 2>&1 | tee dist/evidence/tooling.log
-      - run: (python3 tests/CiPolicy.py && python3 tests/ReleaseBoundaries.py && python3 tests/ReleaseAutomation.py && python3 tests/LocalJellyfin.py) 2>&1 | tee -a dist/evidence/tooling.log
+      - run: LYRICBRIDGE_PYTHON=python sh scripts/checks/check-python.sh 2>&1 | tee dist/evidence/tooling.log
+      - run: (python3 -m tests.tooling.Architecture && python3 -m tests.tooling.CiPolicy && python3 -m tests.tooling.ReleaseBoundaries && python3 -m tests.tooling.ReleaseAutomation && python3 -m tests.tooling.LocalJellyfin) 2>&1 | tee -a dist/evidence/tooling.log
       - uses: ./.github/actions/evidence
         if: always()
         with:
@@ -211,8 +217,8 @@ jobs:
         with:
           name: browser-assets
           path: dist
-      - run: python3 scripts/ci.py web-verify
-      - run: CI_BROWSER_GROUP=workflow scripts/test-browser.sh --project workflow-chromium --workers=2 2>&1 | tee dist/evidence/browser.log
+      - run: python3 -m scripts.ci web-verify
+      - run: CI_BROWSER_GROUP=workflow scripts/checks/test-browser.sh --project workflow-chromium --workers=2 2>&1 | tee dist/evidence/browser.log
       - uses: ./.github/actions/evidence
         if: always()
         with:
@@ -239,8 +245,8 @@ jobs:
         with:
           name: browser-assets
           path: dist
-      - run: python3 scripts/ci.py web-verify
-      - run: CI_BROWSER_GROUP=rendering scripts/test-browser.sh --project "${{ matrix.project }}" --workers=2 2>&1 | tee dist/evidence/browser.log
+      - run: python3 -m scripts.ci web-verify
+      - run: CI_BROWSER_GROUP=rendering scripts/checks/test-browser.sh --project "${{ matrix.project }}" --workers=2 2>&1 | tee dist/evidence/browser.log
       - uses: ./.github/actions/evidence
         if: always()
         with:
@@ -267,8 +273,8 @@ jobs:
         with:
           name: browser-assets
           path: dist
-      - run: python3 scripts/ci.py web-verify
-      - run: CI_BROWSER_GROUP=performance scripts/test-browser.sh --project "${{ matrix.project }}" --workers=1 2>&1 | tee dist/evidence/browser.log
+      - run: python3 -m scripts.ci web-verify
+      - run: CI_BROWSER_GROUP=performance scripts/checks/test-browser.sh --project "${{ matrix.project }}" --workers=1 2>&1 | tee dist/evidence/browser.log
       - uses: ./.github/actions/evidence
         if: always()
         with:
@@ -293,14 +299,14 @@ jobs:
         with:
           name: browser-assets
           path: dist
-      - run: python3 scripts/ci.py web-verify
-      - run: python3 scripts/release.py prepare --repository "$REPOSITORY" --tag "$RELEASE_TAG" --environment "$GITHUB_ENV"
+      - run: python3 -m scripts.ci web-verify
+      - run: python3 -m scripts.release prepare --repository "$REPOSITORY" --tag "$RELEASE_TAG" --environment "$GITHUB_ENV"
       - name: Build clean candidate with verified browser assets
         run: |
           args=(--prepared-web)
           if [ "$RELEASE_MODE" = true ]; then args+=(--release); fi
-          python3 scripts/clean-package.py "${args[@]}" 2>&1 | tee dist/evidence/package.log
-      - run: python3 tests/PackageArtifacts.py
+          python3 -m scripts.build.clean_package "${args[@]}" 2>&1 | tee dist/evidence/package.log
+      - run: python3 -m tests.tooling.PackageArtifacts
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: candidate-unverified
@@ -332,7 +338,7 @@ jobs:
         with:
           name: candidate-unverified
           path: dist
-      - run: python3 tests/PackageInstallation.py 2>&1 | tee dist/evidence/installation.log
+      - run: python3 -m tests.installation.PackageInstallation 2>&1 | tee dist/evidence/installation.log
       - uses: ./.github/actions/evidence
         if: always()
         with:
@@ -357,8 +363,8 @@ jobs:
         with:
           name: candidate-unverified
           path: dist
-      - run: python3 scripts/release.py prepare --repository "$REPOSITORY" --tag "$RELEASE_TAG" --environment "$GITHUB_ENV"
-      - run: python3 tests/ReproducibleBuild.py 2>&1 | tee dist/evidence/reproducibility.log
+      - run: python3 -m scripts.release prepare --repository "$REPOSITORY" --tag "$RELEASE_TAG" --environment "$GITHUB_ENV"
+      - run: python3 -m tests.tooling.ReproducibleBuild 2>&1 | tee dist/evidence/reproducibility.log
       - uses: ./.github/actions/evidence
         if: always()
         with:
@@ -380,7 +386,10 @@ jobs:
           references: "true"
       - run: mkdir -p dist/evidence
       - run: pnpm audit 2>&1 | tee dist/evidence/pnpm-audit.log
-      - run: dotnet restore tests/StorageTests.csproj --locked-mode -m:1 --force-evaluate -p:NuGetAuditMode=all -p:WarningsAsErrors=NU1900%3BNU1901%3BNU1902%3BNU1903%3BNU1904%3BNU1905 2>&1 | tee dist/evidence/nuget-audit.log
+      - run: |
+          for project in Core Infrastructure Host; do
+            dotnet restore "tests/backend/$project/LyricBridge.$project.Tests.csproj" --locked-mode -m:1 --force-evaluate -p:NuGetAuditMode=all -p:WarningsAsErrors=NU1900%3BNU1901%3BNU1902%3BNU1903%3BNU1904%3BNU1905
+          done 2>&1 | tee dist/evidence/nuget-audit.log
       - uses: ./.github/actions/evidence
         if: always()
         with:
@@ -412,7 +421,7 @@ jobs:
       - name: Aggregate required validation and bind evidence to artifacts
         env:
           CI_JOB_RESULTS: ${{ toJSON(needs) }}
-        run: python3 scripts/ci.py finish
+        run: python3 -m scripts.ci finish
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:

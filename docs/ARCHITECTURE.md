@@ -16,9 +16,23 @@ Each project owns a distinct boundary:
 | `LyricBridge`                | Registration, configuration, authenticated controllers, library access, tasks, native lyrics  | Host singleton access stays here; controllers delegate to explicit services                                   |
 | Vendored Lyricify helper     | Provider/format adapters and field comparisons                                                | Separately maintained dependency; preserve [upstream provenance](../vendor/UPSTREAM.md)                       |
 
-Repository contracts live in `src/Core/Repositories.cs` and the transcription domain contract. Services accept narrow
+The three projects are siblings under `src/`: `Core`, `Infrastructure`, and `Host`.
+Features are grouped within those boundaries. Core owns lyrics/composition,
+retrieval/ranking, preferences/timing, generation, transcription, and service
+configuration. Infrastructure groups storage, retrieval/providers, formats, language
+adapters, transcription, and maintenance. Host groups startup/configuration,
+playback/library integration, transcription, administration, and web integration.
+Assembly identities and .NET type names remain stable.
+
+Repository contracts live beside their Core feature. Services accept narrow
 interfaces such as `IGenerationRepository` and `IPreferenceRepository`; controllers
-do not access generic storage keys. Multi-record completion and selection are transactional.
+do not access generic storage keys. Storage partials stay together because completion,
+selection, deletion, and reset share transaction and admission fences. The language
+adapter project owns the Kawazu dictionary assets its consumers require.
+
+Backend tests have independent Core, Infrastructure, and Host projects. Core tests
+reference Core alone; storage and worker fixtures do not construct Jellyfin plugins.
+Project-reference policy and forbidden host dependencies are checked automatically.
 Shared .NET policy lives in `Directory.Build.props`; vendor source retains its own
 framework/version.
 
@@ -77,12 +91,19 @@ and UI work. Administrator controls use native Jellyfin markup; playback control
 scoped glass styles. Shared feedback behavior has separate presentation adapters; see
 [feedback integration](FEEDBACK.md).
 
-`frontend/renderer/runtime.ts` coordinates host/route/media state, accepted records,
-and one scheduler. Auto-follow owns scrolling/suspension; controls own timing and seek
-interactions. Artwork resolution owns identity, candidates, and request generations;
-its surface owns WebGL and fallback layers. Word models, lyric/instrumental views,
-pronunciation, song preferences, and playback coordination have explicit dependencies
-and limited state views. Diagnostics expose snapshots without mutation.
+Frontend applications contain feature folders; their installation modules compose
+owners, wire effects, publish supported APIs, and release resources. Bridge owners
+separate track acceptance/polling, preferences, catalog actions, lyric presentation,
+settings/dialog navigation, notifications, search, versions, and transcription.
+Administrator settings transactions own drafts, server baselines, conflict choices,
+and load/save revisions independently of source/service editors and their DOM.
+
+Renderer owners separate lyric sessions and decoration, media clocks/hooks, frame
+scheduling, host observation/recovery, appearance, pronunciation, and preferences.
+Each owns its state and exposes commands and read-only views. Stable frozen accessor
+facades avoid copying snapshots in the frame loop; render records and host handles
+retain their presentation lifetimes. Diagnostics combine owner views into the
+supported snapshots. There is one animation scheduler.
 
 Temporary work stays with its owner. Searches capture authentication and own admission,
 polling, and release. Generation monitors use the track abort signal. Previews retain
@@ -90,9 +111,36 @@ their baseline and newest deferred response until cancel/apply. Image loads and
 cooperative yields settle on disposal; generation/view checks reject stale decoration.
 Accepted preference writes finish using captured account/song identities even after
 playback cancellation. Shared resource ownership lives in `frontend/shared/lifecycle.ts`.
-Transcription review owns its edit history, request revisions and previews; admitted-job
-monitors belong to the captured track. Shared feedback and playback notifications carry
-stable job identities. Status-check failures do not imply that remote work failed.
+Transcription's panel façade composes submission, result browsing, review, and job owners.
+Its DOM-free review controller owns draft history, saved baselines, immutable snapshots,
+and separate request/plan/metadata revisions; editor sections dispatch typed commands.
+Panel closure cancels uploads and reads, while admitted-job monitors belong to the captured
+track. Saved-entry refreshes preserve drafts and previews. Shared feedback and playback
+notifications carry stable job identities. Status-check failures do not imply that remote work failed.
+
+Cross-application payloads and public ports live in `frontend/contracts/`, independently
+of controllers and installation. Ambient host declarations live in `frontend/platform/`;
+shared primitives cannot import application implementations. Renderer installation
+implements the explicit full API; bridge access uses a narrower optional capability port
+supporting late installation and stock-TV bypass. The established `RendererApi` type
+re-export remains available from the renderer runtime.
+
+Feature-private implementations are consumed within their feature or by composition
+roots. Cross-feature access uses explicit ports and the reusable operations/algorithms
+listed by the boundary checker. Checks reject application imports from contracts/shared,
+private cross-feature imports, and runtime dependency cycles.
+
+Repository-level tests live under `tests/backend`, `tests/browser`, `tests/tooling`,
+and `tests/installation`; frontend unit tests remain colocated with their owners.
+Browser workflow, rendering, and performance groups use one manifest of relative spec
+paths, checked against recursive discovery. Reviewed visual baselines live in the
+browser workspace's `baselines` directory.
+
+Tooling is grouped under `scripts/ci`, `build`, `release`, `dev`, `checks`, and `common`.
+Python entrypoints run as packages from the repository root, with explicit root overrides
+where validation targets a separate checkout. Release verification executes the complete
+trusted tooling package independently of candidate code. Source inventories, fingerprints,
+archives, and cumulative CI classification cover the same maintained roots.
 
 ## Storage and deletion
 

@@ -10,8 +10,8 @@ node_modules/
 *.snupkg
 
 # Test, coverage and checker output
-browser-tests/results/
-browser-tests/results-*/
+tests/browser/results/
+tests/browser/results-*/
 TestResults/
 coverage/
 *.trx
@@ -48,3 +48,7 @@ core
 core.*
 *.dmp
 vendor/Lyricify.Lyrics.Helper/.git/
+
+# Retired local browser reports are generated artifacts as well.
+/browser-tests/results/
+/browser-tests/results-*/
