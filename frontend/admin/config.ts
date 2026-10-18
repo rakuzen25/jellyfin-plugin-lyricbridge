@@ -287,7 +287,9 @@ import { revealSelectedTab } from "./ui/ui.ts";
                     typeof error.json === "function"
                         ? await error.clone?.().json()
                         : error.responseJSON || JSON.parse(error.responseText || error.response?.data || "null");
-            } catch {}
+            } catch {
+                // Invalid error JSON falls back to the HTTP status message below.
+            }
             const code = error.status || error.response?.status;
             const message =
                 body?.error?.message ||

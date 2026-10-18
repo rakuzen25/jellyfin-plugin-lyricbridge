@@ -132,7 +132,9 @@ export function createApi<TScope extends TransportScope>(options: ApiOptions<TSc
             let data: unknown;
             try {
                 data = await response.json();
-            } catch {}
+            } catch {
+                // Non-JSON error responses use the HTTP status fallback below.
+            }
             const details = failure(data) ?? {
                 code: response.status === 401 ? "sign_in_required" : response.status === 403 ? "permission_denied" : "request_failed",
                 message:

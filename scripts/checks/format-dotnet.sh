@@ -7,11 +7,18 @@ case "${1:-}" in
     --fix) options=() ;;
     *) echo "Usage: bash scripts/checks/format-dotnet.sh [--fix]" >&2; exit 2 ;;
 esac
-# Syntax-only formatting needs neither reference assemblies nor package restoration.
 # Keep vendored and generated code outside the maintained formatting boundary.
 files=()
 while IFS= read -r -d '' file; do files+=("$PWD/$file"); done < <(
     find src tests -type d \( -name bin -o -name obj \) -prune -o -type f -name '*.cs' -print0
 )
 if [ "${#files[@]}" -eq 0 ]; then echo "No maintained C# files found" >&2; exit 1; fi
-"$dotnet_executable" format whitespace . --folder "${options[@]}" --include "${files[@]}"
+projects=()
+while IFS= read -r -d '' project; do projects+=("$project"); done < <(
+    find src tests -type d \( -name bin -o -name obj \) -prune -o -type f -name '*.csproj' -print0
+)
+if [ "${#projects[@]}" -eq 0 ]; then echo "No maintained C# projects found" >&2; exit 1; fi
+for project in "${projects[@]}"; do
+    "$dotnet_executable" restore "$project" --locked-mode -m:1 -p:NuGetAudit=false
+    "$dotnet_executable" format "$project" --no-restore "${options[@]}" --include "${files[@]}"
+done
