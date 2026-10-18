@@ -8,6 +8,8 @@ from pathlib import Path
 import scripts.ci.evidence as ci_evidence
 import scripts.ci.planning as ci_planning
 import scripts.ci.policy as ci_policy
+from scripts.common import artifacts
+from scripts.common.artifacts import verify_web
 
 
 def main() -> None:
@@ -117,7 +119,7 @@ def main() -> None:
         ci_evidence.verify(root, receipt, os.environ["GITHUB_REPOSITORY"], args.run_id)
     else:
         path = root / "dist/web-build.json"
-        current = ci_policy.web_inputs(root)
+        current = artifacts.web_inputs(root)
         if args.command == "web-record":
             if not all(
                 name in current["files"]
@@ -131,8 +133,8 @@ def main() -> None:
             ):
                 raise ValueError("Prepared web assets are incomplete")
             path.write_text(json.dumps(current, indent=2) + "\n")
-        elif json.loads(path.read_text()) != current:
-            raise ValueError("Prepared frontend inputs or asset hashes changed")
+        else:
+            verify_web(root)
 
 
 if __name__ == "__main__":

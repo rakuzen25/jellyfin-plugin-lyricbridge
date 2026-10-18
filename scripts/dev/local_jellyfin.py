@@ -1,30 +1,29 @@
-"""Interactive, isolated Jellyfin sandbox for unpublished LyricBridge builds."""
+"""Owned Docker sandbox operations used by the persistent Node development session."""
 
 import argparse
+import fcntl
 import hashlib
 import http.client
 import json
 import os
 import shutil
+import signal
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.request
-import zipfile
 from pathlib import Path
 
-from scripts.common.release_metadata import load_release
+from scripts.build.backend import publish
+from scripts.common.process import IMAGES, ROOT, run
+from scripts.common.release_metadata import load_identity
 
-REPOSITORY = Path(__file__).resolve().parents[2]
-DATA = REPOSITORY / ".build/local-jellyfin"
-IMAGE = "jellyfin/jellyfin@sha256:357724bf0ae27a672c7cbaa899db2d9abeb13dbd8657ccce750258a4c059d037"
+REPOSITORY = ROOT
+DATA = ROOT / ".build/local-jellyfin"
 OWNER_LABEL = "lyricbridge.local-checkout"
-OWNER = str(REPOSITORY)
+OWNER = str(ROOT)
 CONTAINER = "lyricbridge-local-" + hashlib.sha256(OWNER.encode()).hexdigest()[:10]
-
-
-def run(*command: str) -> None:
-    subprocess.run(command, cwd=REPOSITORY, check=True)
 
 
 def inspect() -> dict | None:
@@ -51,69 +50,6 @@ def inspect() -> dict | None:
             "Container name belongs to another installation; refusing to change it."
         )
     return container
-
-
-def build() -> None:
-    for executable in (
-        "docker",
-        "python3",
-        os.environ.get("LYRICBRIDGE_PNPM", "pnpm"),
-        os.environ.get("LYRICBRIDGE_DOTNET", "dotnet"),
-    ):
-        if not shutil.which(executable):
-            raise SystemExit(
-                f"Missing {executable}. Install the pinned tools described in docs/how-to/develop.md."
-            )
-    reference = REPOSITORY / ".build/jellyfin"
-    if not (reference / "MediaBrowser.Common.dll").exists():
-        run("sh", "scripts/dev/bootstrap-references.sh")
-    run("sh", "scripts/build/package.sh")
-
-
-def install() -> None:
-    release = load_release(REPOSITORY)
-    archive = REPOSITORY / "dist" / f"lyricbridge-{release.version}.zip"
-    if not archive.is_file():
-        raise SystemExit(
-            "Package not found. Run python3 -m scripts.dev.local_jellyfin rebuild to build the current checkout."
-        )
-    plugins = DATA / "config/plugins"
-    plugins.mkdir(parents=True, exist_ok=True)
-    # Validate/extract before taking a running sandbox down.
-    with tempfile.TemporaryDirectory(prefix="lyricbridge-local-package-") as directory:
-        staged = Path(directory)
-        with zipfile.ZipFile(archive) as package:
-            metadata = json.loads(package.read("meta.json"))
-            if (
-                metadata.get("guid") != release.guid
-                or metadata.get("version") != release.jellyfin_version
-            ):
-                raise SystemExit(
-                    "Package identity/version does not match this checkout. Rebuild it."
-                )
-            for entry in package.infolist():
-                if (
-                    not (staged / entry.filename)
-                    .resolve()
-                    .is_relative_to(staged.resolve())
-                ):
-                    raise SystemExit("Unsafe archive path.")
-            package.extractall(staged)
-        previous = list(plugins.glob("LyricBridge_*"))
-        for folder in previous:
-            meta = folder / "meta.json"
-            if (
-                not meta.is_file()
-                or json.loads(meta.read_text()).get("guid") != release.guid
-            ):
-                raise SystemExit(
-                    f"Unexpected plugin folder: {folder}. Resolve it manually before rebuilding."
-                )
-        if inspect():
-            run("docker", "rm", "-f", CONTAINER)
-        for folder in previous:
-            shutil.rmtree(folder)
-        shutil.copytree(staged, plugins / ("LyricBridge_" + release.jellyfin_version))
 
 
 def media_paths(requested: list[str] | None) -> list[str]:
@@ -160,24 +96,42 @@ def media_paths(requested: list[str] | None) -> list[str]:
     return paths
 
 
-def start(port: int, requested_mounts: list[str] | None = None) -> None:
-    mounts = media_paths(requested_mounts)
-    DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+def stop() -> None:
+    if inspect():
+        run("docker", "rm", "-f", CONTAINER)
+    (DATA / "session.json").unlink(missing_ok=True)
+
+
+def wait_ready(port: int) -> None:
+    for _ in range(60):
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/health", timeout=2
+            ) as response:
+                if response.status == 200 and response.read().strip() == b"Healthy":
+                    return
+        except OSError, http.client.HTTPException:
+            pass
+        time.sleep(1)
+    run("docker", "logs", "--tail", "60", CONTAINER)
+    raise RuntimeError("Jellyfin startup timed out")
+
+
+def start(mounts: list[str]) -> int:
     for name in ("config", "cache", "media"):
-        (DATA / name).mkdir(exist_ok=True)
-    install()
+        (DATA / name).mkdir(parents=True, exist_ok=True)
     run(
         "docker",
         "run",
         "-d",
         "--platform",
-        "linux/amd64",
+        IMAGES["platform"],
         "--name",
         CONTAINER,
         "--label",
         OWNER_LABEL + "=" + OWNER,
         "-p",
-        f"127.0.0.1:{port}:8096",
+        "127.0.0.1::8096",
         "-v",
         f"{DATA / 'config'}:/config",
         "-v",
@@ -189,89 +143,138 @@ def start(port: int, requested_mounts: list[str] | None = None) -> None:
             for path in mounts
             for argument in ("--mount", f"type=bind,src={path},dst={path},readonly")
         ),
-        IMAGE,
+        IMAGES["jellyfin"],
     )
-    (DATA / "media-mounts.json").write_text(json.dumps(mounts, indent=2) + "\n")
+    container = inspect()
+    assert container is not None
+    port = int(container["NetworkSettings"]["Ports"]["8096/tcp"][0]["HostPort"])
     wait_ready(port)
+    (DATA / "session.json").write_text(json.dumps({"port": port}) + "\n")
+    return port
 
 
-def rebuild(port: int, requested_mounts: list[str] | None = None) -> None:
+def deploy(web: Path, requested_mounts: list[str] | None = None) -> None:
     mounts = media_paths(requested_mounts)
-    build()
-    start(port, mounts)
-
-
-def wait_ready(port: int) -> None:
-    url = f"http://localhost:{port}/web/"
-    for _ in range(60):
+    DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+    release = load_identity()
+    plugins = DATA / "config/plugins"
+    plugins.mkdir(parents=True, exist_ok=True)
+    previous = list(plugins.glob("LyricBridge_*"))
+    for folder in previous:
+        meta = folder / "meta.json"
+        if (
+            not meta.is_file()
+            or json.loads(meta.read_text()).get("guid") != release.guid
+        ):
+            raise ValueError("Unexpected plugin folder: " + str(folder))
+    # Compile/validate before taking down the currently usable installation.
+    with tempfile.TemporaryDirectory(prefix="plugin-", dir=DATA) as temporary:
+        staging = Path(temporary)
+        candidate = staging / "candidate"
+        publish(candidate, web, configuration="Debug")
+        if not (candidate / "Jellyfin.Plugin.LyricBridge.dll").is_file():
+            raise ValueError("Build did not produce the plugin assembly")
+        (candidate / "meta.json").write_text(
+            json.dumps(
+                {
+                    "guid": release.guid,
+                    "name": release.name,
+                    "description": release.description,
+                    "version": release.jellyfin_version,
+                    "targetAbi": release.abi,
+                    "status": "Active",
+                    "autoUpdate": False,
+                    "assemblies": [p.name for p in sorted(candidate.glob("*.dll"))],
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+        backup = staging / "previous"
+        backup.mkdir()
+        for folder in previous:
+            shutil.copytree(folder, backup / folder.name)
+        was_running = bool(inspect())
+        stop()
+        target = plugins / ("LyricBridge_" + release.jellyfin_version)
         try:
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{port}/health", timeout=2
-            ) as response:
-                if response.status == 200:
-                    print(
-                        f"\nReady: {url}\nTest media: {DATA / 'media'}\nAdd /media as a music library. Configuration and data are retained across rebuilds."
-                    )
-                    return
-        except OSError, http.client.HTTPException:
-            # The published port can accept connections before Jellyfin is ready.
-            pass
-        time.sleep(1)
-    raise SystemExit(
-        f"Startup timed out. Inspect with: python3 -m scripts.dev.local_jellyfin logs\nContainer retained at {url}"
-    )
+            for folder in previous:
+                shutil.rmtree(folder)
+            shutil.copytree(candidate, target)
+            start(mounts)
+        except BaseException:
+            stop()
+            if target.exists():
+                shutil.rmtree(target)
+            for folder in backup.iterdir():
+                shutil.copytree(folder, plugins / folder.name)
+            if was_running and previous:
+                print("Replacement failed; restoring the previous plugin", flush=True)
+                start(mounts)
+            raise
+    (DATA / "media-mounts.json").write_text(json.dumps(mounts, indent=2) + "\n")
+
+
+def dev(args: argparse.Namespace) -> None:
+    from scripts.tasks import verify_tools
+
+    DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (DATA / "session.lock").open("w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError(
+                "A development session already owns this checkout"
+            ) from None
+        media_paths([] if args.clear_media_mounts else args.media_mount)
+        verify_tools()
+        if not (ROOT / "frontend/node_modules/esbuild").exists():
+            raise ValueError(
+                "Workspace dependencies are missing; run pnpm install --frozen-lockfile"
+            )
+        from scripts.dev.references import ensure
+
+        ensure()
+        command = ["node", "scripts/dev/session.mjs", "--port", str(args.port)]
+        if args.open:
+            command.append("--open")
+        if args.clear_media_mounts:
+            command.append("--clear-media-mounts")
+        for mount in args.media_mount or []:
+            command.extend(["--media-mount", mount])
+        environment = {**os.environ, "LYRICBRIDGE_DEV_PYTHON": sys.executable}
+        child = subprocess.Popen(command, cwd=ROOT, env=environment)
+        previous_handler = signal.signal(
+            signal.SIGTERM, lambda signum, frame: child.send_signal(signal.SIGTERM)
+        )
+        try:
+            code = child.wait()
+            if code:
+                raise subprocess.CalledProcessError(code, command)
+        except KeyboardInterrupt:
+            child.send_signal(signal.SIGINT)
+            child.wait()
+        finally:
+            signal.signal(signal.SIGTERM, previous_handler)
+            if child.poll() is None:
+                child.terminate()
+                child.wait()
+            stop()
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "command",
-        choices=("start", "rebuild", "stop", "status", "logs"),
-        help="start uses the existing plugin ZIP; rebuild packages the checkout first",
-    )
-    parser.add_argument(
-        "--port", type=int, default=18096, help="Localhost-only port (default: 18096)"
-    )
-    mount_options = parser.add_mutually_exclusive_group()
-    mount_options.add_argument(
-        "--media-mount",
-        action="append",
-        metavar="PATH",
-        help="Read-only host directory mounted at the same absolute path; repeatable and retained across rebuilds",
-    )
-    mount_options.add_argument(
-        "--clear-media-mounts",
-        action="store_true",
-        help="Remove remembered extra media mounts",
-    )
+    parser = argparse.ArgumentParser(__doc__)
+    parser.add_argument("operation", choices=["deploy", "stop"])
+    parser.add_argument("--web", type=Path)
+    parser.add_argument("--media-mount", action="append")
+    parser.add_argument("--clear-media-mounts", action="store_true")
     args = parser.parse_args()
-    if not 1 <= args.port <= 65535:
-        parser.error("--port must be between 1 and 65535")
-    if not shutil.which("docker"):
-        parser.error("Docker is required")
-    if args.command in ("start", "rebuild"):
-        action = rebuild if args.command == "rebuild" else start
-        action(
-            args.port,
-            [] if args.clear_media_mounts else args.media_mount,
-        )
+    if args.operation == "stop":
+        stop()
+    elif args.web:
+        deploy(args.web.resolve(), [] if args.clear_media_mounts else args.media_mount)
     else:
-        container = inspect()
-        if not container:
-            print("Local Jellyfin is stopped. Retained data:", DATA)
-        elif args.command == "stop":
-            run("docker", "rm", "-f", CONTAINER)
-            print("Stopped. Test configuration, media and database retained:", DATA)
-        elif args.command == "logs":
-            run("docker", "logs", "--tail", "100", "-f", CONTAINER)
-        else:
-            ports = container["NetworkSettings"].get("Ports", {}).get("8096/tcp") or []
-            print("Container:", CONTAINER, "State:", container["State"]["Status"])
-            for binding in ports:
-                print("URL: http://localhost:" + binding["HostPort"] + "/web/")
-            print("Data:", DATA)
-            for path in media_paths(None):
-                print("Read-only media mount:", path)
+        parser.error("deploy requires --web")
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
-from scripts.ci.policy import digest
+from scripts.common.artifacts import digest
 from scripts.common.source_inventory import source_files
 
 repository = Path(__file__).resolve().parents[2]
@@ -31,7 +31,7 @@ if not source.is_file():
 if not (reference / "MediaBrowser.Common.dll").is_file():
     raise SystemExit("Set LYRICBRIDGE_REFERENCE_DIR to verified official references.")
 environment = dict(os.environ)
-environment["LYRICBRIDGE_REFERENCE_ARG"] = "-p:JellyfinReferenceDir=" + str(reference)
+environment["LYRICBRIDGE_REFERENCE_DIR"] = str(reference)
 environment["NUGET_PACKAGES"] = str(
     Path(os.environ.get("NUGET_PACKAGES", Path.home() / ".nuget/packages")).resolve()
 )
@@ -48,7 +48,6 @@ if proof != {
     raise SystemExit(
         "Candidate is not the current verified clean build; run scripts/build/clean_package.py first."
     )
-environment.pop("LYRICBRIDGE_PREPARED_WEB", None)
 results = []
 with tempfile.TemporaryDirectory(prefix="lyricbridge-repro-") as directory:
     for name in ("comparison",):
@@ -64,7 +63,7 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-repro-") as directory:
         log = repository / "dist" / f"reproducibility-{name}.log"
         with log.open("w") as output:
             subprocess.run(
-                ["sh", "scripts/build/package.sh"],
+                ["python3", "-m", "scripts.build.package"],
                 cwd=root,
                 env=environment,
                 stdout=output,

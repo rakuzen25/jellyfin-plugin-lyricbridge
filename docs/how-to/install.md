@@ -54,7 +54,7 @@ For an independently hosted Jellyfin Web client, download and extract the matchi
 From the source checkout, run:
 
 ```sh
-python3 -m scripts.build.web_assets --web-root WEB_ROOT --assets WEB_ASSETS
+python3 -m scripts.installation.web_assets --web-root WEB_ROOT --assets WEB_ASSETS
 ```
 
 Replace `WEB_ROOT` with the installed client's directory and `WEB_ASSETS` with the extracted web archive directory.
@@ -68,7 +68,7 @@ Then uninstall or disable it through Jellyfin and restart. An inactive plugin ca
 For a separate client or leftover managed tags, run from the source checkout:
 
 ```sh
-python3 -m scripts.build.web_assets --web-root WEB_ROOT --uninstall
+python3 -m scripts.installation.web_assets --web-root WEB_ROOT --uninstall
 ```
 
 Replace `WEB_ROOT` with the client directory being cleaned. The command removes managed tags and assets while retaining the backup and unrelated changes.

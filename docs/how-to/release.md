@@ -58,7 +58,7 @@ For an unpublished local release build, set the intended public URLs:
 ```sh
 LYRICBRIDGE_REPOSITORY_URL=https://github.com/OWNER/REPOSITORY \
 LYRICBRIDGE_DOWNLOAD_BASE_URL=https://github.com/OWNER/REPOSITORY/releases/download/vVERSION \
-  scripts/build/package.sh --release
+  pnpm build --release
 ```
 
 Replace `OWNER`, `REPOSITORY`, and `VERSION` with the intended destination and version.

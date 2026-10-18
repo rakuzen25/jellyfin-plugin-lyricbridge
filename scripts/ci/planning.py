@@ -11,6 +11,7 @@ from pathlib import Path
 
 import scripts.ci.evidence as ci_evidence
 import scripts.ci.policy as ci_policy
+from scripts.common import artifacts
 from scripts.common.source_inventory import source_files
 
 
@@ -20,7 +21,7 @@ def plan(
     ci_policy.browser_inventory(root)
     ci_policy.check_classification(root, [])
     inputs = ci_policy.fingerprints(root)
-    policy = ci_policy.digest(
+    policy = artifacts.digest(
         root,
         [Path(p) for p in ci_policy.POLICY]
         + [
@@ -182,7 +183,7 @@ def finish(root: Path, selection: dict, jobs: dict) -> dict:
         selection,
         groups=results,
         validated_at=datetime.now(UTC).isoformat(),
-        artifacts=ci_policy.artifact_hashes(root)
+        artifacts=artifacts.artifact_hashes(root)
         if results.get("artifacts") == "success"
         else {},
     )

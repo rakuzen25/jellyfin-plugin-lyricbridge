@@ -9,34 +9,26 @@ For maintained source and tooling, run:
 
 ```sh
 pnpm check
-pnpm test:tooling
-pnpm build
 pnpm test
+pnpm build
 ```
 
 All commands must exit successfully. A successful build creates the assets used by browser fixtures.
-For prose and link changes alone, run `pnpm check:docs`; review the text against the reader's task as well.
+For frontend changes alone, `pnpm check frontend` runs lint, formatting, unused-code, and type checks.
+For prose and link changes alone, run `pnpm check docs`; review the text against the reader's task as well.
 The link checker cannot establish accuracy or writing quality.
 
-For backend changes, test each project independently:
-
-```sh
-for project in Core Infrastructure Host; do
-  dotnet restore "tests/backend/$project/LyricBridge.$project.Tests.csproj" --locked-mode
-  TESTINGPLATFORM_TELEMETRY_OPTOUT=1 dotnet test --project "tests/backend/$project/LyricBridge.$project.Tests.csproj" --no-restore --minimum-expected-tests 1
-done
-```
-
-The minimum rejects an accidental zero-test run. Keep dependencies and fixtures at the boundary they exercise rather than adding Jellyfin to domain tests.
-For Python policy/tooling changes, run the relevant modules under [tooling tests](../../tests/tooling/), following the commands in the [validation workflow](../../.github/workflows/validate.yml).
+Use `pnpm check frontend`, `pnpm check backend`, or `pnpm check tooling` for targeted checks. Each verifies formatting; `pnpm format` applies formatting across maintained languages.
+`pnpm test` runs frontend, backend, and tooling unit tests. Use a target to run one boundary, for example `pnpm test backend`. Backend runs reject accidental zero-test executions.
+Browser, installation, and reproducibility acceptance are explicit tasks.
 
 ## Exercise browser workflows and rendering
 
 After building, use the pinned offline browser image for acceptance:
 
 ```sh
-CI_BROWSER_GROUP=workflow pnpm test:browser --project workflow-chromium --workers=2
-CI_BROWSER_GROUP=rendering pnpm test:browser --workers=2
+CI_BROWSER_GROUP=workflow pnpm test browser --project workflow-chromium --workers=2
+CI_BROWSER_GROUP=rendering pnpm test browser --workers=2
 ```
 
 Workflow checks exercise actions and asynchronous results; rendering checks cover the browser/viewport matrix.
@@ -46,7 +38,7 @@ For native browser debugging, install browsers and run from the current workspac
 
 ```sh
 pnpm --dir tests/browser exec playwright install --with-deps chromium firefox webkit
-pnpm --dir tests/browser test --list
+pnpm --dir tests/browser exec playwright test --list
 ```
 
 The listing confirms discovery. Remove `--list` to run locally; native results do not replace pinned-image acceptance.
@@ -56,10 +48,10 @@ The listing confirms discovery. Remove `--list` to run locally; native results d
 For packaging, dependency, installer, or release changes, build and inspect a clean candidate:
 
 ```sh
-python3 -m scripts.build.clean_package
+pnpm build
 python3 -m tests.tooling.package_artifacts
-python3 -m tests.tooling.reproducible_build
-python3 -m tests.installation.package_installation
+pnpm test reproducibility
+pnpm test installation
 ```
 
 These checks inspect archives, rebuild independently, and install into a disposable official server.

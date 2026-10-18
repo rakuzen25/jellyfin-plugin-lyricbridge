@@ -1,11 +1,11 @@
 """Local input classification, fingerprints and artifact inventories."""
 
-import hashlib
 import json
 import re
 import subprocess
 from pathlib import Path
 
+from scripts.common.artifacts import digest
 from scripts.common.source_inventory import source_files
 
 GROUPS = (
@@ -35,6 +35,11 @@ POLICY = (
     "scripts/ci/evidence.py",
     "scripts/ci/planning.py",
     "scripts/common/source_inventory.py",
+    "scripts/common/artifacts.py",
+    "scripts/common/images.json",
+    "scripts/common/process.py",
+    "scripts/__main__.py",
+    "scripts/tasks.py",
     "scripts/checks/architecture.py",
     "tests/browser/groups.json",
 )
@@ -88,6 +93,11 @@ def impacts(path: str, root: Path | None = None) -> set[str]:
 def known_impacts(path: str, root: Path | None = None) -> set[str]:
     all_groups = set(GROUPS)
     if path.startswith("scripts/ci/") or path in {
+        "scripts/__main__.py",
+        "scripts/tasks.py",
+        "scripts/common/process.py",
+        "scripts/common/artifacts.py",
+        "scripts/common/images.json",
         "scripts/__init__.py",
         "scripts/common/__init__.py",
     }:
@@ -123,6 +133,8 @@ def known_impacts(path: str, root: Path | None = None) -> set[str]:
         or path in POLICY
     ):
         return all_groups
+    if path.startswith("scripts/dev/") and path.endswith(".mjs"):
+        return {"frontend", "backend", "tooling", "workflow", "artifacts"}
     if path.startswith(("frontend/renderer", "frontend/assets/")):
         return {"frontend", "rendering", "performance", "artifacts"}
     if path.startswith("frontend/bridge/"):
@@ -147,8 +159,27 @@ def known_impacts(path: str, root: Path | None = None) -> set[str]:
         }:
             return {"frontend", "workflow", "rendering", "artifacts"}
         return {"frontend", "workflow", "rendering", "performance", "artifacts"}
+    if path in {
+        "frontend/build.mjs",
+        "frontend/check-boundaries.mjs",
+        "frontend/contract-boundaries.mjs",
+        "frontend/package.json",
+    }:
+        return {
+            "frontend",
+            "tooling",
+            "workflow",
+            "rendering",
+            "performance",
+            "artifacts",
+        }
     if path.startswith("frontend/"):
         return {"frontend", "workflow", "rendering", "performance", "artifacts"}
+    if path in {
+        "tests/tooling/renderer-contract.test.mjs",
+        "tests/tooling/typescript-toolchain.test.mjs",
+    }:
+        return {"frontend", "tooling", "artifacts"}
     if path.startswith("tests/browser/"):
         if path.endswith(".spec.cjs"):
             groups = json.loads(
@@ -215,6 +246,8 @@ def known_impacts(path: str, root: Path | None = None) -> set[str]:
             return {"metadata", "frontend", "tooling", "artifacts"}
         if path.endswith(
             (
+                "references.py",
+                "backend.py",
                 "bootstrap-references.sh",
                 "reference_cache.py",
                 "reference-cache.py",
@@ -240,6 +273,7 @@ def known_impacts(path: str, root: Path | None = None) -> set[str]:
         return {
             "metadata",
             "frontend",
+            "tooling",
             "workflow",
             "rendering",
             "performance",
@@ -252,9 +286,9 @@ def known_impacts(path: str, root: Path | None = None) -> set[str]:
         ".prettierignore",
     }:
         return (
-            {"metadata", "frontend"}
+            {"metadata", "frontend", "tooling"}
             if path in {".prettierrc.json", ".prettierignore"}
-            else {"frontend"}
+            else {"frontend", "tooling"}
         )
     raise ValueError(
         "Unclassified CI input: "
@@ -312,43 +346,6 @@ def browser_inventory(root: Path) -> None:
         raise ValueError("Every browser spec must belong to exactly one known group")
 
 
-def digest(root: Path, paths: list[Path], normalize_version: bool = False) -> str:
-    value = hashlib.sha256()
-    for path in sorted(paths):
-        data = (root / path).read_bytes()
-        # Only the authoritative release version is non-behavioral. ABI, identity,
-        # build options and external dependency versions are never normalized.
-        if normalize_version and str(path) == "Directory.Build.props":
-            data = re.sub(
-                rb"<LyricBridgeVersion>\d+\.\d+\.\d+</LyricBridgeVersion>",
-                b"<LyricBridgeVersion>RELEASE</LyricBridgeVersion>",
-                data,
-            )
-        if normalize_version and path.name == "packages.lock.json":
-            lock = json.loads(data)
-            match = re.search(
-                r"<LyricBridgeVersion>(\d+\.\d+\.\d+)</LyricBridgeVersion>",
-                (root / "Directory.Build.props").read_text(),
-            )
-            if not match:
-                raise ValueError("Invalid authoritative version")
-            for framework in lock["dependencies"].values():
-                for dependency in framework.values():
-                    if dependency.get("type") == "Project":
-                        for name, requested in dependency.get(
-                            "dependencies", {}
-                        ).items():
-                            if (
-                                name
-                                in {"LyricBridge.Core", "LyricBridge.Infrastructure"}
-                                and requested == f"[{match[1]}, )"
-                            ):
-                                dependency["dependencies"][name] = "[RELEASE, )"
-            data = json.dumps(lock, sort_keys=True).encode()
-        value.update(str(path).encode() + b"\0" + data + b"\0")
-    return value.hexdigest()
-
-
 def fingerprints(root: Path) -> dict[str, str]:
     files = source_files(root)
     shared = {Path(p) for p in POLICY} | {
@@ -365,9 +362,9 @@ def fingerprints(root: Path) -> dict[str, str]:
             "pnpm-lock.yaml",
             "requirements-check.txt",
             "Directory.Build.props",
-            "scripts/checks/test-browser.sh",
-            "scripts/dev/bootstrap-references.sh",
-            "scripts/dev/reference_cache.py",
+            "scripts/tasks.py",
+            "scripts/dev/references.py",
+            "scripts/common/images.json",
         )
     }
     metadata_shared = {
@@ -396,14 +393,6 @@ def fingerprints(root: Path) -> dict[str, str]:
             group != "artifacts",
         )
         for group in GROUPS
-    }
-
-
-def artifact_hashes(root: Path) -> dict[str, str]:
-    return {
-        p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-        for p in sorted((root / "dist").iterdir())
-        if p.suffix == ".zip" or p.name in {"manifest.json", "SHA256SUMS"}
     }
 
 
@@ -457,30 +446,3 @@ def metadata_check(root: Path) -> None:
     print(
         f"PASS: {len(paths)} automation metadata files checked (syntax/format, not full Renovate schema validation)."
     )
-
-
-def web_inputs(root: Path) -> dict:
-    return {
-        "input": digest(
-            root,
-            [
-                p
-                for p in source_files(root)
-                if str(p).startswith("frontend/")
-                or str(p)
-                in {
-                    "Directory.Build.props",
-                    "package.json",
-                    "pnpm-lock.yaml",
-                    "pnpm-workspace.yaml",
-                    ".node-version",
-                    ".python-version",
-                }
-            ],
-        ),
-        "files": {
-            p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in sorted((root / "dist/web").glob("*"))
-            if p.is_file()
-        },
-    }

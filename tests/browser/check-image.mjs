@@ -15,7 +15,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const require = createRequire(manifestPath);
     const declared = JSON.parse(readFileSync(manifestPath, "utf8")).dependencies.playwright;
     const installed = require("playwright/package.json").version;
-    const image = readFileSync(path.join(root, "scripts/checks/test-browser.sh"), "utf8").match(/^image=(\S+)$/m)?.[1] || "";
+    const image = JSON.parse(readFileSync(path.join(root, "scripts/common/images.json"), "utf8")).playwright;
     verifyBrowserImage(declared, installed, image);
     if (process.argv.includes("--inside")) {
         const browsers = require("playwright");

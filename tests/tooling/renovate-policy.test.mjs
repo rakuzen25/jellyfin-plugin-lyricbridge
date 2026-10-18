@@ -60,8 +60,8 @@ test("Playwright and its extracted versioned image share a patch-only automerge 
         assert.equal(policy(name, "patch").groupName, "Playwright package and image");
     }
     const manager = config.customManagers[0];
-    assert.ok(new RegExp(manager.managerFilePatterns[0].slice(1, -1)).test("scripts/checks/test-browser.sh"));
-    const script = readFileSync(new URL("../../scripts/checks/test-browser.sh", import.meta.url), "utf8");
+    assert.ok(new RegExp(manager.managerFilePatterns[0].slice(1, -1)).test("scripts/common/images.json"));
+    const script = readFileSync(new URL("../../scripts/common/images.json", import.meta.url), "utf8");
     const match = new RegExp(manager.matchStrings[0]).exec(script);
     assert.equal(match?.groups?.depName, "mcr.microsoft.com/playwright");
     const expected = JSON.parse(readFileSync(new URL("../browser/package.json", import.meta.url), "utf8")).dependencies.playwright;
@@ -90,14 +90,9 @@ test("Renovate, pnpm and pip enforce the same 24-hour release age", () => {
     for (const line of (excludes || "").trim().split("\n").filter(Boolean)) {
         assert.match(line.trim(), /^- "?[^*]+@\d+\.\d+\.\d+"?$/, "Exceptions must pin exact versions");
     }
-    for (const file of [".github/actions/setup/action.yml", "docs/how-to/develop.md"]) {
-        const content = readFileSync(new URL(`../../${file}`, import.meta.url), "utf8");
-        const installs = content.split("\n").filter((line) => line.includes("-m pip install") && line.includes("requirements-check.txt"));
-        assert.ok(installs.length > 0, `${file} must retain its Python setup command`);
-        for (const line of installs) {
-            const days = Number(line.match(/--uploaded-prior-to=P(\d+)D/)?.[1]);
-            assert.equal(days * 24 * 60, minutes, `${file} pip cutoff must match pnpm`);
-            assert.match(line, /scripts\.checks\.check_pip &&/, `${file} must check pip support before installing`);
-        }
-    }
+    const tasks = readFileSync(new URL("../../scripts/tasks.py", import.meta.url), "utf8");
+    assert.match(tasks, /"--uploaded-prior-to=P1D"/);
+    assert.match(tasks, /"scripts\.checks\.check_pip"/);
+    const setup = readFileSync(new URL("../../.github/actions/setup/action.yml", import.meta.url), "utf8");
+    assert.match(setup, /--uploaded-prior-to=P1D/);
 });

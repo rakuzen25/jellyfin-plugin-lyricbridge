@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import { bundleEntries } from "./build.mjs";
 import { checkRendererContract, checkModuleBoundary, checkAcyclic } from "./contract-boundaries.mjs";
 const root = new URL(".", import.meta.url).pathname;
 const configuration = ts.readConfigFile(path.join(root, "tsconfig.json"), ts.sys.readFile);
@@ -75,28 +76,8 @@ visit(root);
 checkAcyclic(graph);
 console.log(`PASS: ${count} maintained TypeScript sources covered by strict checking; no unchecked application JavaScript or broad any.`);
 
-const buildScript = fs.readFileSync(path.join(root, "build.mjs"), "utf8");
-const outputs = new Map();
-const buildAst = ts.createSourceFile("build.mjs", buildScript, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
-function inspectBuild(node) {
-    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "build") {
-        const options = node.arguments[0];
-        if (options && ts.isObjectLiteralExpression(options)) {
-            const properties = options.properties.filter(ts.isPropertyAssignment);
-            const entries = properties.find((property) => property.name.getText(buildAst) === "entryPoints")?.initializer;
-            const output = properties.find((property) => property.name.getText(buildAst) === "outfile")?.initializer;
-            if (entries && ts.isArrayLiteralExpression(entries) && entries.elements.length === 1 && output && ts.isStringLiteral(output)) {
-                const entry = entries.elements[0];
-                if (entry && ts.isStringLiteral(entry)) outputs.set(entry.text, output.text);
-            }
-        }
-    }
-    ts.forEachChild(node, inspectBuild);
-}
-inspectBuild(buildAst);
-for (const [entry, output] of [
-    ["bridge.ts", "lyricbridge.js"],
-    ["renderer.ts", "jellyfin-lyric-motion.js"],
-]) {
-    if (outputs.get(entry) !== "../dist/web/" + output) throw new Error("Changed public output filename or unchecked bundle entrypoint: " + entry);
+for (const [entry, output] of Object.entries(bundleEntries)) {
+    if (!checked.has(path.join(root, entry))) throw new Error("Unchecked bundle entrypoint: " + entry);
+    const expected = { "bridge.ts": "lyricbridge.js", "renderer.ts": "jellyfin-lyric-motion.js" };
+    if (expected[entry] !== output) throw new Error("Changed public output filename: " + entry);
 }

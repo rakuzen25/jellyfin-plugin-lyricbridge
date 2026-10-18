@@ -89,9 +89,9 @@
     "customManagers": [
         {
             "customType": "regex",
-            "managerFilePatterns": ["/^scripts\\/checks\\/test-browser\\.sh$/"],
+            "managerFilePatterns": ["/^scripts\\/common\\/images\\.json$/"],
             "matchStrings": [
-                "image=(?<depName>mcr\\.microsoft\\.com/playwright):(?<currentValue>v\\d+\\.\\d+\\.\\d+-noble)@(?<currentDigest>sha256:[a-f0-9]{64})"
+                "\"(?<depName>mcr\\.microsoft\\.com/playwright):(?<currentValue>v\\d+\\.\\d+\\.\\d+-noble)@(?<currentDigest>sha256:[a-f0-9]{64})\""
             ],
             "datasourceTemplate": "docker",
             "versioningTemplate": "docker"

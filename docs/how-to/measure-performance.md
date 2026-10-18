@@ -8,8 +8,8 @@ Start with [development setup](develop.md) and a built checkout.
 Run each performance project separately in the pinned offline image:
 
 ```sh
-CI_BROWSER_GROUP=performance pnpm test:browser --project stress-chromium --workers=1
-CI_BROWSER_GROUP=performance pnpm test:browser --project stress-mobile-chromium --workers=1
+CI_BROWSER_GROUP=performance pnpm test browser --project stress-chromium --workers=1
+CI_BROWSER_GROUP=performance pnpm test browser --project stress-mobile-chromium --workers=1
 ```
 
 Keep other heavy builds and tests idle during measurement.

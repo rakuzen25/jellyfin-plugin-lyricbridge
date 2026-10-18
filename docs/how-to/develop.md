@@ -1,56 +1,43 @@
 # Develop and test locally
 
-Prepare a contributor environment and use a disposable Jellyfin sandbox for interactive testing.
 Run commands from the repository root. Read the [architecture rationale](../explanation/architecture.md) before changing ownership boundaries.
 
 ## Prepare the toolchain
 
-Install the versions pinned by [.python-version](../../.python-version), [.node-version](../../.node-version), [package.json](../../package.json), and [global.json](../../global.json).
-Docker is required for official reference extraction, browser acceptance, and the sandbox.
-With the pinned Python available as `python3`, run:
+Install the versions pinned by [.python-version](../../.python-version), [.node-version](../../.node-version), [package.json](../../package.json), and [global.json](../../global.json), plus Docker. Then run:
 
 ```sh
-python3 -m venv .venv
-.venv/bin/python -m scripts.checks.check_pip && .venv/bin/python -m pip install --uploaded-prior-to=P1D -r requirements-check.txt
-node scripts/checks/check-toolchain.mjs
-pnpm install --frozen-lockfile
-scripts/dev/bootstrap-references.sh
+pnpm bootstrap
 ```
 
-Each command must complete successfully before continuing. Bootstrap extracts official compile references without starting Jellyfin.
-Recreate the virtual environment after a Python upgrade. `LYRICBRIDGE_PYTHON`, `LYRICBRIDGE_DOTNET`, and `JellyfinReferenceDir` support alternate local executable/reference locations.
-
-Edit maintained source, then build and [run relevant checks](validate.md). Do not edit generated `dist/web/` assets.
-Use `pnpm format`, `pnpm format:python`, or `pnpm format:dotnet` to apply formatting before review.
+Bootstrap verifies installed tools, restores frozen workspace dependencies, prepares `.venv` with the check dependencies, extracts verified references from the pinned official Jellyfin image, and restores locked backend dependencies. It does not install system tools.
+`LYRICBRIDGE_PYTHON`, `LYRICBRIDGE_DOTNET`, and `LYRICBRIDGE_PNPM` select alternate executable locations; `LYRICBRIDGE_REFERENCE_DIR` selects the references used by clean builds.
 
 ## Run an interactive sandbox
 
-After setup, build and start the owned local server:
-
 ```sh
-python3 -m scripts.dev.local_jellyfin rebuild
+pnpm dev
 ```
 
-Open [local Jellyfin](http://localhost:18096/web/), finish setup, and add `/media` as a music library.
-Place sample media and sidecar lyrics in `.build/local-jellyfin/media/`; the container mounts them read-only.
-Configuration, credentials, and plugin data remain under ignored `.build/local-jellyfin/`.
-Use test accounts and leave paid or credentialed services unconfigured unless you intend external calls.
+Keep the command running and open [local Jellyfin](http://localhost:18096/web/). Finish setup and add `/media` as a music library. Place sample media and sidecar lyrics in `.build/local-jellyfin/media/`.
+Accounts, credentials, settings, and plugin data remain under ignored `.build/local-jellyfin/`. Use test accounts and configure external services only when you intend real provider calls.
 
-After edits, run `rebuild` again and reload the browser. A failed build leaves the existing server intact; a successful rebuild preserves its data.
+Frontend edits rebuild and reload the browser without restarting Jellyfin. Backend edits compile before restarting the server. Failed builds leave the last working version available; fix the error and save again. A failed replacement startup restores the previous plugin.
+Browser reloads can interrupt playback and unsaved forms.
 
-Use `start` only when an existing package matches the checkout.
-For symlinks outside the sample directory, repeat `--media-mount` with each target's original absolute host path. Mounts remain read-only and persist across rebuilds.
+Press `r` to rebuild/restart, `o` to open the browser, or `h` for help. Ctrl+C stops the session and its container while retaining data. Only one session can own a checkout. The public port stays fixed; use `pnpm dev --port 18097` if 18096 is occupied. `--open` opens the browser after startup.
 
-Inspect or stop the sandbox with:
+Dev prepares missing official references and restores locked backend dependencies. If workspace dependencies are missing, run `pnpm install --frozen-lockfile` first.
 
-```sh
-python3 -m scripts.dev.local_jellyfin status
-python3 -m scripts.dev.local_jellyfin logs
-python3 -m scripts.dev.local_jellyfin stop
-```
+For symlinks outside the sample directory, pass `--media-mount /absolute/host/path` for each target directory. These mounts are read-only, use the same path inside Docker, and persist across sessions. `--clear-media-mounts` clears remembered extra mounts.
 
-`stop` retains test data. For a fresh server, stop it and remove only its `.build/local-jellyfin/` directory before rebuilding.
-That removes test accounts, credentials, plugin data, and sample media. Never substitute production storage.
+For a fresh server, stop the session and remove only `.build/local-jellyfin/`. This removes test accounts, credentials, plugin data, and sample media. Never substitute production storage.
+
+## Build and validate
+
+Edit maintained source rather than generated `dist/web/` assets. `pnpm build frontend` builds production web assets; `pnpm build backend` publishes a staged plugin using those assets. `pnpm build` creates clean distributable archives, manifests, and checksums.
+
+Use `pnpm check`, `pnpm format`, and `pnpm test` for the whole project. Add `frontend`, `backend`, or `tooling` to target one boundary; `pnpm check docs` checks documentation links. See [validation](validate.md) for acceptance checks.
 
 ## Upgrade dependencies deliberately
 

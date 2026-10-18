@@ -17,6 +17,7 @@ from unittest.mock import patch
 import scripts.ci.evidence as ci_evidence
 import scripts.ci.planning as ci_planning
 import scripts.ci.policy as ci_policy
+from scripts.common import artifacts as artifact_inputs
 from scripts.common.source_inventory import source_files
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -53,7 +54,7 @@ class PolicyTests(IsolatedCiTestCase):
             old.write_bytes(b"previous")
             (output / "unrelated.txt").write_text("keep")
             preserve(output, {current.name})
-            self.assertEqual(set(ci_policy.artifact_hashes(root)), {current.name})
+            self.assertEqual(set(artifact_inputs.artifact_hashes(root)), {current.name})
             self.assertEqual(current.read_bytes(), b"current")
             self.assertEqual(
                 next(output.glob("previous-*/*.zip")).read_bytes(), b"previous"
@@ -171,12 +172,14 @@ class PolicyTests(IsolatedCiTestCase):
             path.write_text(
                 "<LyricBridgeVersion>0.1.0</LyricBridgeVersion><JellyfinTargetAbi>12.2</JellyfinTargetAbi>"
             )
-            original = ci_policy.digest(root, [Path(path.name)], True)
+            original = artifact_inputs.digest(root, [Path(path.name)], True)
             path.write_text(path.read_text().replace("0.1.0", "0.1.1"))
-            self.assertEqual(original, ci_policy.digest(root, [Path(path.name)], True))
+            self.assertEqual(
+                original, artifact_inputs.digest(root, [Path(path.name)], True)
+            )
             path.write_text(path.read_text().replace("12.2", "12.3"))
             self.assertNotEqual(
-                original, ci_policy.digest(root, [Path(path.name)], True)
+                original, artifact_inputs.digest(root, [Path(path.name)], True)
             )
 
     def fixture(self) -> dict:
@@ -206,7 +209,7 @@ class PolicyTests(IsolatedCiTestCase):
             ),
             patch.object(ci_policy, "fingerprints", return_value=receipt["inputs"]),
             patch.object(
-                ci_policy, "artifact_hashes", return_value=receipt["artifacts"]
+                artifact_inputs, "artifact_hashes", return_value=receipt["artifacts"]
             ),
         ):
             ci_evidence.verify(ROOT, receipt, "owner/repo", "100")
@@ -541,17 +544,19 @@ class PolicyTests(IsolatedCiTestCase):
                 }
             }
             lock.write_text(json.dumps(data))
-            original = ci_policy.digest(root, [Path(props.name), Path(lock.name)], True)
+            original = artifact_inputs.digest(
+                root, [Path(props.name), Path(lock.name)], True
+            )
             props.write_text(props.read_text().replace("0.1.0", "0.1.1"))
             lock.write_text(lock.read_text().replace("0.1.0", "0.1.1"))
             self.assertEqual(
                 original,
-                ci_policy.digest(root, [Path(props.name), Path(lock.name)], True),
+                artifact_inputs.digest(root, [Path(props.name), Path(lock.name)], True),
             )
             lock.write_text(lock.read_text().replace("1.0.0", "1.0.1"))
             self.assertNotEqual(
                 original,
-                ci_policy.digest(root, [Path(props.name), Path(lock.name)], True),
+                artifact_inputs.digest(root, [Path(props.name), Path(lock.name)], True),
             )
 
     def test_upload_retry_accepts_failed_attach_but_never_failed_validation(self):
@@ -1043,12 +1048,14 @@ class MetadataTests(IsolatedCiTestCase):
                 file.parent.mkdir(parents=True)
                 file.write_text("first")
                 before = ci_policy.fingerprints(root)
-                policy_before = ci_policy.digest(root, [Path(path)])
+                policy_before = artifact_inputs.digest(root, [Path(path)])
                 file.write_text("second")
                 after = ci_policy.fingerprints(root)
                 self.assertIn(path, ci_policy.POLICY)
                 self.assertEqual(ci_policy.impacts(path), set(ci_policy.GROUPS))
-                self.assertNotEqual(policy_before, ci_policy.digest(root, [Path(path)]))
+                self.assertNotEqual(
+                    policy_before, artifact_inputs.digest(root, [Path(path)])
+                )
                 for group in ci_policy.GROUPS:
                     self.assertNotEqual(before[group], after[group], (path, group))
 
@@ -1069,7 +1076,7 @@ class MetadataTests(IsolatedCiTestCase):
             subprocess.run([*command, "web-record"], check=True, capture_output=True)
             receipt = json.loads((root / "dist/web-build.json").read_text())
             self.assertEqual(set(receipt), {"input", "files"})
-            self.assertEqual(receipt, ci_policy.web_inputs(root))
+            self.assertEqual(receipt, artifact_inputs.web_inputs(root))
             subprocess.run([*command, "web-verify"], check=True, capture_output=True)
             (assets / "lyricbridge.js").write_text("changed")
             result = subprocess.run(

@@ -44,13 +44,12 @@ runs:
       if: inputs.references == 'true'
       with:
         path: .build/jellyfin
-        key: official-jellyfin-linux-amd64-${{ hashFiles('scripts/dev/bootstrap-references.sh', 'scripts/dev/reference_cache.py') }}
+        key: official-jellyfin-linux-amd64-${{ hashFiles('scripts/dev/references.py', 'scripts/common/images.json') }}
     - name: Verify official reference cache or bootstrap
       if: inputs.references == 'true'
       shell: bash
-      run: |
-        if ! python3 -m scripts.dev.reference_cache verify; then
-          rm -rf .build/jellyfin
-          scripts/dev/bootstrap-references.sh
-          python3 -m scripts.dev.reference_cache record
-        fi
+      run: python3 -m scripts.dev.references
+    - name: Restore locked backend dependencies
+      if: inputs.dotnet == 'true' && inputs.references == 'true'
+      shell: bash
+      run: python3 -m scripts.build.backend

@@ -76,7 +76,7 @@ with zipfile.ZipFile(root / f"lyricbridge-source-{version}.zip") as archive:
         assert archive.read("frontend/assets/" + name), (
             "Development demo missing from editable source"
         )
-    assert archive.getinfo("scripts/build/package.sh").external_attr >> 16 & 0o111
+    assert "scripts/build/package.py" in archive.namelist()
     assert ".github/workflows/validate.yml" in archive.namelist()
     for name in (
         "package.json",

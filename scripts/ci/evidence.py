@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import scripts.ci.policy as ci_policy
+from scripts.common import artifacts
 
 
 class SafeRedirect(urllib.request.HTTPRedirectHandler):
@@ -375,7 +376,7 @@ def verify(root: Path, receipt: dict, repository: str, run_id: str) -> None:
         raise ValueError("Validation input fingerprints changed")
     if not receipt.get("artifacts") or receipt[
         "artifacts"
-    ] != ci_policy.artifact_hashes(root):
+    ] != artifacts.artifact_hashes(root):
         raise ValueError("Tested artifact hashes do not match")
 
 

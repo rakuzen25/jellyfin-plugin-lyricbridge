@@ -31,7 +31,9 @@ RELEASE = load_release()
 VERSION = RELEASE.version
 HOST_VERSION = RELEASE.jellyfin_version
 
-IMAGE = "jellyfin/jellyfin@sha256:357724bf0ae27a672c7cbaa899db2d9abeb13dbd8657ccce750258a4c059d037"
+from scripts.common.process import IMAGES
+
+IMAGE = IMAGES["jellyfin"]
 PLUGIN = RELEASE.guid
 CONTAINER = "lyricbridge-package-test-" + uuid.uuid4().hex[:12]
 DIST = Path(__file__).resolve().parents[2] / "dist"
@@ -203,7 +205,7 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
             "run",
             "-d",
             "--platform",
-            "linux/amd64",
+            IMAGES["platform"],
             "--name",
             CONTAINER,
             "--label",
@@ -253,7 +255,7 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         web_assets = root / "assets"
         with zipfile.ZipFile(DIST / f"lyricbridge-web-{VERSION}.zip") as web_archive:
             web_archive.extractall(web_assets)
-        installer = [sys.executable, "-m", "scripts.build.web_assets"]
+        installer = [sys.executable, "-m", "scripts.installation.web_assets"]
         subprocess.run(
             [
                 *installer,
@@ -898,7 +900,7 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
             "run",
             "-d",
             "--platform",
-            "linux/amd64",
+            IMAGES["platform"],
             "--name",
             CONTAINER,
             "--label",

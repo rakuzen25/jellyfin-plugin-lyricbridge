@@ -3,13 +3,13 @@
 import re
 import uuid
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
 
 
 @dataclass(frozen=True)
-class Release:
+class PluginIdentity:
     version: str
     abi: str
     guid: str
@@ -18,15 +18,26 @@ class Release:
     overview: str
     description: str
     category: str
-    changelog: str
-    timestamp: str
 
     @property
     def jellyfin_version(self) -> str:
         return self.version + ".0"
 
 
+@dataclass(frozen=True)
+class Release(PluginIdentity):
+    changelog: str
+    timestamp: str
+
+
 def load_release(root: Path | None = None) -> Release:
+    root = root or Path(__file__).resolve().parents[2]
+    identity = load_identity(root)
+    changelog, timestamp = changelog_section(root, identity.version)
+    return Release(**asdict(identity), changelog=changelog, timestamp=timestamp)
+
+
+def load_identity(root: Path | None = None) -> PluginIdentity:
     root = root or Path(__file__).resolve().parents[2]
     metadata = ET.parse(root / "Directory.Build.props").getroot()
 
@@ -37,8 +48,7 @@ def load_release(root: Path | None = None) -> Release:
         return value.strip()
 
     version = required("LyricBridgeVersion")
-    changelog, timestamp = changelog_section(root, version)
-    release = Release(
+    release = PluginIdentity(
         version=version,
         abi=required("JellyfinTargetAbi"),
         guid=required("LyricBridgeGuid"),
@@ -47,8 +57,6 @@ def load_release(root: Path | None = None) -> Release:
         overview=required("LyricBridgeOverview"),
         description=required("LyricBridgeDescription"),
         category=required("LyricBridgeCategory"),
-        changelog=changelog,
-        timestamp=timestamp,
     )
     if not re.fullmatch(r"\d+\.\d+\.\d+", release.version) or not re.fullmatch(
         r"\d+\.\d+\.\d+\.\d+", release.abi

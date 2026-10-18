@@ -2,12 +2,15 @@
     "$schema": "https://unpkg.com/knip@6/schema.json",
     "workspaces": {
         ".": {
-            "entry": ["tests/tooling/**/*.test.mjs"],
-            "project": ["*.mjs", "scripts/**/*.mjs", "tests/tooling/**/*.mjs"]
+            "entry": ["tests/tooling/**/*.test.mjs", "scripts/dev/session.mjs"],
+            "project": ["*.mjs", "scripts/**/*.mjs", "tests/tooling/**/*.mjs"],
+            "ignoreDependencies": ["prettier"],
+            "ignoreBinaries": ["xdg-open"]
         },
         "frontend": {
-            "entry": ["bridge.ts", "renderer.ts", "admin/config.ts", "**/*.test.ts"],
-            "project": ["**/*.{ts,mjs}"]
+            "entry": ["bridge.ts", "renderer.ts", "admin/config.ts", "**/*.test.ts", "build.mjs", "check-boundaries.mjs"],
+            "project": ["**/*.{ts,mjs}"],
+            "ignoreDependencies": ["@typescript/native"]
         },
         "tests/browser": {
             "entry": ["playwright.config.cjs", "**/*.spec.cjs", "compare-playback-performance.cjs", "check-image.mjs"],

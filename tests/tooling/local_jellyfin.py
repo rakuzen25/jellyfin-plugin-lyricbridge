@@ -1,240 +1,193 @@
-"""Local sandbox ownership and package replacement checks; no Docker daemon used."""
+"""Sandbox replacement, rollback, mount, and ownership behavior without Docker."""
 
-import http.client
-import importlib.util
 import json
-import sys
+import subprocess
 import tempfile
 import unittest
-import zipfile
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-spec = importlib.util.spec_from_file_location(
-    "local_jellyfin",
-    Path(__file__).resolve().parents[2] / "scripts/dev/local_jellyfin.py",
-)
-assert spec is not None and spec.loader is not None
-sandbox = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(sandbox)
+from scripts.dev import local_jellyfin as sandbox
+from scripts.dev.references import inventory, verify
 
 
 class LocalSandboxTests(unittest.TestCase):
-    def test_media_mounts_are_read_only_same_path_and_retained(self) -> None:
-        with tempfile.TemporaryDirectory(
-            prefix="lyricbridge-media-mount-test-"
-        ) as directory:
+    def test_readiness_waits_for_healthy_body_and_retries_startup_connection_resets(
+        self,
+    ):
+        degraded, healthy = MagicMock(), MagicMock()
+        degraded.__enter__.return_value.status = 200
+        degraded.__enter__.return_value.read.return_value = b"Degraded"
+        healthy.__enter__.return_value.status = 200
+        healthy.__enter__.return_value.read.return_value = b"Healthy"
+        with (
+            patch.object(
+                sandbox.urllib.request,
+                "urlopen",
+                side_effect=[degraded, ConnectionResetError("starting"), healthy],
+            ) as request,
+            patch.object(sandbox.time, "sleep") as sleep,
+        ):
+            sandbox.wait_ready(18096)
+        self.assertEqual(3, request.call_count)
+        self.assertEqual(2, sleep.call_count)
+
+    def test_another_session_cannot_take_the_checkout_lock(self):
+        import argparse
+        import fcntl
+
+        with tempfile.TemporaryDirectory() as directory:
+            data = Path(directory)
+            with (
+                (data / "session.lock").open("w") as lock,
+                patch.object(sandbox, "DATA", data),
+                patch("scripts.tasks.verify_tools") as tools,
+            ):
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with self.assertRaisesRegex(ValueError, "already owns"):
+                    sandbox.dev(argparse.Namespace())
+                tools.assert_not_called()
+
+    def test_development_identity_does_not_require_release_notes(self):
+        from scripts.common.release_metadata import load_identity, load_release
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Directory.Build.props").write_bytes(
+                (sandbox.ROOT / "Directory.Build.props").read_bytes()
+            )
+            self.assertEqual(sandbox.load_identity().guid, load_identity(root).guid)
+            with self.assertRaises(FileNotFoundError):
+                load_release(root)
+
+    def test_media_mounts_are_deduplicated_and_retained(self):
+        with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             media = root / "sample music"
             media.mkdir()
-            data = root / "sandbox"
-            with (
-                patch.object(sandbox, "DATA", data),
-                patch.object(sandbox, "install"),
-                patch.object(sandbox, "wait_ready"),
-                patch.object(sandbox, "run") as run,
-            ):
-                sandbox.start(18096, [str(media), str(media)])
-                expected = f"type=bind,src={media},dst={media},readonly"
-                self.assertEqual(run.call_args.args.count(expected), 1)
-                sandbox.start(18096)
-                self.assertIn(expected, run.call_args.args)
-                sandbox.start(18096, [])
-                self.assertNotIn(expected, run.call_args.args)
+            (root / "media-mounts.json").write_text(json.dumps([str(media)]))
+            with patch.object(sandbox, "DATA", root):
+                self.assertEqual([str(media)], sandbox.media_paths(None))
                 self.assertEqual(
-                    json.loads((data / "media-mounts.json").read_text()), []
+                    [str(media)], sandbox.media_paths([str(media), str(media)])
                 )
+                self.assertEqual([], sandbox.media_paths([]))
+                for invalid in ["relative/path", "/", "/config"]:
+                    with self.assertRaises(SystemExit):
+                        sandbox.media_paths([invalid])
 
-    def test_missing_media_mount_fails_before_stopping_or_building(self) -> None:
-        with (
-            tempfile.TemporaryDirectory(
-                prefix="lyricbridge-media-mount-test-"
-            ) as directory,
-            patch.object(sandbox, "build") as build,
-            patch.object(sandbox, "install") as install,
-        ):
-            with self.assertRaisesRegex(SystemExit, "directory not found"):
-                sandbox.rebuild(18096, [str(Path(directory) / "missing")])
-            build.assert_not_called()
-            install.assert_not_called()
+    def test_missing_media_fails_before_build(self):
+        with patch.object(sandbox, "publish") as publish:
+            with self.assertRaises(SystemExit):
+                sandbox.deploy(Path("unused"), ["/this-directory-does-not-exist"])
+            publish.assert_not_called()
 
-    def test_start_uses_package_and_rebuild_builds_before_install(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            calls = []
-            with (
-                patch.object(sandbox, "DATA", Path(directory)),
-                patch.object(
-                    sandbox, "build", side_effect=lambda: calls.append("build")
-                ),
-                patch.object(
-                    sandbox, "install", side_effect=lambda: calls.append("install")
-                ),
-                patch.object(sandbox, "run"),
-                patch.object(sandbox, "wait_ready"),
-            ):
-                sandbox.start(18096)
-                self.assertEqual(calls, ["install"])
-                calls.clear()
-                sandbox.rebuild(18096)
-                self.assertEqual(calls, ["build", "install"])
-
-    def test_cli_dispatches_start_and_rebuild_without_build_flag(self) -> None:
-        for command in ("start", "rebuild"):
-            with (
-                self.subTest(command=command),
-                patch.object(sys, "argv", ["local-jellyfin.py", command]),
-                patch.object(sandbox.shutil, "which", return_value="docker"),
-                patch.object(sandbox, "start") as start,
-                patch.object(sandbox, "rebuild") as rebuild,
-            ):
-                sandbox.main()
-                selected, other = (
-                    (start, rebuild) if command == "start" else (rebuild, start)
-                )
-                selected.assert_called_once_with(18096, None)
-                other.assert_not_called()
-
-    def test_failed_rebuild_does_not_replace_running_installation(self) -> None:
-        with (
-            patch.object(sandbox, "media_paths", return_value=[]),
-            patch.object(sandbox, "build", side_effect=SystemExit("build failed")),
-            patch.object(sandbox, "start") as start,
-        ):
-            with self.assertRaisesRegex(SystemExit, "build failed"):
-                sandbox.rebuild(18096)
-            start.assert_not_called()
-
-    def test_relative_media_mount_is_rejected(self) -> None:
-        with self.assertRaisesRegex(SystemExit, "absolute directory"):
-            sandbox.media_paths(["relative/path"])
-
-    def test_startup_resets_and_closed_connections_are_retried(self) -> None:
-        healthy = MagicMock()
-        healthy.__enter__.return_value.status = 200
-        with (
-            patch.object(
-                sandbox.urllib.request,
-                "urlopen",
-                side_effect=[
-                    ConnectionResetError("starting"),
-                    http.client.RemoteDisconnected("starting"),
-                    TimeoutError("starting"),
-                    healthy,
-                ],
-            ) as request,
-            patch.object(sandbox.time, "sleep") as delay,
-            patch("builtins.print"),
-        ):
-            sandbox.wait_ready(18096)
-        self.assertEqual(request.call_count, 4)
-        self.assertEqual(delay.call_count, 3)
-
-    def test_unhealthy_response_waits_before_retry(self) -> None:
-        unhealthy, healthy = MagicMock(), MagicMock()
-        unhealthy.__enter__.return_value.status = 503
-        healthy.__enter__.return_value.status = 200
-        with (
-            patch.object(
-                sandbox.urllib.request, "urlopen", side_effect=[unhealthy, healthy]
-            ),
-            patch.object(sandbox.time, "sleep") as delay,
-            patch("builtins.print"),
-        ):
-            sandbox.wait_ready(18096)
-        delay.assert_called_once_with(1)
-
-    def test_startup_failure_is_bounded_and_retains_container(self) -> None:
-        with (
-            patch.object(
-                sandbox.urllib.request,
-                "urlopen",
-                side_effect=ConnectionResetError("starting"),
-            ) as request,
-            patch.object(sandbox.time, "sleep"),
-            patch.object(sandbox, "run") as run,
-            self.assertRaisesRegex(SystemExit, "Container retained"),
-        ):
-            sandbox.wait_ready(18096)
-        self.assertEqual(request.call_count, 60)
-        run.assert_not_called()
-
-    def test_foreign_container_is_never_adopted(self) -> None:
+    def test_foreign_container_is_never_adopted(self):
         with (
             patch.object(
                 sandbox.subprocess,
                 "check_output",
-                side_effect=["container-id", json.dumps([{"Config": {"Labels": {}}}])],
+                side_effect=["id", json.dumps([{"Config": {"Labels": {}}}])],
             ),
             self.assertRaisesRegex(SystemExit, "another installation"),
         ):
             sandbox.inspect()
 
-    def test_failed_daemon_query_is_not_an_absent_container(self) -> None:
+    def test_daemon_errors_are_not_treated_as_absence(self):
         with (
             patch.object(
                 sandbox.subprocess,
                 "check_output",
-                side_effect=RuntimeError("daemon offline"),
+                side_effect=subprocess.CalledProcessError(1, "docker"),
             ),
-            self.assertRaisesRegex(RuntimeError, "daemon offline"),
+            self.assertRaises(subprocess.CalledProcessError),
         ):
             sandbox.inspect()
 
-    def test_package_validation_precedes_container_removal(self) -> None:
-        self.install_fixture(unsafe=True)
-
-    def test_replacement_keeps_database_and_other_plugins(self) -> None:
-        self.install_fixture(unsafe=False)
-
-    def install_fixture(self, unsafe: bool) -> None:
-        with tempfile.TemporaryDirectory(
-            prefix="lyricbridge-local-helper-test-"
-        ) as directory:
-            root = Path(directory)
-            data = root / "data"
-            release = SimpleNamespace(
-                version="0.1.1", jellyfin_version="0.1.1.0", guid="fixture-guid"
-            )
+    def replacement(self, *, build_fails=False, startup_fails=False):
+        with tempfile.TemporaryDirectory() as directory:
+            data = Path(directory)
             plugins = data / "config/plugins"
-            old = plugins / "LyricBridge_0.1.0.0"
-            old.mkdir(parents=True)
-            (old / "meta.json").write_text(json.dumps({"guid": release.guid}))
-            database = data / "config/data/LyricBridge/test.db"
-            database.parent.mkdir(parents=True)
-            database.write_text("saved test data")
+            previous = plugins / "LyricBridge_previous"
+            previous.mkdir(parents=True)
+            release = sandbox.load_identity()
+            (previous / "meta.json").write_text(json.dumps({"guid": release.guid}))
+            (previous / "old.dll").write_text("last working plugin")
             other = plugins / "OtherPlugin"
             other.mkdir()
-            (root / "dist").mkdir()
-            with zipfile.ZipFile(root / "dist/lyricbridge-0.1.1.zip", "w") as archive:
-                archive.writestr(
-                    "meta.json",
-                    json.dumps(
-                        {"guid": release.guid, "version": release.jellyfin_version}
-                    ),
-                )
-                archive.writestr("../escape" if unsafe else "plugin.dll", "fixture")
+            database = data / "config/test.db"
+            database.write_text("retained")
+            calls = []
+
+            def publish(output, web, **kwargs):
+                calls.append("build")
+                if build_fails:
+                    raise ValueError("compile error")
+                output.mkdir()
+                (output / "Jellyfin.Plugin.LyricBridge.dll").write_text("new plugin")
+
+            def start(mounts):
+                calls.append("start")
+                if startup_fails and calls.count("start") == 1:
+                    raise RuntimeError("startup error")
+
             with (
-                patch.object(sandbox, "REPOSITORY", root),
                 patch.object(sandbox, "DATA", data),
-                patch.object(sandbox, "load_release", return_value=release),
+                patch.object(sandbox, "publish", side_effect=publish),
                 patch.object(sandbox, "inspect", return_value={"owned": True}),
-                patch.object(sandbox, "run") as run,
+                patch.object(sandbox, "stop", side_effect=lambda: calls.append("stop")),
+                patch.object(sandbox, "start", side_effect=start),
             ):
-                if unsafe:
-                    with self.assertRaisesRegex(SystemExit, "Unsafe archive"):
-                        sandbox.install()
-                    run.assert_not_called()
-                    self.assertTrue(old.exists())
-                else:
-                    sandbox.install()
-                    run.assert_called_once_with("docker", "rm", "-f", sandbox.CONTAINER)
-                    self.assertFalse(old.exists())
-                    self.assertTrue(
-                        (plugins / "LyricBridge_0.1.1.0/plugin.dll").exists()
+                if build_fails or startup_fails:
+                    with self.assertRaisesRegex((ValueError, RuntimeError), "error"):
+                        sandbox.deploy(data / "web")
+                    self.assertEqual(
+                        "last working plugin", (previous / "old.dll").read_text()
                     )
-                self.assertTrue(other.exists())
-                self.assertEqual(database.read_text(), "saved test data")
+                else:
+                    sandbox.deploy(data / "web")
+                    self.assertFalse(previous.exists())
+                    self.assertTrue(
+                        (
+                            plugins
+                            / ("LyricBridge_" + release.jellyfin_version)
+                            / "Jellyfin.Plugin.LyricBridge.dll"
+                        ).exists()
+                    )
+            self.assertTrue(other.exists())
+            self.assertEqual("retained", database.read_text())
+            return calls
+
+    def test_successful_replacement_builds_before_stopping_and_preserves_data(self):
+        self.assertEqual(["build", "stop", "start"], self.replacement())
+
+    def test_compile_failure_keeps_running_installation(self):
+        self.assertEqual(["build"], self.replacement(build_fails=True))
+
+    def test_startup_failure_rolls_back_and_restarts_previous_plugin(self):
+        self.assertEqual(
+            ["build", "stop", "start", "stop", "start"],
+            self.replacement(startup_fails=True),
+        )
+
+    def test_reference_integrity_detects_corruption_and_image_changes(self):
+        from scripts.common.process import IMAGES
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in (
+                "MediaBrowser.Common.dll",
+                "MediaBrowser.Controller.dll",
+                "MediaBrowser.Model.dll",
+            ):
+                (root / name).write_text("assembly")
+            (root / "image.txt").write_text(IMAGES["jellyfin"])
+            (root / "cache-integrity.json").write_text(json.dumps(inventory(root)))
+            self.assertTrue(verify(root))
+            (root / "MediaBrowser.Common.dll").write_text("changed")
+            self.assertFalse(verify(root))
+            (root / "image.txt").write_text("other image")
+            self.assertFalse(verify(root))
 
 
 if __name__ == "__main__":

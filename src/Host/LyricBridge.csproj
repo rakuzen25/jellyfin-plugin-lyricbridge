@@ -20,9 +20,12 @@
     <Reference Include="$(JellyfinReferenceDir)/Jellyfin.Extensions.dll" Private="false" />
     <Reference Include="$(JellyfinReferenceDir)/Microsoft.Data.Sqlite.dll" Private="false" />
   </ItemGroup>
+  <PropertyGroup>
+    <LyricBridgeWebAssets Condition="'$(LyricBridgeWebAssets)' == ''">$(MSBuildThisFileDirectory)../../dist/web</LyricBridgeWebAssets>
+  </PropertyGroup>
   <ItemGroup>
-    <EmbeddedResource Include="../../dist/web/*"
-      Exclude="../../dist/web/demo.html;../../dist/web/demo.wav"
+    <EmbeddedResource Include="$(LyricBridgeWebAssets)/*"
+      Exclude="$(LyricBridgeWebAssets)/demo.html;$(LyricBridgeWebAssets)/demo.wav"
       Link="Web/%(Filename)%(Extension)" />
   </ItemGroup>
   <PropertyGroup>
