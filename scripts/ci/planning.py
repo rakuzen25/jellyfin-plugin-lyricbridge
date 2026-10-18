@@ -1,16 +1,17 @@
 """Check scheduling and aggregation of executed and reused evidence."""
 
-from datetime import datetime, timezone
 import os
-from pathlib import Path
 import subprocess
 import sys
 import urllib.error
 import urllib.request
 import zipfile
-from scripts.common.source_inventory import source_files
-import scripts.ci.policy as ci_policy
+from datetime import UTC, datetime
+from pathlib import Path
+
 import scripts.ci.evidence as ci_evidence
+import scripts.ci.policy as ci_policy
+from scripts.common.source_inventory import source_files
 
 
 def plan(
@@ -180,7 +181,7 @@ def finish(root: Path, selection: dict, jobs: dict) -> dict:
     receipt = dict(
         selection,
         groups=results,
-        validated_at=datetime.now(timezone.utc).isoformat(),
+        validated_at=datetime.now(UTC).isoformat(),
         artifacts=ci_policy.artifact_hashes(root)
         if results.get("artifacts") == "success"
         else {},

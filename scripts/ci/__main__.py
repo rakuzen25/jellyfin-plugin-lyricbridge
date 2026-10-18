@@ -4,9 +4,10 @@ import argparse
 import json
 import os
 from pathlib import Path
-import scripts.ci.policy as ci_policy
+
 import scripts.ci.evidence as ci_evidence
 import scripts.ci.planning as ci_planning
+import scripts.ci.policy as ci_policy
 
 
 def main() -> None:
@@ -53,8 +54,10 @@ def main() -> None:
         (root / "dist/plan.json").write_text(json.dumps(result, indent=2) + "\n")
         if output := os.environ.get("GITHUB_OUTPUT"):
             with open(output, "a") as stream:
-                for group in ci_policy.GROUPS:
-                    stream.write(f"{group}={str(group in result['execute']).lower()}\n")
+                stream.writelines(
+                    f"{group}={str(group in result['execute']).lower()}\n"
+                    for group in ci_policy.GROUPS
+                )
                 stream.write(
                     "web="
                     + str(

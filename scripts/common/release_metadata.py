@@ -1,11 +1,11 @@
 """Authoritative plugin identity and release metadata, independent of packaging."""
 
-from dataclasses import dataclass
-from datetime import date
-from pathlib import Path
 import re
 import uuid
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
 
 
 @dataclass(frozen=True)

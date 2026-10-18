@@ -23,6 +23,6 @@ Do not remove these as apparent duplicates or prose-cleanup candidates.
 The packaged `dependency-inventory.json` identifies shipped files and matching notices.
 [Project NOTICE](../../NOTICE) and the preserved vendor license texts state the attribution and licensing material; this page does not restate every package version or hash.
 
-[Artifact validation](../../tests/tooling/PackageArtifacts.py) checks matching source and notices in the archives.
+[Artifact validation](../../tests/tooling/package_artifacts.py) checks matching source and notices in the archives.
 Build/test dependencies restored from lockfiles are not shipped as `node_modules`.
 Host-provided assemblies must not be confused with plugin-owned payloads when assessing a distribution.

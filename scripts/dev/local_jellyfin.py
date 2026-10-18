@@ -5,13 +5,13 @@ import hashlib
 import http.client
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import time
 import urllib.request
 import zipfile
+from pathlib import Path
 
 from scripts.common.release_metadata import load_release
 

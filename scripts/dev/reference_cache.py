@@ -2,9 +2,9 @@
 
 import hashlib
 import json
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 reference = root / ".build/jellyfin"

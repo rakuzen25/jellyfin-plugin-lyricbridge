@@ -4,13 +4,14 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
-from scripts.common.release_metadata import load_release
-from scripts.common.source_inventory import source_files
 import shutil
-from urllib.parse import urlparse
 import xml.etree.ElementTree as ET
 import zipfile
+from pathlib import Path
+from urllib.parse import urlparse
+
+from scripts.common.release_metadata import load_release
+from scripts.common.source_inventory import source_files
 
 parser = argparse.ArgumentParser()
 parser.add_argument("staging", type=Path)

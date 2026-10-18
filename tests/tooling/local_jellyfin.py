@@ -3,13 +3,13 @@
 import http.client
 import importlib.util
 import json
-from pathlib import Path
 import sys
 import tempfile
-from types import SimpleNamespace
 import unittest
-from unittest.mock import MagicMock, patch
 import zipfile
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 spec = importlib.util.spec_from_file_location(
     "local_jellyfin",
@@ -47,17 +47,17 @@ class LocalSandboxTests(unittest.TestCase):
                 )
 
     def test_missing_media_mount_fails_before_stopping_or_building(self) -> None:
-        with tempfile.TemporaryDirectory(
-            prefix="lyricbridge-media-mount-test-"
-        ) as directory:
-            with (
-                patch.object(sandbox, "build") as build,
-                patch.object(sandbox, "install") as install,
-            ):
-                with self.assertRaisesRegex(SystemExit, "directory not found"):
-                    sandbox.rebuild(18096, [str(Path(directory) / "missing")])
-                build.assert_not_called()
-                install.assert_not_called()
+        with (
+            tempfile.TemporaryDirectory(
+                prefix="lyricbridge-media-mount-test-"
+            ) as directory,
+            patch.object(sandbox, "build") as build,
+            patch.object(sandbox, "install") as install,
+        ):
+            with self.assertRaisesRegex(SystemExit, "directory not found"):
+                sandbox.rebuild(18096, [str(Path(directory) / "missing")])
+            build.assert_not_called()
+            install.assert_not_called()
 
     def test_start_uses_package_and_rebuild_builds_before_install(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -153,29 +153,33 @@ class LocalSandboxTests(unittest.TestCase):
             ) as request,
             patch.object(sandbox.time, "sleep"),
             patch.object(sandbox, "run") as run,
+            self.assertRaisesRegex(SystemExit, "Container retained"),
         ):
-            with self.assertRaisesRegex(SystemExit, "Container retained"):
-                sandbox.wait_ready(18096)
+            sandbox.wait_ready(18096)
         self.assertEqual(request.call_count, 60)
         run.assert_not_called()
 
     def test_foreign_container_is_never_adopted(self) -> None:
-        with patch.object(
-            sandbox.subprocess,
-            "check_output",
-            side_effect=["container-id", json.dumps([{"Config": {"Labels": {}}}])],
+        with (
+            patch.object(
+                sandbox.subprocess,
+                "check_output",
+                side_effect=["container-id", json.dumps([{"Config": {"Labels": {}}}])],
+            ),
+            self.assertRaisesRegex(SystemExit, "another installation"),
         ):
-            with self.assertRaisesRegex(SystemExit, "another installation"):
-                sandbox.inspect()
+            sandbox.inspect()
 
     def test_failed_daemon_query_is_not_an_absent_container(self) -> None:
-        with patch.object(
-            sandbox.subprocess,
-            "check_output",
-            side_effect=RuntimeError("daemon offline"),
+        with (
+            patch.object(
+                sandbox.subprocess,
+                "check_output",
+                side_effect=RuntimeError("daemon offline"),
+            ),
+            self.assertRaisesRegex(RuntimeError, "daemon offline"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "daemon offline"):
-                sandbox.inspect()
+            sandbox.inspect()
 
     def test_package_validation_precedes_container_removal(self) -> None:
         self.install_fixture(unsafe=True)

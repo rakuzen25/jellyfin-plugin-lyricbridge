@@ -132,7 +132,7 @@ jobs:
         if: needs.impact.outputs.frontend == 'true'
         run: (pnpm lint && pnpm format:check && pnpm knip && pnpm test:tooling && pnpm test) 2>&1 | tee dist/evidence/frontend-checks.log
       - run: (pnpm build && python3 -m scripts.ci web-record) 2>&1 | tee dist/evidence/frontend-build.log
-      - run: python3 -m tests.installation.WebInstallation && sh tests/installation/WebAssetVersions.sh
+      - run: python3 -m tests.installation.web_installation && sh tests/installation/WebAssetVersions.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: browser-assets
@@ -195,7 +195,7 @@ jobs:
           python: "true"
       - run: mkdir -p dist/evidence
       - run: LYRICBRIDGE_PYTHON=python sh scripts/checks/check-python.sh 2>&1 | tee dist/evidence/tooling.log
-      - run: (python3 -m tests.tooling.Documentation && python3 -m tests.tooling.Architecture && python3 -m tests.tooling.CiPolicy && python3 -m tests.tooling.ReleaseBoundaries && python3 -m tests.tooling.ReleaseAutomation && python3 -m tests.tooling.LocalJellyfin) 2>&1 | tee -a dist/evidence/tooling.log
+      - run: (python3 -m tests.tooling.documentation && python3 -m tests.tooling.architecture && python3 -m tests.tooling.ci_policy && python3 -m tests.tooling.release_boundaries && python3 -m tests.tooling.release_automation && python3 -m tests.tooling.local_jellyfin) 2>&1 | tee -a dist/evidence/tooling.log
       - uses: ./.github/actions/evidence
         if: always()
         with:
@@ -307,7 +307,7 @@ jobs:
           args=(--prepared-web)
           if [ "$RELEASE_MODE" = true ]; then args+=(--release); fi
           python3 -m scripts.build.clean_package "${args[@]}" 2>&1 | tee dist/evidence/package.log
-      - run: python3 -m tests.tooling.PackageArtifacts
+      - run: python3 -m tests.tooling.package_artifacts
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: candidate-unverified
@@ -339,7 +339,7 @@ jobs:
         with:
           name: candidate-unverified
           path: dist
-      - run: python3 -m tests.installation.PackageInstallation 2>&1 | tee dist/evidence/installation.log
+      - run: python3 -m tests.installation.package_installation 2>&1 | tee dist/evidence/installation.log
       - uses: ./.github/actions/evidence
         if: always()
         with:
@@ -365,7 +365,7 @@ jobs:
           name: candidate-unverified
           path: dist
       - run: python3 -m scripts.release prepare --repository "$REPOSITORY" --tag "$RELEASE_TAG" --environment "$GITHUB_ENV"
-      - run: python3 -m tests.tooling.ReproducibleBuild 2>&1 | tee dist/evidence/reproducibility.log
+      - run: python3 -m tests.tooling.reproducible_build 2>&1 | tee dist/evidence/reproducibility.log
       - uses: ./.github/actions/evidence
         if: always()
         with:

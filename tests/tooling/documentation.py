@@ -1,8 +1,8 @@
 """Documentation links are checked locally, including on documentation-only CI runs."""
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from scripts.checks.docs import check, parse
 

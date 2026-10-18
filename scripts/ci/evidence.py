@@ -1,17 +1,18 @@
 """Authenticated GitHub evidence, receipt validation and reuse trust rules."""
 
-from datetime import datetime, timezone
 import hashlib
 import io
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import urllib.error
 import urllib.request
-from urllib.parse import urlparse
 import zipfile
+from datetime import UTC, datetime
+from pathlib import Path
+from urllib.parse import urlparse
+
 import scripts.ci.policy as ci_policy
 
 
@@ -106,7 +107,7 @@ def read_receipt(repository: str, run: dict) -> dict | None:
             raise ValueError("Receipt exceeds size limit")
         receipt = json.loads(archive.read("validation.json"))
     if not isinstance(receipt, dict):
-        raise ValueError("Receipt must be an object")
+        raise TypeError("Receipt must be an object")
     if (
         receipt.get("schema") not in {1, 2, ci_policy.SCHEMA}
         or receipt.get("run_id") != str(run["id"])
@@ -219,12 +220,15 @@ def completed_group_origin(
         return None
     origin = receipt.get("reused", {}).get(group, {}).get("run_id")
     baseline = receipt.get("full_baseline", {})
-    if not origin and receipt.get("groups", {}).get(group) is None:
-        if (
+    if (
+        not origin
+        and receipt.get("groups", {}).get(group) is None
+        and (
             baseline.get("policy") == policy
             and baseline.get("inputs", {}).get(group) == fingerprint
-        ):
-            origin = baseline.get("origins", {}).get(group)
+        )
+    ):
+        origin = baseline.get("origins", {}).get(group)
     if origin:
         origin = str(origin)
         if not re.fullmatch(r"[0-9]+", origin):
@@ -410,7 +414,7 @@ def verify_run(repository: str, run_id: str, receipt: dict) -> None:
         raise ValueError("Receipt does not identify the authenticated workflow source")
     # Upload-only retries remain fast, but old advisory observations are not fresh.
     observed = datetime.fromisoformat(receipt["validated_at"])
-    if (datetime.now(timezone.utc) - observed).total_seconds() > 86400:
+    if (datetime.now(UTC) - observed).total_seconds() > 86400:
         raise ValueError(
             "Release evidence is older than 24 hours; rebuild with fresh advisory checks"
         )

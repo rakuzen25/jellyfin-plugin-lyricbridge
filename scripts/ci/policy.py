@@ -2,11 +2,11 @@
 
 import hashlib
 import json
-from pathlib import Path
 import re
 import subprocess
-from scripts.common.source_inventory import source_files
+from pathlib import Path
 
+from scripts.common.source_inventory import source_files
 
 GROUPS = (
     "metadata",
@@ -63,10 +63,13 @@ def metadata_path(path: str) -> bool:
         path == "renovate.json"
         or path == ".github/CODEOWNERS"
         or path.startswith(
-            (".github/ISSUE_TEMPLATE/", ".github/PULL_REQUEST_TEMPLATE/")
+            (
+                ".github/ISSUE_TEMPLATE/",
+                ".github/PULL_REQUEST_TEMPLATE/",
+                ".github/PULL_REQUEST_TEMPLATE.",
+                ".github/pull_request_template.",
+            )
         )
-        or path.startswith(".github/PULL_REQUEST_TEMPLATE.")
-        or path.startswith(".github/pull_request_template.")
     )
 
 
@@ -120,7 +123,7 @@ def known_impacts(path: str, root: Path | None = None) -> set[str]:
         or path in POLICY
     ):
         return all_groups
-    if path.startswith("frontend/renderer") or path.startswith("frontend/assets/"):
+    if path.startswith(("frontend/renderer", "frontend/assets/")):
         return {"frontend", "rendering", "performance", "artifacts"}
     if path.startswith("frontend/bridge/"):
         name = Path(path).name.removesuffix(".test.ts").removesuffix(".ts")
@@ -166,8 +169,7 @@ def known_impacts(path: str, root: Path | None = None) -> set[str]:
             )
         return {"frontend", "workflow", "rendering", "performance"}
     if (
-        path.startswith("src/")
-        or path.startswith("vendor/")
+        path.startswith(("src/", "vendor/"))
         or path.startswith("tests/")
         and path.endswith((".cs", ".csproj", "lock.json"))
     ):

@@ -1,8 +1,8 @@
 """Dependency policy failures should identify the architectural boundary."""
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from scripts.checks.architecture import check_graph, check_projects
 

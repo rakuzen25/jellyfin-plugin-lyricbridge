@@ -1,9 +1,9 @@
 """Check repository Markdown links and README reachability without network access."""
 
-from dataclasses import dataclass
 import html
-from pathlib import Path
 import re
+from dataclasses import dataclass
+from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 
@@ -28,9 +28,13 @@ def mask_code(text: str, *, inline: bool = True) -> str:
         marker = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line)
         if fence:
             lines[index] = re.sub(r"[^\n]", " ", line)
-            if marker and marker[1][0] == fence[0] and len(marker[1]) >= len(fence):
-                if not marker[2].strip():
-                    fence = ""
+            if (
+                marker
+                and marker[1][0] == fence[0]
+                and len(marker[1]) >= len(fence)
+                and not marker[2].strip()
+            ):
+                fence = ""
         elif marker:
             fence = marker[1]
             lines[index] = re.sub(r"[^\n]", " ", line)
@@ -39,14 +43,14 @@ def mask_code(text: str, *, inline: bool = True) -> str:
         r"<!--.*?-->",
         lambda match: re.sub(r"[^\n]", " ", match[0]),
         visible,
-        flags=re.S,
+        flags=re.DOTALL,
     )
     if inline:
         visible = re.sub(
             r"(`+)(?!`)(.+?)(?<!`)\1(?!`)",
             lambda match: re.sub(r"[^\n]", " ", match[0]),
             visible,
-            flags=re.S,
+            flags=re.DOTALL,
         )
     return visible
 
@@ -92,7 +96,9 @@ def destination(value: str) -> str:
 def parse(text: str, inherited: dict[str, str] | None = None) -> Document:
     visible = mask_code(text)
     references = dict(inherited or {})
-    definition = re.compile(r"^ {0,3}\[([^\]\n]+)\]:[ \t]*(<[^>\n]+>|\S+).*$", re.M)
+    definition = re.compile(
+        r"^ {0,3}\[([^\]\n]+)\]:[ \t]*(<[^>\n]+>|\S+).*$", re.MULTILINE
+    )
     for match in definition.finditer(visible):
         references.setdefault(label_key(match[1]), destination(match[2]))
     visible = definition.sub(lambda match: " " * len(match[0]), visible)
@@ -139,11 +145,10 @@ def parse(text: str, inherited: dict[str, str] | None = None) -> Document:
     for index, line in enumerate(headings):
         heading = re.match(r"^ {0,3}#{1,6}\s+(.*?)\s*#*\s*$", line)
         title = heading[1] if heading else ""
-        if not heading and index + 1 < len(headings):
-            if line.strip() and re.fullmatch(
-                r" {0,3}(?:=+|-+)[ \t]*", headings[index + 1]
-            ):
-                title = line.strip()
+        if (not heading and index + 1 < len(headings)) and (
+            line.strip() and re.fullmatch(" {0,3}(?:=+|-+)[ \\t]*", headings[index + 1])
+        ):
+            title = line.strip()
         if title:
             title = re.sub(r"<[^>]*>", "", title)
             title = re.sub(r"!?\[([^\]]+)\]\([^)]*\)", r"\1", title)

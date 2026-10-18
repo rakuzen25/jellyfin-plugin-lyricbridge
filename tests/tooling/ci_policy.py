@@ -1,22 +1,22 @@
 """Deterministic selection, receipt and clean-build safety regressions; no GitHub calls."""
 
 import copy
-from datetime import datetime, timedelta, timezone
 import json
 import os
 import runpy
 import subprocess
-from pathlib import Path
 import sys
 import tempfile
 import unittest
 import urllib.error
 import urllib.request
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from unittest.mock import patch
 
-import scripts.ci.policy as ci_policy
 import scripts.ci.evidence as ci_evidence
 import scripts.ci.planning as ci_planning
+import scripts.ci.policy as ci_policy
 from scripts.common.source_inventory import source_files
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -559,7 +559,7 @@ class PolicyTests(IsolatedCiTestCase):
         run["conclusion"] = "failure"  # attach can fail after complete validation
         receipt = {
             "workflow_sha": "workflow",
-            "validated_at": datetime.now(timezone.utc).isoformat(),
+            "validated_at": datetime.now(UTC).isoformat(),
         }
         jobs = {
             "jobs": [
@@ -586,9 +586,7 @@ class PolicyTests(IsolatedCiTestCase):
     def test_old_release_receipt_requires_fresh_advisories(self):
         receipt = {
             "workflow_sha": "workflow",
-            "validated_at": (
-                datetime.now(timezone.utc) - timedelta(days=2)
-            ).isoformat(),
+            "validated_at": (datetime.now(UTC) - timedelta(days=2)).isoformat(),
         }
         with (
             patch.object(
@@ -1021,7 +1019,7 @@ class MetadataTests(IsolatedCiTestCase):
                 patch.object(
                     ci_policy,
                     "git",
-                    side_effect=lambda root, *args: (
+                    side_effect=lambda root, *args, path=path: (
                         path if args[0] == "diff" else "commit"
                     ),
                 ),
@@ -1291,7 +1289,7 @@ class GroupReuseTests(IsolatedCiTestCase):
             )
 
     def test_expired_missing_or_mismatched_origin_proof_cannot_reuse(self):
-        run, receipt, jobs = self.fixture()
+        run, receipt, _jobs = self.fixture()
         receipt["reused"] = {"backend": {"run_id": "99"}}
         for proof in (
             None,
@@ -1314,7 +1312,7 @@ class GroupReuseTests(IsolatedCiTestCase):
         import io
         import zipfile
 
-        run, receipt, jobs = self.fixture()
+        run, receipt, _jobs = self.fixture()
         run["run_attempt"] = 2
         receipt.update(
             schema=ci_policy.SCHEMA,
@@ -1349,7 +1347,7 @@ class GroupReuseTests(IsolatedCiTestCase):
         import io
         import zipfile
 
-        run, receipt, jobs = self.fixture(None, "in_progress")
+        run, receipt, _jobs = self.fixture(None, "in_progress")
         receipt.update(
             schema=ci_policy.SCHEMA,
             run_id="100",

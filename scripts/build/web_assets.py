@@ -1,11 +1,10 @@
-#!/usr/bin/env python3
 """Install/remove the optional renderer in an explicitly selected Jellyfin web root."""
 
 import argparse
 import hashlib
-from pathlib import Path
 import re
 import shutil
+from pathlib import Path
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--web-root", required=True, type=Path)
@@ -30,7 +29,7 @@ start = "<!-- LyricBridge managed assets -->"
 end = "<!-- /LyricBridge managed assets -->"
 text = index.read_text()
 clean = re.sub(
-    re.escape(start) + r".*?" + re.escape(end) + r"\n?", "", text, flags=re.S
+    re.escape(start) + r".*?" + re.escape(end) + r"\n?", "", text, flags=re.DOTALL
 )
 backup = root / "index.html.lyricbridge-backup"
 if args.uninstall:

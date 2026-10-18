@@ -144,16 +144,18 @@ class ReleaseTests(unittest.TestCase):
                     ],
                 ),
                 patch.object(release.subprocess, "check_output", return_value="same\n"),
+                self.assertRaisesRegex(ValueError, "does not match"),
             ):
-                with self.assertRaisesRegex(ValueError, "does not match"):
-                    release.resume_draft(root, REPOSITORY, output)
-            with patch.object(
-                release,
-                "github_json",
-                return_value=[{"tag_name": tag, "draft": True}] * 2,
+                release.resume_draft(root, REPOSITORY, output)
+            with (
+                patch.object(
+                    release,
+                    "github_json",
+                    return_value=[{"tag_name": tag, "draft": True}] * 2,
+                ),
+                self.assertRaisesRegex(ValueError, "duplicate"),
             ):
-                with self.assertRaisesRegex(ValueError, "duplicate"):
-                    release.resume_draft(root, REPOSITORY, output)
+                release.resume_draft(root, REPOSITORY, output)
 
     def test_identity_changelog_and_preparation(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -269,9 +271,9 @@ class ReleaseTests(unittest.TestCase):
                     release.subprocess, "check_output", return_value="fixture\n"
                 ),
                 patch.object(release.subprocess, "run", side_effect=corrupted_download),
+                self.assertRaisesRegex(ValueError, "Conflicting"),
             ):
-                with self.assertRaisesRegex(ValueError, "Conflicting"):
-                    release.upload(root, directory, REPOSITORY, tag)
+                release.upload(root, directory, REPOSITORY, tag)
 
     def test_public_receipt_mismatch_stops_before_remote_upload(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -326,11 +328,15 @@ class ReleaseTests(unittest.TestCase):
             root = Path(temporary)
             self.fixture(root)
             directory, tag = self.artifacts(root)
-            with patch.object(
-                release, "github_json", return_value=[{"draft": False, "tag_name": tag}]
+            with (
+                patch.object(
+                    release,
+                    "github_json",
+                    return_value=[{"draft": False, "tag_name": tag}],
+                ),
+                self.assertRaisesRegex(ValueError, "draft"),
             ):
-                with self.assertRaisesRegex(ValueError, "draft"):
-                    release.upload(root, directory, REPOSITORY, tag)
+                release.upload(root, directory, REPOSITORY, tag)
             with (
                 patch.object(
                     release,
@@ -343,9 +349,9 @@ class ReleaseTests(unittest.TestCase):
                 patch.object(
                     release.subprocess, "check_output", return_value="tested\n"
                 ),
+                self.assertRaisesRegex(ValueError, "moved"),
             ):
-                with self.assertRaisesRegex(ValueError, "moved"):
-                    release.upload(root, directory, REPOSITORY, tag)
+                release.upload(root, directory, REPOSITORY, tag)
 
 
 if __name__ == "__main__":

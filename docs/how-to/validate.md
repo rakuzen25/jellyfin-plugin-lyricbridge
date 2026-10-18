@@ -57,9 +57,9 @@ For packaging, dependency, installer, or release changes, build and inspect a cl
 
 ```sh
 python3 -m scripts.build.clean_package
-python3 -m tests.tooling.PackageArtifacts
-python3 -m tests.tooling.ReproducibleBuild
-python3 -m tests.installation.PackageInstallation
+python3 -m tests.tooling.package_artifacts
+python3 -m tests.tooling.reproducible_build
+python3 -m tests.installation.package_installation
 ```
 
 These checks inspect archives, rebuild independently, and install into a disposable official server.

@@ -3,10 +3,11 @@
 import argparse
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from pathlib import Path
+
 from scripts.ci.policy import artifact_hashes, digest
 from scripts.common.source_inventory import source_files
 
