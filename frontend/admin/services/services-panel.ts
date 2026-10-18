@@ -46,6 +46,7 @@ function field(parent: HTMLElement, label: string, value: string | number, run: 
         input = node("input");
     input.setAttribute("is", "emby-input");
     input.setAttribute("label", label);
+    input.setAttribute("aria-label", label);
     input.type = type;
     input.value = String(value);
     input.oninput = () => run(input.value);
@@ -58,6 +59,7 @@ function select(parent: HTMLElement, label: string, value: string, choices: [str
         input = node("select");
     input.setAttribute("is", "emby-select");
     input.setAttribute("label", label);
+    input.setAttribute("aria-label", label);
     choices.forEach(([v, text]) => {
         const o = node("option", text);
         o.value = v;

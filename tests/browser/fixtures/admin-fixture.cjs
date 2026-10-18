@@ -2,7 +2,7 @@ const { expect } = require("playwright/test");
 const path = require("node:path");
 const { existsSync, readFileSync } = require("node:fs");
 
-exports.mountAdmin = async function mountAdmin(page) {
+exports.mountAdmin = async function mountAdmin(page, { nativeControls = true } = {}) {
     await page.route("**/*", (route) =>
         new URL(route.request().url()).pathname === "/config.html"
             ? route.fulfill({
@@ -322,7 +322,7 @@ exports.mountAdmin = async function mountAdmin(page) {
     await page.goto("http://fixture.invalid/config.html");
     const css = path.resolve(__dirname, "../../../.build/jellyfin-admin.css"),
         controls = path.resolve(__dirname, "../../../.build/jellyfin-admin-native.js");
-    if (existsSync(css) && existsSync(controls)) {
+    if (nativeControls && existsSync(css) && existsSync(controls)) {
         await page.addStyleTag({ content: readFileSync(css, "utf8") });
         const theme = path.resolve(__dirname, "../../../.build/jellyfin-admin-theme.css");
         if (existsSync(theme)) await page.addStyleTag({ content: readFileSync(theme, "utf8") });

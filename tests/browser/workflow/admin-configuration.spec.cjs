@@ -5,7 +5,7 @@ const tab = (page, name) => page.getByRole("tablist", { name: "LyricBridge setti
 test("@workflow one settings draft preserves editors, credentials, saved-only tests and save failure recovery", async ({ page }) => {
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await mountAdmin(page);
+    await mountAdmin(page, { nativeControls: false });
     await expect(page.locator("#lb-reset-open")).toHaveCount(0);
     await page.locator("#lb-storage").fill("/unsaved");
     await tab(page, "Sources").click();
@@ -32,6 +32,8 @@ test("@workflow one settings draft preserves editors, credentials, saved-only te
     await page.locator('[data-capability="translation"] > summary').click();
     await page.locator('[data-option-id="translation"]').getByRole("button", { name: "Edit", exact: true }).click();
     await expect(page.getByRole("button", { name: "Test saved settings" })).toBeEnabled();
+    await expect(page.getByRole("combobox", { name: "Provider", exact: true })).toHaveValue("AI");
+    await expect(page.getByRole("combobox", { name: "Connection", exact: true })).toHaveValue("connection");
     await page.getByLabel("Model ID").fill("draft-model");
     await expect(page.getByRole("button", { name: "Test saved settings" })).toBeDisabled();
     await page.locator(".lb-service-editor").getByRole("button", { name: "Apply", exact: true }).click();
