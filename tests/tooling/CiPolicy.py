@@ -157,7 +157,7 @@ class PolicyTests(IsolatedCiTestCase):
     def test_source_inventory_excludes_generated_and_includes_policy(self):
         paths = {str(p) for p in source_files(ROOT)}
         self.assertIn("scripts/ci/policy.py", paths)
-        self.assertIn("docs/ARCHITECTURE.md", paths)
+        self.assertIn("docs/explanation/architecture.md", paths)
         self.assertIn("tests/browser/groups.json", paths)
         self.assertIn(".github/workflows/validate.yml", paths)
         self.assertFalse(
@@ -892,7 +892,12 @@ class CumulativeCoverageTests(IsolatedCiTestCase):
         )
 
     def test_documentation_after_successful_baseline_skips_checks(self):
-        self.assertEqual(self.selected(["README.md"])["execute"], [])
+        self.assertEqual(
+            self.selected(["README.md", "docs/how-to/configure.md", "docs/SETUP.md"])[
+                "execute"
+            ],
+            [],
+        )
 
     def test_missing_baseline_or_api_requires_all_but_reuses_passed_groups(self):
         for unavailable in (False, True):

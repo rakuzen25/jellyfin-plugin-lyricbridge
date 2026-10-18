@@ -1,7 +1,7 @@
 # Upstream components
 
 This record identifies pinned sources, notices, and local modifications.
-[Distribution requirements](../docs/LICENSES.md) describe the matching archives and
+[Distribution requirements](../docs/reference/distribution.md) describe the matching archives and
 corresponding-source obligations.
 
 ## Lyricify helper

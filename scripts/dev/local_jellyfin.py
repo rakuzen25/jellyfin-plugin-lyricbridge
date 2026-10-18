@@ -62,7 +62,7 @@ def build() -> None:
     ):
         if not shutil.which(executable):
             raise SystemExit(
-                f"Missing {executable}. Install the pinned tools described in DEPLOYMENT.md."
+                f"Missing {executable}. Install the pinned tools described in docs/how-to/develop.md."
             )
     reference = REPOSITORY / ".build/jellyfin"
     if not (reference / "MediaBrowser.Common.dll").exists():

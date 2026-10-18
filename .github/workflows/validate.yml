@@ -61,6 +61,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup
+      - run: python3 -m scripts.checks.docs
       - run: python3 -m scripts.release prepare --repository "$REPOSITORY" --tag "$RELEASE_TAG" --environment "$GITHUB_ENV"
       - id: plan
         env:
@@ -194,7 +195,7 @@ jobs:
           python: "true"
       - run: mkdir -p dist/evidence
       - run: LYRICBRIDGE_PYTHON=python sh scripts/checks/check-python.sh 2>&1 | tee dist/evidence/tooling.log
-      - run: (python3 -m tests.tooling.Architecture && python3 -m tests.tooling.CiPolicy && python3 -m tests.tooling.ReleaseBoundaries && python3 -m tests.tooling.ReleaseAutomation && python3 -m tests.tooling.LocalJellyfin) 2>&1 | tee -a dist/evidence/tooling.log
+      - run: (python3 -m tests.tooling.Documentation && python3 -m tests.tooling.Architecture && python3 -m tests.tooling.CiPolicy && python3 -m tests.tooling.ReleaseBoundaries && python3 -m tests.tooling.ReleaseAutomation && python3 -m tests.tooling.LocalJellyfin) 2>&1 | tee -a dist/evidence/tooling.log
       - uses: ./.github/actions/evidence
         if: always()
         with:

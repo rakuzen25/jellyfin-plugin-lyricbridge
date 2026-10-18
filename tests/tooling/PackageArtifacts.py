@@ -92,7 +92,7 @@ with zipfile.ZipFile(root / f"lyricbridge-source-{version}.zip") as archive:
         ".release-please-manifest.json",
         "version.txt",
         ".python-version",
-        "docs/RELEASING.md",
+        "docs/how-to/release.md",
         "scripts/release/__main__.py",
     ):
         assert archive.read(name) == (repository / name).read_bytes(), (
@@ -103,7 +103,7 @@ with zipfile.ZipFile(root / f"lyricbridge-source-{version}.zip") as archive:
     )
     assert "frontend/bridge/transport/transport.ts" in archive.namelist()
     assert "frontend/admin/config.ts" in archive.namelist()
-    assert "docs/ARCHITECTURE.md" in archive.namelist()
+    assert "docs/explanation/architecture.md" in archive.namelist()
     for path in (repository / "frontend" / "renderer").rglob("*.ts"):
         if path.name.endswith(".test.ts"):
             continue

@@ -19,34 +19,33 @@ Install through Jellyfin's plugin catalog:
 LyricBridge stores its data separately from music and never writes to media paths.
 It preserves manual selections, uses available Jellyfin lyrics, and searches enabled
 providers when needed.
-See [installation, storage, web repair, and uninstall](docs/DEPLOYMENT.md) for
+See [installation, storage, web repair, and uninstall](docs/how-to/install.md) for
 read-only web roots, independently hosted clients, backups, and updates.
 
 ## Configure lyrics and languages
 
-Use [source and language setup](docs/SETUP.md) to configure credentials, generation,
-saved versions, and account/song preferences. Missing Japanese romaji can be generated
-locally with bundled Kawazu. External generation is explicit and sends song text to
-the chosen service; user requests and automatic approval default to off.
-Optional OpenAI-compatible audio transcription uses Jellyfin's FFmpeg, then offers
-local, manual, or AI line-break review while preserving timed tokens. Configure it
-under **Services**; see [transcription and review](docs/SETUP.md#transcribe-audio-and-review-line-breaks).
+[Configure sources and services](docs/how-to/configure.md) as an administrator, then
+[choose playback versions and languages](docs/how-to/playback.md) for your account.
+External generation sends text or prepared audio to the chosen service; bundled
+Japanese romaji runs locally.
 
-The [import reference](docs/IMPORT.md) defines supported formats and validation.
-The [matching reference](docs/RANKING.md) explains recording eligibility, ranking,
-and improvement offers. Manual selections remain stable until explicitly changed.
+[Transcribe audio and review line breaks](docs/how-to/transcribe.md),
+[choose an import/export format](docs/reference/import-formats.md), or
+[manage saved data and requests](docs/how-to/manage-data.md).
+See [how lyric selection works](docs/explanation/lyric-selection.md) when investigating
+recording conflicts or improvement offers.
 
 ## Develop and release
 
-Start with [development setup](docs/DEVELOPMENT.md), including the disposable local
-Jellyfin sandbox. [Architecture](docs/ARCHITECTURE.md) explains ownership and contracts;
-[CI and local validation](docs/CI.md) lists maintained checks and evidence requirements.
-Follow [release publication](docs/RELEASING.md) to build verified draft assets and
+Start with [development setup](docs/how-to/develop.md), including the disposable local
+Jellyfin sandbox. [Architecture](docs/explanation/architecture.md) explains ownership and contracts;
+[Local validation](docs/how-to/validate.md) explains which checks to run.
+Follow [release publication](docs/how-to/release.md) to build verified draft assets and
 notify the shared catalog. Published changes are in the [changelog](CHANGELOG.md).
 
 ## Licenses
 
 Original plugin code and the Lyricify helper use Apache 2.0. The LyricMotion-derived
-renderer uses MPL 2.0. See [distribution licenses and source](docs/LICENSES.md) for
+renderer uses MPL 2.0. See [distribution licenses and source](docs/reference/distribution.md) for
 dependency terms and corresponding-source requirements, and
 [upstream components](vendor/UPSTREAM.md) for pinned revisions and local modifications.

@@ -87,4 +87,4 @@ jobs:
       - name: Write handoff
         run: |
           echo "Draft artifacts verified. Review the green validation jobs, then publish the draft in GitHub Releases." >> "$GITHUB_STEP_SUMMARY"
-          echo "Publishing triggers a verified catalog update; see docs/RELEASING.md." >> "$GITHUB_STEP_SUMMARY"
+          echo "Publishing triggers a verified catalog update; see docs/how-to/release.md." >> "$GITHUB_STEP_SUMMARY"

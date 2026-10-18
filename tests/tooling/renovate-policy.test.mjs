@@ -90,7 +90,7 @@ test("Renovate, pnpm and pip enforce the same 24-hour release age", () => {
     for (const line of (excludes || "").trim().split("\n").filter(Boolean)) {
         assert.match(line.trim(), /^- "?[^*]+@\d+\.\d+\.\d+"?$/, "Exceptions must pin exact versions");
     }
-    for (const file of [".github/actions/setup/action.yml", "docs/DEVELOPMENT.md"]) {
+    for (const file of [".github/actions/setup/action.yml", "docs/how-to/develop.md"]) {
         const content = readFileSync(new URL(`../../${file}`, import.meta.url), "utf8");
         const installs = content.split("\n").filter((line) => line.includes("-m pip install") && line.includes("requirements-check.txt"));
         assert.ok(installs.length > 0, `${file} must retain its Python setup command`);

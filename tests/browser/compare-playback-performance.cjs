@@ -1,6 +1,6 @@
 /* Compare two local web-asset directories with synthetic media; no server target. */
 const { chromium } = require("playwright");
-const { demo } = require("fixtures/demo-fixture.cjs");
+const { demo } = require("./fixtures/demo-fixture.cjs");
 const path = require("node:path");
 const fs = require("node:fs");
 const assert = require("node:assert/strict");
