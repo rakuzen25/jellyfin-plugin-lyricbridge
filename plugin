@@ -15,6 +15,9 @@ from pathlib import Path, PurePosixPath
 
 
 def install(root, download=False):
+    # The verified inventory must stay immutable after imports, including in children.
+    sys.dont_write_bytecode = True
+    os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     cache = root / ".build/toolkit"
     if (root / ".build").is_symlink() or cache.is_symlink():
         raise ValueError("Toolkit cache cannot redirect outside the checkout")
@@ -189,7 +192,11 @@ if __name__ == "__main__":
                         + os.environ["JELLYFIN_PLUGIN_TOOLKIT_ROOT"]
                         + "\n"
                     )
-                    for key in ("JELLYFIN_PLUGIN_ROOT", "JELLYFIN_PLUGIN_TOOLKIT_ROOT"):
+                    for key in (
+                        "JELLYFIN_PLUGIN_ROOT",
+                        "JELLYFIN_PLUGIN_TOOLKIT_ROOT",
+                        "PYTHONDONTWRITEBYTECODE",
+                    ):
                         stream.write(key + "=" + os.environ[key] + "\n")
         else:
             from jellyfin_plugin_toolkit.cli import main

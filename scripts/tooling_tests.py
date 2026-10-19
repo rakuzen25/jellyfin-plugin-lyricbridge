@@ -2,7 +2,10 @@
 
 import sys
 
-from jellyfin_plugin_toolkit.common.process import ROOT, run
+from jellyfin_plugin_toolkit.common.process import run
+from jellyfin_plugin_toolkit.context import Context
+
+ROOT = Context.load().root
 
 files = [
     str(p.relative_to(ROOT))
@@ -10,11 +13,12 @@ files = [
     if p.name not in {"renderer-contract.test.mjs", "typescript-toolchain.test.mjs"}
 ]
 if files:
-    run("node", "--test", *files)
+    run("node", "--test", *files, cwd=ROOT)
 for name in (
+    "toolkit_bootstrap",
     "architecture",
     "consumer_policy",
     "release_boundaries",
     "release_automation",
 ):
-    run(sys.executable, "-m", "tests.tooling." + name)
+    run(sys.executable, "-m", "tests.tooling." + name, cwd=ROOT)

@@ -6,8 +6,10 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from jellyfin_plugin_toolkit.common.process import ROOT
 from jellyfin_plugin_toolkit.common.release_metadata import load_identity
+from jellyfin_plugin_toolkit.context import Context
+
+ROOT = Context.load().root
 
 parser = argparse.ArgumentParser(
     description="Check web installation using candidate ZIP assets or an explicit build directory."

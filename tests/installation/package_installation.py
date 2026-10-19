@@ -31,7 +31,9 @@ RELEASE = load_release()
 VERSION = RELEASE.version
 HOST_VERSION = RELEASE.jellyfin_version
 
-from jellyfin_plugin_toolkit.common.process import IMAGES
+from jellyfin_plugin_toolkit.context import Context
+
+IMAGES = Context.load().images
 
 IMAGE = IMAGES["jellyfin"]
 PLUGIN = RELEASE.guid

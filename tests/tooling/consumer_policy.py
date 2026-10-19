@@ -12,8 +12,8 @@ class ConsumerPolicyTests(unittest.TestCase):
         context = Context.load()
         for path in source_files(context.root):
             with self.subTest(path=path):
-                classification(path.as_posix(), context.root)
-        browser_inventory(context.root)
+                classification(context, path.as_posix())
+        browser_inventory(context)
 
     def test_toolkit_and_build_configuration_require_every_enabled_group(self):
         context = Context.load()
@@ -23,15 +23,15 @@ class ConsumerPolicyTests(unittest.TestCase):
             "Directory.Build.props",
             ".github/workflows/validate.yml",
         ]:
-            self.assertEqual(set(context.groups), impacts(path, context.root))
+            self.assertEqual(set(context.groups), impacts(context, path))
 
     def test_renderer_changes_preserve_rendering_and_performance_gates(self):
         context = Context.load()
         self.assertTrue(
             {"frontend", "workflow", "rendering", "performance", "artifacts"}
-            <= impacts("frontend/renderer/lyrics/layout.ts", context.root)
+            <= impacts(context, "frontend/renderer/lyrics/layout.ts")
         )
-        self.assertEqual(set(), impacts("docs/how-to/develop.md", context.root))
+        self.assertEqual(set(), impacts(context, "docs/how-to/develop.md"))
 
 
 if __name__ == "__main__":

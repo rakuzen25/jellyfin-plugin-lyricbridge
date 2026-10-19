@@ -7,8 +7,9 @@ from pathlib import Path
 
 from jellyfin_plugin_toolkit.acceptance import inventory
 from jellyfin_plugin_toolkit.common.release_metadata import load_release
+from jellyfin_plugin_toolkit.context import Context
 
-inventory()
+inventory(Context.load())
 repository = Path(__file__).resolve().parents[2]
 root = repository / "dist"
 version = load_release(repository).version

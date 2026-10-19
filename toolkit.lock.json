@@ -1,6 +1,6 @@
 {
     "schema": 1,
     "repository": "rakuzen25/jellyfin-plugin-toolkit",
-    "version": "v1.0.0",
-    "sha256": "d24d71a458721ebcb33fe634021a458351ca171144418c4f6e59410ddd7211a1"
+    "version": "v0.1.0",
+    "sha256": "0c287f9ce072e4c1e27d9b1133be4a60f7bb3002bbae99fefa8cc345e8b1951b"
 }
