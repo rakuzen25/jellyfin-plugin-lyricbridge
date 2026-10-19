@@ -3,12 +3,17 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const config = JSON.parse(readFileSync(new URL("../../renovate.json", import.meta.url), "utf8"));
+const preset = JSON.parse(readFileSync(new URL("../../.build/toolkit/current/default.json", import.meta.url), "utf8"));
+function matches(pattern, name) {
+    if (pattern.startsWith("!/") && pattern.endsWith("/")) return !new RegExp(pattern.slice(2, -1)).test(name);
+    return pattern === name;
+}
 function policy(name, update, dependency = name) {
     return Object.assign(
         {},
-        ...config.packageRules.filter(
+        ...[...preset.packageRules, ...config.packageRules].filter(
             (rule) =>
-                (!rule.matchPackageNames || rule.matchPackageNames.includes(name)) &&
+                (!rule.matchPackageNames || rule.matchPackageNames.some((pattern) => matches(pattern, name))) &&
                 (!rule.matchDepNames || rule.matchDepNames.includes(dependency)) &&
                 (!rule.matchUpdateTypes || rule.matchUpdateTypes.includes(update)),
         ),
@@ -59,9 +64,9 @@ test("Playwright and its extracted versioned image share a patch-only automerge 
         assert.equal(policy(name, "major").automerge, false);
         assert.equal(policy(name, "patch").groupName, "Playwright package and image");
     }
-    const manager = config.customManagers[0];
-    assert.ok(new RegExp(manager.managerFilePatterns[0].slice(1, -1)).test("scripts/common/images.json"));
-    const script = readFileSync(new URL("../../scripts/common/images.json", import.meta.url), "utf8");
+    const manager = preset.customManagers[1];
+    assert.ok(new RegExp(manager.managerFilePatterns[0].slice(1, -1)).test("plugin.toml"));
+    const script = readFileSync(new URL("../../plugin.toml", import.meta.url), "utf8");
     const match = new RegExp(manager.matchStrings[0]).exec(script);
     assert.equal(match?.groups?.depName, "mcr.microsoft.com/playwright");
     const expected = JSON.parse(readFileSync(new URL("../browser/package.json", import.meta.url), "utf8")).dependencies.playwright;
@@ -90,9 +95,9 @@ test("Renovate, pnpm and pip enforce the same 24-hour release age", () => {
     for (const line of (excludes || "").trim().split("\n").filter(Boolean)) {
         assert.match(line.trim(), /^- "?[^*]+@\d+\.\d+\.\d+"?$/, "Exceptions must pin exact versions");
     }
-    const tasks = readFileSync(new URL("../../scripts/tasks.py", import.meta.url), "utf8");
-    assert.match(tasks, /"--uploaded-prior-to=P1D"/);
-    assert.match(tasks, /"scripts\.checks\.check_pip"/);
-    const setup = readFileSync(new URL("../../.github/actions/setup/action.yml", import.meta.url), "utf8");
+    const tasks = readFileSync(new URL("../../.build/toolkit/current/jellyfin_plugin_toolkit/tasks.py", import.meta.url), "utf8");
+    assert.match(tasks, /["\']--uploaded-prior-to=P1D["\']/);
+    assert.match(tasks, /"jellyfin_plugin_toolkit\.checks\.check_pip"/);
+    const setup = readFileSync(new URL("../../.build/toolkit/current/.github/actions/setup/action.yml", import.meta.url), "utf8");
     assert.match(setup, /--uploaded-prior-to=P1D/);
 });

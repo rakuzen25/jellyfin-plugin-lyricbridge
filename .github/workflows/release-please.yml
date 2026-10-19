@@ -4,61 +4,16 @@ on:
     branches: [main]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
   actions: read
+  pull-requests: write
+  issues: write
+  id-token: write
+  attestations: write
 jobs:
-  release-please:
-    runs-on: ubuntu-26.04
-    concurrency:
-      group: release-please-${{ github.repository }}
-      cancel-in-progress: false
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created == 'true' || steps.resume.outputs.release_created == 'true' }}
-      tag: ${{ steps.release.outputs.tag_name || steps.resume.outputs.tag }}
-      sha: ${{ steps.release.outputs.sha || steps.resume.outputs.sha }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup
-      - name: Create repository-scoped release token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: app
-        with:
-          client-id: ${{ vars.PLUGIN_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PLUGIN_APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
-          permission-issues: write
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
-        id: release
-        with:
-          token: ${{ steps.app.outputs.token }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-      - name: Resume an existing matching unpublished draft
-        id: resume
-        if: steps.release.outputs.release_created != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-        run: python3 -m scripts.release resume-draft --repository "$REPOSITORY" --environment "$GITHUB_OUTPUT"
-  validate:
-    needs: release-please
-    if: needs.release-please.outputs.release_created != 'true'
-    uses: ./.github/workflows/validate.yml
+  prepare:
+    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/prepare-release.yml@a2d1ea6a13b2f1e6c0cb7c4fd4609c5f16b60243
     with:
-      ref: ${{ github.sha }}
-      base: ${{ github.event.before }}
-  artifacts:
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
-    permissions:
-      contents: write
-      actions: read
-      id-token: write
-      attestations: write
-    uses: ./.github/workflows/release.yml
-    with:
-      tag: ${{ needs.release-please.outputs.tag }}
-      sha: ${{ needs.release-please.outputs.sha }}
+      app_client_id: ${{ vars.PLUGIN_APP_CLIENT_ID }}
+    secrets:
+      PLUGIN_APP_PRIVATE_KEY: ${{ secrets.PLUGIN_APP_PRIVATE_KEY }}

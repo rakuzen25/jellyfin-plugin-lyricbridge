@@ -10,7 +10,7 @@ Infrastructure executes those decisions through storage, providers, formats, and
 Host adapts Jellyfin configuration, authentication, library access, and lifecycle into those services.
 
 This direction lets domain tests run without constructing a plugin and lets adapters change without redefining selection or generation policy.
-The [project boundary check](../../scripts/checks/architecture.py) enforces the dependency graph; it is the authority for permitted project references.
+The shared project checker enforces the dependency graph declared in [plugin.toml](../../plugin.toml), which is the authority for permitted project references.
 
 Storage transactions stay behind repositories because admission, selection, deletion, and late completion must agree on the same data.
 Splitting related writes across request handlers would allow work admitted before deletion to recreate removed content.
@@ -62,3 +62,9 @@ The baseline ships an empty registry. Replace the predecessor step when advancin
 The upgrade runner journals intent and creates a private backup before conversion. XML replacement is atomic; database conversion and version stamping share one transaction.
 Each domain commits independently. Startup reconstructs interrupted completion from persisted schema markers, so a completed conversion doesn't run twice.
 Completed-upgrade notices survive restart and acknowledgement; backup files expire after 30 days. Their journal and lifecycle belong to the upgrade boundary rather than ordinary lyric retention.
+
+## Share tooling without sharing plugin behavior
+
+The toolkit owns sandbox supervision, compilation, bundling, packaging, generic validation and release mechanics. LyricBridge retains lyric policy, native host behavior, API and persisted schemas, provider integrations and its rendering/performance test groups.
+
+Optional resource lifecycle, feedback and native controls are bundled from the locked toolkit. LyricBridge-specific styling remains in its adapters. Command serialization, navigation and uncertain writes remain application-owned. Compatibility Python entrypoints delegate to the installed toolkit rather than maintaining another implementation.

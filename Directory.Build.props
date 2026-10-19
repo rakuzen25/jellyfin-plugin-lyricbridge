@@ -1,39 +1,9 @@
 <Project>
-  <PropertyGroup>
-    <LyricBridgeVersion>0.2.2</LyricBridgeVersion> <!-- x-release-please-version -->
-    <LyricBridgeGuid>70a9d327-7e98-4201-88a5-724d39366c40</LyricBridgeGuid>
-    <LyricBridgeName>LyricBridge</LyricBridgeName>
-    <LyricBridgeOwner>rakuzen25</LyricBridgeOwner>
-    <LyricBridgeOverview>Word-by-word karaoke lyrics, translations, and pronunciation for Jellyfin
-      Web.</LyricBridgeOverview>
-    <LyricBridgeDescription>Follow your music with synchronized karaoke lyrics in Jellyfin Web.
-      Search multiple lyric providers, import lyrics, and save your preferred versions. Display
-      translations and pronunciation alongside the original lyrics, with optional tools to generate
-      missing language support or transcribe audio.</LyricBridgeDescription>
-    <LyricBridgeCategory>Music</LyricBridgeCategory>
-    <JellyfinTargetAbi>12.2.0.0</JellyfinTargetAbi>
-    <JellyfinReferenceDir Condition="'$(JellyfinReferenceDir)' == ''">
-      $(MSBuildThisFileDirectory).build/jellyfin</JellyfinReferenceDir>
-    <Deterministic>true</Deterministic>
-    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
-    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-    <PathMap>$(MSBuildThisFileDirectory)=/_/</PathMap>
-  </PropertyGroup>
-  <!-- Shared maintained-project policy; the upstream helper owns its own target/version. -->
-  <PropertyGroup Condition="'$(MSBuildProjectName)' != 'Lyricify.Lyrics.Helper'">
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <Nullable>enable</Nullable>
-    <Version>$(LyricBridgeVersion)</Version>
-  </PropertyGroup>
-  <PropertyGroup
-    Condition="'$(MSBuildProjectName)' != 'Lyricify.Lyrics.Helper'">
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <AnalysisLevel>latest</AnalysisLevel>
-  </PropertyGroup>
+  <PropertyGroup><PluginRepositoryRoot>$(MSBuildThisFileDirectory)</PluginRepositoryRoot></PropertyGroup>
+  <Import Project=".build/toolkit/current/msbuild/Plugin.props" />
+  <PropertyGroup><LyricBridgeVersion>$(PluginVersion)</LyricBridgeVersion></PropertyGroup>
   <ItemGroup>
-    <AssemblyMetadata Include="LyricBridgeGuid" Value="$(LyricBridgeGuid)" />
-    <AssemblyMetadata Include="LyricBridgeName" Value="$(LyricBridgeName)" />
+    <AssemblyMetadata Include="LyricBridgeGuid" Value="$(PluginGuid)" />
+    <AssemblyMetadata Include="LyricBridgeName" Value="$(PluginName)" />
   </ItemGroup>
 </Project>

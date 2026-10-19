@@ -1,90 +1,14 @@
-"""Authoritative plugin identity and release metadata, independent of packaging."""
+"""Compatibility entrypoint for the shared toolkit."""
 
-import re
-import uuid
-import xml.etree.ElementTree as ET
-from dataclasses import asdict, dataclass
-from datetime import date
-from pathlib import Path
+import importlib
+import runpy
+import sys
 
-
-@dataclass(frozen=True)
-class PluginIdentity:
-    version: str
-    abi: str
-    guid: str
-    name: str
-    owner: str
-    overview: str
-    description: str
-    category: str
-
-    @property
-    def jellyfin_version(self) -> str:
-        return self.version + ".0"
-
-
-@dataclass(frozen=True)
-class Release(PluginIdentity):
-    changelog: str
-    timestamp: str
-
-
-def load_release(root: Path | None = None) -> Release:
-    root = root or Path(__file__).resolve().parents[2]
-    identity = load_identity(root)
-    changelog, timestamp = changelog_section(root, identity.version)
-    return Release(**asdict(identity), changelog=changelog, timestamp=timestamp)
-
-
-def load_identity(root: Path | None = None) -> PluginIdentity:
-    root = root or Path(__file__).resolve().parents[2]
-    metadata = ET.parse(root / "Directory.Build.props").getroot()
-
-    def required(name: str) -> str:
-        value = metadata.findtext(".//" + name)
-        if not value or not value.strip():
-            raise ValueError("Missing release metadata: " + name)
-        return value.strip()
-
-    version = required("LyricBridgeVersion")
-    release = PluginIdentity(
-        version=version,
-        abi=required("JellyfinTargetAbi"),
-        guid=required("LyricBridgeGuid"),
-        name=required("LyricBridgeName"),
-        owner=required("LyricBridgeOwner"),
-        overview=required("LyricBridgeOverview"),
-        description=required("LyricBridgeDescription"),
-        category=required("LyricBridgeCategory"),
+if __name__ == "__main__":
+    runpy.run_module(
+        "jellyfin_plugin_toolkit.common.release_metadata", run_name="__main__"
     )
-    if not re.fullmatch(r"\d+\.\d+\.\d+", release.version) or not re.fullmatch(
-        r"\d+\.\d+\.\d+\.\d+", release.abi
-    ):
-        raise ValueError("Invalid plugin version or Jellyfin ABI")
-    uuid.UUID(release.guid)
-    return release
-
-
-def changelog_section(root: Path, version: str) -> tuple[str, str]:
-    """Read the same version's notes that release-please puts in its release PR."""
-    text = (root / "CHANGELOG.md").read_text()
-    heading = re.search(
-        r"^##\s+\[?" + re.escape(version) + r"(?:\]|(?=\s|$)).*$", text, re.MULTILINE
+else:
+    sys.modules[__name__] = importlib.import_module(
+        "jellyfin_plugin_toolkit.common.release_metadata"
     )
-    if heading is None:
-        raise ValueError("Missing changelog section for plugin version " + version)
-    stamp = re.search(r"\((\d{4}-\d{2}-\d{2})\)\s*$", heading.group())
-    if stamp is None:
-        raise ValueError("Missing release date in changelog heading")
-    timestamp = date.fromisoformat(stamp.group(1)).isoformat() + "T00:00:00Z"
-    tail = text[heading.end() :]
-    next_heading = re.search(r"^##\s", tail, re.MULTILINE)
-    notes = tail[: next_heading.start()] if next_heading else tail
-    if not notes.strip():
-        raise ValueError("Empty changelog section for plugin version " + version)
-    return notes.strip(), timestamp
-
-
-def changelog_for_version(root: Path, version: str) -> str:
-    return changelog_section(root, version)[0]

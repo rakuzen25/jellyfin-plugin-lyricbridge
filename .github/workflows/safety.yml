@@ -6,12 +6,9 @@ on:
 permissions:
   contents: read
   actions: read
-concurrency:
-  group: safety-${{ github.repository }}
-  cancel-in-progress: false
 jobs:
   safety:
-    uses: ./.github/workflows/validate.yml
+    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/validate.yml@a2d1ea6a13b2f1e6c0cb7c4fd4609c5f16b60243
     with:
       ref: ${{ github.sha }}
       scheduled: ${{ github.event_name == 'schedule' }}

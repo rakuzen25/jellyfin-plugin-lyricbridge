@@ -23,6 +23,10 @@ For a deliberate override, use a one-time `Release-As:` footer rather than perma
 
 Packaging reads the versioned changelog section and its date. Preserve their structure and remove duplicate sections before merging the release PR.
 
+## Verify the shared release signer
+
+The catalog independently approves the toolkit repository, immutable source revision and reusable release workflow signer. The source ZIP contains the exact toolkit archive. A release receipt cannot reduce catalog-required assets or checks. Historical LyricBridge receipts remain supported under their existing policy.
+
 ## Verify and publish the draft
 
 After the release PR passes required checks, merge it. Leave the resulting release as a draft until its artifact workflow is green.
@@ -56,8 +60,8 @@ A tagged source fix needs a new reviewed release/version. The [workflow inputs](
 For an unpublished local release build, set the intended public URLs:
 
 ```sh
-LYRICBRIDGE_REPOSITORY_URL=https://github.com/OWNER/REPOSITORY \
-LYRICBRIDGE_DOWNLOAD_BASE_URL=https://github.com/OWNER/REPOSITORY/releases/download/vVERSION \
+JELLYFIN_PLUGIN_REPOSITORY_URL=https://github.com/OWNER/REPOSITORY \
+JELLYFIN_PLUGIN_DOWNLOAD_BASE_URL=https://github.com/OWNER/REPOSITORY/releases/download/vVERSION \
   pnpm build --release
 ```
 

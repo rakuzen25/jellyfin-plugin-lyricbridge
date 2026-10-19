@@ -13,7 +13,7 @@ A test belongs at multiple boundaries only when those boundaries can fail indepe
 CI compares cumulative changes with trustworthy coverage, including deleted paths and both sides of renames.
 Missing history, unknown paths, or unavailable evidence must not silently reduce coverage.
 Documentation changes still run the local documentation check without needing application suites solely for prose.
-The [classification policy](../../scripts/ci/policy.py) defines exact inputs and group selection.
+The rules in [plugin.toml](../../plugin.toml) define maintained inputs and group selection; the toolkit implements classification.
 
 ## Reuse evidence without laundering failures
 
@@ -24,7 +24,7 @@ Fork and unmerged-PR results cannot establish trusted release evidence.
 
 A partially failed workflow can contain a reusable successful group, while establishing a cumulative baseline requires complete coverage.
 Reuse chains must resolve to their original successful execution.
-The [evidence implementation](../../scripts/ci/evidence.py) owns receipt fields and trust rules; duplicating that schema here would create another source of truth.
+The locked toolkit owns receipt fields and trust rules. Its archive digest, configuration and native toolchain pins participate in fingerprints. Consumer workflows supply event triggers and explicit permissions around immutable reusable-workflow references.
 
 ## Keep release acceptance fresh
 

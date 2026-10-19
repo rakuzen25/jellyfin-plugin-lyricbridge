@@ -1,19 +1,6 @@
-/** Native Jellyfin action chrome shared by configuration sections and feedback. */
-export function adminButton(
-    label: string,
-    action: ((event: MouseEvent) => unknown) | null,
-    emphasis: "raised" | "quiet" = "raised",
-): HTMLButtonElement {
-    const control = document.createElement("button");
-    control.type = "button";
-    control.setAttribute("is", "emby-button");
-    control.className = emphasis === "quiet" ? "emby-button button-flat lb-settings-action" : "raised emby-button";
-    const text = document.createElement("span");
-    text.textContent = label;
-    control.append(text);
-    control.disabled = action === null;
-    control.onclick = (event) => {
-        void action?.(event);
-    };
-    return control;
+import { adminButton as sharedAdminButton } from "../../../.build/toolkit/current/ui/controls.ts";
+export function adminButton(...args: Parameters<typeof sharedAdminButton>): HTMLButtonElement {
+    const button = sharedAdminButton(...args);
+    if (args[2] === "quiet") button.classList.add("lb-settings-action");
+    return button;
 }

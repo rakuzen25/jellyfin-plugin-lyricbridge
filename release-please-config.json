@@ -11,10 +11,6 @@
         ".": {
             "extra-files": [
                 {
-                    "type": "generic",
-                    "path": "Directory.Build.props"
-                },
-                {
                     "type": "json",
                     "path": "src/Host/packages.lock.json",
                     "jsonpath": "$..dependencies[?(@property === 'LyricBridge.Core' || @property === 'LyricBridge.Infrastructure')]"
