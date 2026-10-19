@@ -6,7 +6,8 @@ import { renderServices } from "./services/services-panel.ts";
 import type { Configuration, WebRendererStatus } from "./settings/contracts.ts";
 import { hostFailure } from "./settings/contracts.ts";
 import { SettingsController, type SettingsSnapshot } from "./settings/settings-controller.ts";
-import { same } from "./settings/settings-draft.ts";
+import { createDiscardDialog, createNavigationGuard } from "./settings/unsaved-changes.ts";
+import { same, sameEditorValues } from "./settings/settings-draft.ts";
 import { createSourcesSection } from "./sources/source-section.ts";
 import { adminButton as button } from "./ui/controls.ts";
 import { materialFeedback } from "./ui/feedback.ts";
@@ -64,6 +65,16 @@ import { revealSelectedTab } from "./ui/ui.ts";
         loading = false;
     const saveButton = query(".lb-config-footer .button-submit");
     let activeEditor: "source" | "service" | null = null;
+    let servicesSection: ReturnType<typeof renderServices> | undefined;
+    const discardDialog = createDiscardDialog(page);
+    const editorSession = () => (activeEditor === "source" ? sourcesSection : activeEditor === "service" ? servicesSection : undefined);
+    const editorChanged = () => {
+        updateDirtyMarkers();
+        navigation?.update();
+    };
+    const unsaved = () => (!!config && !!savedConfig && !sameEditorValues(config, savedConfig)) || !!editorSession()?.hasChanges();
+    const confirmDiscard = (discard: () => void) =>
+        discardDialog.open("Discard changes to this editor?", [{ label: "Discard changes", run: discard }]);
     const sourcesSection = createSourcesSection({
         query: (...args) => query(...args),
         get config() {
@@ -76,65 +87,55 @@ import { revealSelectedTab } from "./ui/ui.ts";
         check: (...args) => check(...args),
         changed: (...args) => changed(...args),
         editing: (...args) => editing(...args),
+        editorChanged,
+        confirmDiscard,
         failure: (...args) => failure(...args),
     });
     const { sources } = sourcesSection;
     function editing(owner: "source" | "service", value: boolean, resume?: () => void) {
+        if (value && (!loaded || loading)) {
+            notice(status, "Wait for settings to finish loading before opening an editor.");
+            return false;
+        }
         if (value && saving) {
             notice(status, "Wait for settings to finish saving before opening an editor.");
             return false;
         }
         if (value && activeEditor !== null) {
             const previousOwner = activeEditor;
-            const current = page.querySelector<HTMLElement>((activeEditor === "source" ? "#lb-sources" : "#lb-services") + " .lb-service-editor");
-            if (!current) return false;
-            let prompt = current.querySelector<HTMLElement>(".lb-editor-switch");
-            if (!prompt) {
-                prompt = node("div");
-                prompt.className = "lb-editor-switch";
-                current.prepend(prompt);
-            }
-            const switchEditor = (label: string) => {
-                const control = Array.from(current?.querySelectorAll<HTMLButtonElement>(".lb-actions > button") || []).find(
-                    (candidate) => candidate.textContent?.trim() === label,
+            const session = editorSession();
+            if (!session?.hasChanges()) {
+                session?.discard();
+            } else {
+                const current = page.querySelector<HTMLElement>(
+                    (previousOwner === "source" ? "#lb-sources" : "#lb-services") + " .lb-service-editor",
                 );
-                control?.click();
-                if (activeEditor === null) {
-                    activateTab(owner === "source" ? 1 : 2);
-                    resume?.();
-                } else {
-                    activateTab(previousOwner === "source" ? 1 : 2);
-                    current?.scrollIntoView({ block: "center" });
-                }
-            };
-            feedbackScope.update(prompt, {
-                message: "You have an unfinished edit. Apply or discard it before switching rows.",
-                severity: "warning",
-                actions: [
-                    { label: "Apply and switch", run: () => switchEditor("Apply") },
-                    { label: "Discard and switch", run: () => switchEditor("Cancel") },
-                    {
-                        label: "Keep editing",
-                        run: () => {
-                            prompt.remove();
-                            notice(status, "Apply or cancel editor changes before saving.");
-                            activateTab(previousOwner === "source" ? 1 : 2);
-                            current?.querySelector<HTMLInputElement>("input")?.focus();
-                        },
-                    },
-                ],
-            });
-            activateTab(previousOwner === "source" ? 1 : 2);
-            const disclosure = current.closest("details");
-            if (disclosure) disclosure.open = true;
-            prompt.scrollIntoView({ block: "center" });
-            prompt.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
-            return false;
+                const switchEditor = (apply: boolean) => {
+                    if (apply) {
+                        const control = Array.from(current?.querySelectorAll<HTMLButtonElement>(".lb-actions > button") || []).find(
+                            (candidate) => candidate.textContent?.trim() === "Apply",
+                        );
+                        control?.click();
+                    } else session.discard();
+                    if (activeEditor === null) {
+                        activateTab(owner === "source" ? 1 : 2);
+                        resume?.();
+                    }
+                };
+                activateTab(previousOwner === "source" ? 1 : 2);
+                const disclosure = current?.closest("details");
+                if (disclosure) disclosure.open = true;
+                discardDialog.open("You have an unfinished edit. Apply or discard it before switching rows.", [
+                    { label: "Apply and switch", run: () => switchEditor(true) },
+                    { label: "Discard and switch", run: () => switchEditor(false) },
+                ]);
+                return false;
+            }
         }
         activeEditor = value ? owner : null;
         saveButton.disabled = value || !loaded;
         notice(status, value ? "Apply adds this edit to your draft. Save settings persists all changes." : dirty ? "Unsaved changes" : "");
-        updateDirtyMarkers();
+        editorChanged();
         return true;
     }
     const names: Record<string, string> = {
@@ -190,12 +191,24 @@ import { revealSelectedTab } from "./ui/ui.ts";
     }
     page.addEventListener("viewhide", () => {
         feedbackVisible = false;
+        navigation?.active(false);
         requestsPanel.hide();
         window.removeEventListener("resize", positionFooter);
         feedbackScope.dispose();
     });
+    page.addEventListener("viewdestroy", () => {
+        feedbackVisible = false;
+        navigation.active(false);
+        feedbackScope.dispose();
+        servicesSection?.dispose();
+        sourcesSection.replaceSourceDraft(null);
+        settings.dispose();
+    });
     function changed(event?: Event) {
-        if (event?.target instanceof Element && event.target.closest("[data-config-transient]")) return;
+        if (event?.target instanceof Element && event.target.closest("[data-config-transient]")) {
+            editorChanged();
+            return;
+        }
         syncFields();
         settings.replaceDraft(config);
         dirty = settings.snapshot().dirty;
@@ -452,7 +465,8 @@ import { revealSelectedTab } from "./ui/ui.ts";
             field(grid, names[key], config.Defaults[key], "number", (v) => (config.Defaults[key] = v));
         refreshDependentControls();
         sources();
-        renderServices({
+        servicesSection?.dispose();
+        servicesSection = renderServices({
             target: query("#lb-services"),
             setup: config.ServiceSetup,
             savedSetup: savedConfig.ServiceSetup,
@@ -460,6 +474,8 @@ import { revealSelectedTab } from "./ui/ui.ts";
             changed,
             active: () => feedbackVisible,
             editing: (value, resume) => editing("service", value, resume),
+            editorChanged,
+            confirmDiscard,
             modelLimits: async (connection, model) => {
                 const result = await call<{ available: boolean; contextWindow: number | null; completionLimit: number | null }>(
                     "service-options/model-limits",
@@ -481,7 +497,7 @@ import { revealSelectedTab } from "./ui/ui.ts";
     const dataHost: DataHost = {
         call,
         feedback: (target, message, error) => (error ? failure(target, message) : notice(target, message)),
-        unsaved: () => dirty || activeEditor !== null,
+        unsaved,
         busy: () => loading || !loaded || saving,
         discard: async () => {
             // Confirm successful retrieval before disposing unfinished drafts.
@@ -600,6 +616,9 @@ import { revealSelectedTab } from "./ui/ui.ts";
                 return;
             }
             const snapshot = settings.snapshot();
+            servicesSection?.dispose();
+            activeEditor = null;
+            sourcesSection.replaceSourceDraft(null);
             config = snapshot.configuration!;
             conflictPanel.hidden = true;
             config.Transcription ??= {
@@ -647,6 +666,7 @@ import { revealSelectedTab } from "./ui/ui.ts";
     }
     page.addEventListener("viewshow", () => {
         feedbackVisible = true;
+        navigation?.active(true);
         window.addEventListener("resize", positionFooter);
         positionFooter();
         if (!loaded) loadSettings();
@@ -657,6 +677,28 @@ import { revealSelectedTab } from "./ui/ui.ts";
             if (!page.querySelector<HTMLElement>('[data-tab="Data"]')!.hidden && !dataMaintenance) dataPanel.show();
         }
     });
+    const navigation = createNavigationGuard({
+        unsaved,
+        saving: () => saving,
+        dialog: discardDialog,
+        blocked: () => notice(status, "Wait for settings to finish saving"),
+        discard: () => {
+            servicesSection?.dispose();
+            activeEditor = null;
+            sourcesSection.replaceSourceDraft(null);
+            config = structuredClone(savedConfig);
+            settings.accept({ configuration: config, revision: settings.snapshot().revision });
+            dirty = false;
+            loaded = false;
+            conflictPanel.hidden = true;
+            conflictPanel.replaceChildren();
+            render();
+            saveButton.disabled = true;
+            editorChanged();
+            notice(status, "");
+        },
+    });
+    page.addEventListener("click", () => queueMicrotask(editorChanged));
     query("form").addEventListener("input", changed);
     query("form").addEventListener("change", changed);
     function syncFields() {
@@ -675,7 +717,9 @@ import { revealSelectedTab } from "./ui/ui.ts";
             config[key] = query(selector).checked;
     }
     function updateDirtyMarkers() {
+        navigation?.update();
         if (!config || !savedConfig) return;
+        dirty = !sameEditorValues(config, savedConfig);
         const groups = [
             ["EnableWebRenderer", "StoragePath", "ScheduledRetrieval"],
             ["Sources", "MinimumMatch"],
@@ -686,8 +730,8 @@ import { revealSelectedTab } from "./ui/ui.ts";
         ];
         page.querySelectorAll<HTMLElement>('#lb-config-tabs [role="tab"]').forEach((tab, index) => {
             const changed =
-                groups[index]!.some((key) => !same(config[key], savedConfig[key])) ||
-                activeEditor === (index === 1 ? "source" : index === 2 ? "service" : "none");
+                groups[index]!.some((key) => !sameEditorValues(config[key], savedConfig[key])) ||
+                (activeEditor === (index === 1 ? "source" : index === 2 ? "service" : "none") && !!editorSession()?.hasChanges());
             tab.querySelector(".lb-dirty-marker")?.remove();
             if (changed) {
                 const marker = node("span", " •");
@@ -805,6 +849,7 @@ import { revealSelectedTab } from "./ui/ui.ts";
         if (!loaded || loading || saving || dataMaintenance || activeEditor !== null) return;
         syncFields();
         saving = true;
+        navigation?.update();
         saveButton.disabled = true;
         notice(status, "Saving…");
         settings.replaceDraft(config);
@@ -831,6 +876,7 @@ import { revealSelectedTab } from "./ui/ui.ts";
             } else failure(status, hostFailure(caught).message || "Settings were not saved. Your draft is preserved; try again.");
         } finally {
             saving = false;
+            navigation?.update();
             saveButton.disabled = !loaded || activeEditor !== null || dataMaintenance || !conflictPanel.hidden;
         }
     };

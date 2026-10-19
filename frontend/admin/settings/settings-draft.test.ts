@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { rebaseSettings } from "./settings-draft.ts";
+import { rebaseSettings, sameEditorValues } from "./settings-draft.ts";
 
 test("rebases independent fields and stable-ID collection edits without dropping additions", () => {
     const base = { StoragePath: "", Options: [{ Id: "one", Model: "old", Enabled: true }] };
@@ -52,4 +52,13 @@ test("deletion-versus-edit conflicts do not expose replacement credentials in co
     const local = { Connections: [{ Id: "one", ApiKey: "PRIVATE-REPLACEMENT", Name: "Edited" }] };
     const latest = { Connections: [] };
     assert.ok(!JSON.stringify(rebaseSettings(base, local, latest).conflicts).includes("PRIVATE-REPLACEMENT"));
+});
+
+test("editor comparisons ignore absent keep actions but preserve credential and field changes", () => {
+    const saved = { Credential: "", CredentialPresent: true };
+    assert.equal(sameEditorValues(saved, { ...saved, CredentialAction: "keep", ignored: undefined }), true);
+    assert.equal(sameEditorValues(saved, { ...saved, CredentialAction: "clear" }), false);
+    assert.equal(sameEditorValues(saved, { ...saved, CredentialAction: "replace", Credential: "replacement" }), false);
+    assert.equal(sameEditorValues({ Model: "before" }, { Model: "after" }), false);
+    assert.equal(sameEditorValues(undefined, undefined), true);
 });

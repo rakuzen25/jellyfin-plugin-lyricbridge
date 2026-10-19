@@ -23,6 +23,7 @@ test("@workflow one settings draft preserves editors, credentials, saved-only te
     await page.getByRole("button", { name: "Keep editing", exact: true }).click();
     await expect(tab(page, "Sources")).toHaveAttribute("aria-selected", "true");
     await spotify.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByRole("dialog", { name: "Unsaved changes" }).getByRole("button", { name: "Discard changes", exact: true }).click();
     await spotify.getByRole("button", { name: "Edit", exact: true }).click();
     await spotify.getByRole("button", { name: "Replace credential" }).click();
     await expect(spotify.getByLabel("Replacement credential")).toHaveValue("");
@@ -252,4 +253,279 @@ test("@layout management rows share action styling, alignment and compact detail
         await checkRows(data, width);
         await page.screenshot({ path: testInfo.outputPath("row-actions-data-" + width + ".png"), fullPage: true });
     }
+});
+
+const unloadBlocked = (page) => page.evaluate(() => !window.dispatchEvent(new Event("beforeunload", { cancelable: true })));
+const unsavedDialog = (page) => page.getByRole("dialog", { name: "Unsaved changes" });
+async function departureLink(page) {
+    await page.evaluate(() => {
+        const link = document.createElement("a");
+        link.id = "test-departure";
+        link.href = "#/dashboard";
+        link.textContent = "Leave settings";
+        link.style.cssText = "position:fixed;top:0;right:0;z-index:10000;background:#222;padding:8px";
+        document.body.append(link);
+        window.departures = 0;
+        document.addEventListener("click", (event) => {
+            if (event.target.closest("#test-departure")) {
+                event.preventDefault();
+                window.departures++;
+                document.querySelector("#LyricBridgeConfig").dispatchEvent(new Event("viewhide"));
+            }
+        });
+    });
+    return page.locator("#test-departure");
+}
+
+test("@workflow editor warnings track changed and reverted values across settings tabs", async ({ page }) => {
+    await mountAdmin(page);
+    expect(await unloadBlocked(page)).toBe(false);
+    await tab(page, "Sources").click();
+    const spotify = page.locator('[data-source="Spotify"]');
+    await spotify.getByRole("button", { name: "Edit", exact: true }).click();
+    expect(await unloadBlocked(page)).toBe(false);
+    await spotify.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(unsavedDialog(page)).toHaveCount(0);
+    await spotify.getByRole("button", { name: "Edit", exact: true }).click();
+    await spotify.getByRole("button", { name: "Replace credential" }).click();
+    await spotify.getByLabel("Replacement credential").fill("NEW-SECRET");
+    expect(await unloadBlocked(page)).toBe(true);
+    await expect(tab(page, "Sources")).toHaveAttribute("aria-description", "Unsaved changes");
+    await tab(page, "General").click();
+    await expect(unsavedDialog(page)).toHaveCount(0);
+    expect(await unloadBlocked(page)).toBe(true);
+    await tab(page, "Sources").click();
+    await spotify.getByRole("button", { name: "Cancel replacement" }).click();
+    expect(await unloadBlocked(page)).toBe(false);
+    await spotify.getByRole("button", { name: "Clear credential" }).click();
+    expect(await unloadBlocked(page)).toBe(true);
+    await spotify.getByRole("button", { name: "Undo clear" }).click();
+    expect(await unloadBlocked(page)).toBe(false);
+    await spotify.getByRole("button", { name: "Apply", exact: true }).click();
+    expect(await unloadBlocked(page)).toBe(false);
+    await tab(page, "Services").click();
+    await page.locator('[data-capability="translation"] > summary').click();
+    const row = page.locator('[data-option-id="translation"]');
+    await row.getByRole("button", { name: "Edit", exact: true }).click();
+    expect(await unloadBlocked(page)).toBe(false);
+    await page.getByLabel("Model ID", { exact: true }).fill("changed-model");
+    expect(await unloadBlocked(page)).toBe(true);
+    await page.getByLabel("Model ID", { exact: true }).fill("fixture-model");
+    expect(await unloadBlocked(page)).toBe(false);
+    await page.getByLabel("Model ID", { exact: true }).fill("changed-model");
+    await page.locator(".lb-service-editor").getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(unsavedDialog(page).locator("p")).toBeFocused();
+    await expect(unsavedDialog(page).locator("button")).toHaveClass([
+        "emby-button button-flat lb-settings-action",
+        "emby-button button-flat lb-settings-action",
+    ]);
+    const keepEditing = unsavedDialog(page).getByRole("button", { name: "Keep editing", exact: true });
+    await keepEditing.hover();
+    await expect(keepEditing).toHaveCSS("background-color", "rgba(128, 128, 128, 0.12)");
+    await page.mouse.move(0, 0);
+    await page.keyboard.press("Tab");
+    await expect(keepEditing).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.getByLabel("Model ID", { exact: true })).toHaveValue("changed-model");
+    await expect(page.locator(".lb-service-editor").getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+    await page.locator(".lb-service-editor").getByRole("button", { name: "Cancel", exact: true }).click();
+    await unsavedDialog(page).getByRole("button", { name: "Discard changes", exact: true }).click();
+    expect(await unloadBlocked(page)).toBe(false);
+});
+
+test("@workflow departure confirms once, clears all drafts and reloads saved settings on return", async ({ page }) => {
+    await mountAdmin(page);
+    const leave = await departureLink(page);
+    await page.locator("#lb-storage").fill("/draft");
+    await tab(page, "Services").click();
+    await page.locator('[data-connection-id="connection"]').getByRole("button", { name: "Edit", exact: true }).click();
+    await page.getByLabel("Connection name", { exact: true }).fill("Changed connection");
+    await leave.click();
+    await expect(unsavedDialog(page)).toHaveCount(1);
+    expect(await page.evaluate(() => window.departures)).toBe(0);
+    await unsavedDialog(page).getByRole("button", { name: "Keep editing", exact: true }).click();
+    expect(await unloadBlocked(page)).toBe(true);
+    await leave.click();
+    await unsavedDialog(page).getByRole("button", { name: "Discard changes and leave", exact: true }).click();
+    expect(await page.evaluate(() => window.departures)).toBe(1);
+    expect(await unloadBlocked(page)).toBe(false);
+    await page.evaluate(() => {
+        window.adminFixture.config.StoragePath = "/server-latest";
+    });
+    await page.locator("#LyricBridgeConfig").dispatchEvent("viewshow");
+    await tab(page, "General").click();
+    await expect(page.locator("#lb-storage")).toHaveValue("/server-latest");
+    await expect(page.locator(".lb-service-editor")).toHaveCount(0);
+    expect(await unloadBlocked(page)).toBe(false);
+});
+
+test("@workflow warning follows save outcomes, blocks pending saves and detaches on viewhide", async ({ page }) => {
+    await mountAdmin(page);
+    const leave = await departureLink(page);
+    await page.locator("#lb-storage").fill("/saved");
+    await page.evaluate(() => {
+        const original = window.ApiClient.ajax;
+        window.ApiClient.ajax = async function (options) {
+            if (options.type === "PUT" && options.url.includes("admin/settings"))
+                await new Promise((resolve) => {
+                    window.releaseSave = resolve;
+                });
+            return original.call(this, options);
+        };
+    });
+    await page.getByRole("button", { name: "Save settings", exact: true }).click();
+    await expect(page.locator("#lb-config-status")).toContainText("Saving");
+    await leave.click();
+    await expect(page.locator("#lb-config-status")).toContainText("Wait for settings to finish saving");
+    await expect(unsavedDialog(page)).toHaveCount(0);
+    expect(await page.evaluate(() => window.departures)).toBe(0);
+    expect(await unloadBlocked(page)).toBe(true);
+    await page.evaluate(() => window.releaseSave());
+    await expect(page.locator("#lb-config-status")).toContainText("Settings saved");
+    expect(await unloadBlocked(page)).toBe(false);
+    await page.locator("#lb-storage").fill("/failed");
+    await page.evaluate(() => {
+        window.adminFixture.failSave = true;
+    });
+    await page.getByRole("button", { name: "Save settings", exact: true }).click();
+    await page.evaluate(() => window.releaseSave());
+    await expect(page.locator("#lb-config-status")).toContainText("Settings were not saved");
+    expect(await unloadBlocked(page)).toBe(true);
+    await page.locator("#LyricBridgeConfig").dispatchEvent("viewhide");
+    expect(await unloadBlocked(page)).toBe(false);
+    await page.locator("#LyricBridgeConfig").dispatchEvent("viewshow");
+    expect(await unloadBlocked(page)).toBe(true);
+    await expect(page.locator("#lb-storage")).toHaveValue("/failed");
+});
+
+test("@workflow row switches confirm changed editors and untouched new editors close freely", async ({ page }) => {
+    await mountAdmin(page);
+    await tab(page, "Sources").click();
+    const spotify = page.locator('[data-source="Spotify"]');
+    await spotify.getByRole("button", { name: "Edit", exact: true }).click();
+    await tab(page, "Services").click();
+    const connection = page.locator('[data-connection-id="connection"]');
+    await connection.getByRole("button", { name: "Edit", exact: true }).click();
+    await expect(unsavedDialog(page)).toHaveCount(0);
+    await page.getByLabel("Connection name", { exact: true }).fill("Applied connection");
+    await tab(page, "Sources").click();
+    await spotify.getByRole("button", { name: "Edit", exact: true }).click();
+    await unsavedDialog(page).getByRole("button", { name: "Apply and switch", exact: true }).click();
+    await expect(tab(page, "Sources")).toHaveAttribute("aria-selected", "true");
+    await spotify.getByRole("button", { name: "Replace credential" }).click();
+    await spotify.getByLabel("Replacement credential").fill("DISCARD-ME");
+    await tab(page, "Services").click();
+    await expect(connection).toContainText("Applied connection");
+    await connection.getByRole("button", { name: "Edit", exact: true }).click();
+    await unsavedDialog(page).getByRole("button", { name: "Discard and switch", exact: true }).click();
+    await expect(page.getByLabel("Connection name", { exact: true })).toHaveValue("Applied connection");
+    await page.locator(".lb-service-editor").getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(unsavedDialog(page)).toHaveCount(0);
+    await page.locator('[data-capability="translation"] > summary').click();
+    await page.locator('[data-capability="translation"]').getByRole("button", { name: "Add option", exact: true }).click();
+    await page.locator(".lb-service-editor").getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(unsavedDialog(page)).toHaveCount(0);
+    expect(await unloadBlocked(page)).toBe(true);
+    await tab(page, "Sources").click();
+    await spotify.getByRole("button", { name: "Edit", exact: true }).click();
+    await spotify.getByRole("button", { name: "Replace credential" }).click();
+    await expect(spotify.getByLabel("Replacement credential")).toHaveValue("");
+});
+
+test("@workflow browser reload warns and canceling preserves the draft", async ({ page }) => {
+    await mountAdmin(page);
+    await page.locator("#lb-storage").fill("/keep-me");
+    const prompt = page.waitForEvent("dialog");
+    await page.evaluate(() => {
+        setTimeout(() => location.reload(), 0);
+    });
+    const dialog = await prompt;
+    expect(dialog.type()).toBe("beforeunload");
+    await dialog.dismiss();
+    await expect(page.locator("#lb-storage")).toHaveValue("/keep-me");
+    expect(await unloadBlocked(page)).toBe(true);
+});
+
+test("@workflow navigation exemptions keep the draft without opening discard dialogs", async ({ page }) => {
+    await mountAdmin(page);
+    await page.locator("#lb-storage").fill("/draft");
+    const seen = await page.evaluate(() => {
+        const cases = [
+            { href: "#/dashboard", target: "_blank" },
+            { href: "/export", download: "settings" },
+            { href: "#LyricBridgeConfig" },
+            { href: "#" },
+            { href: "#/dashboard", modified: true },
+        ];
+        const observed = [];
+        for (const item of cases) {
+            const link = document.createElement("a");
+            link.href = item.href;
+            if (item.target) link.target = item.target;
+            if (item.download) link.download = item.download;
+            link.onclick = (event) => {
+                observed.push(event.defaultPrevented);
+                event.preventDefault();
+            };
+            document.body.append(link);
+            link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: !!item.modified }));
+            link.remove();
+        }
+        return observed;
+    });
+    expect(seen).toEqual([false, false, false, false, false]);
+    await expect(unsavedDialog(page)).toHaveCount(0);
+    expect(await unloadBlocked(page)).toBe(true);
+});
+
+test("@workflow late model metadata cannot restore a discarded editor", async ({ page }) => {
+    await mountAdmin(page);
+    await page.evaluate(() => {
+        const original = window.ApiClient.ajax;
+        window.ApiClient.ajax = async function (options) {
+            if (options.url.includes("service-options/model-limits"))
+                await new Promise((resolve) => {
+                    window.releaseLimits = resolve;
+                });
+            return original.call(this, options);
+        };
+    });
+    await tab(page, "Services").click();
+    await page.locator('[data-capability="boundary-review"] > summary').click();
+    await page.locator('[data-option-id="review"]').getByRole("button", { name: "Edit", exact: true }).click();
+    await page.getByText("Advanced generation settings", { exact: true }).click();
+    expect(await unloadBlocked(page)).toBe(false);
+    await page.getByLabel("Detect model limits automatically", { exact: true }).locator("..").click();
+    await expect.poll(() => page.evaluate(() => typeof window.releaseLimits)).toBe("function");
+    await page.locator(".lb-service-editor").getByRole("button", { name: "Cancel", exact: true }).click();
+    await unsavedDialog(page).getByRole("button", { name: "Discard changes", exact: true }).click();
+    await page.evaluate(() => window.releaseLimits());
+    await expect
+        .poll(() => page.evaluate(() => window.adminFixture.calls.filter((call) => call.path.includes("service-options/model-limits")).length))
+        .toBe(1);
+    await expect(page.locator(".lb-service-editor")).toHaveCount(0);
+    expect(await unloadBlocked(page)).toBe(false);
+    await page.locator('[data-option-id="review"]').getByRole("button", { name: "Edit", exact: true }).click();
+    await page.getByText("Advanced generation settings", { exact: true }).click();
+    await expect(page.getByLabel("Detect model limits automatically", { exact: true })).not.toBeChecked();
+    await expect(page.getByLabel("Model context window (tokens)", { exact: true })).toHaveValue("32768");
+});
+
+test("@workflow factory reset ignores an untouched editor and clears it when settings reload", async ({ page }) => {
+    await mountAdmin(page);
+    await tab(page, "Sources").click();
+    await page.locator('[data-source="Spotify"]').getByRole("button", { name: "Edit", exact: true }).click();
+    await tab(page, "Data").click();
+    const data = page.locator("#lb-data-manager");
+    await data.getByRole("tab", { name: "Maintenance", exact: true }).click();
+    await data.getByRole("button", { name: "Factory reset plugin", exact: true }).click();
+    await expect(data.getByLabel("Type FACTORY RESET to confirm")).toBeVisible();
+    await data.getByLabel("Type FACTORY RESET to confirm").fill("FACTORY RESET");
+    await data.getByRole("button", { name: "Confirm deletion", exact: true }).click();
+    await expect(data).toContainText("Data action finished");
+    await data.getByRole("button", { name: "Return and refresh", exact: true }).click();
+    await tab(page, "Sources").click();
+    await expect(page.locator(".lb-service-editor")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Save settings", exact: true })).toBeEnabled();
+    expect(await unloadBlocked(page)).toBe(false);
 });

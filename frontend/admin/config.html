@@ -509,6 +509,30 @@
                     border-radius: 8px;
                     background: rgba(128, 128, 128, 0.06);
                 }
+                #LyricBridgeConfig dialog.lb-unsaved-dialog {
+                    margin: auto;
+                    box-sizing: border-box;
+                    max-width: min(32rem, calc(100vw - 32px));
+                    max-height: calc(100dvh - 32px);
+                    overflow: auto;
+                    padding: 24px;
+                    color: inherit;
+                    background: var(--jf-palette-background-paper, var(--lb-footer-background, #202020));
+                }
+                #LyricBridgeConfig .lb-unsaved-dialog > p {
+                    margin: 0;
+                    line-height: 1.5;
+                    outline: none;
+                }
+                #LyricBridgeConfig .lb-unsaved-dialog > .lb-actions {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    margin: 16px 0 0;
+                }
+                #LyricBridgeConfig .lb-unsaved-dialog button {
+                    margin: 0;
+                }
                 #LyricBridgeConfig .lb-settings-surface:empty {
                     display: none;
                 }

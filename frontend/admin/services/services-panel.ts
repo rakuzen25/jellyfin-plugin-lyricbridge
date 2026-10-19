@@ -1,5 +1,5 @@
 import type { ServiceConnection, ServiceOption, ServiceSetup } from "../settings/contracts.ts";
-import { same } from "../settings/settings-draft.ts";
+import { same, sameEditorValues } from "../settings/settings-draft.ts";
 import { adminButton as action } from "../ui/controls.ts";
 import { rowAction, settingsRowHeader } from "../ui/settings-row.ts";
 import { credentialAvailable, credentialEditor } from "./credentials.ts";
@@ -11,6 +11,8 @@ interface Dependencies {
     localPolicy: HTMLElement;
     changed(): void;
     active(): boolean;
+    editorChanged(): void;
+    confirmDiscard(discard: () => void): void;
     editing(value: boolean, resume?: () => void): boolean;
     test(id: string): Promise<void>;
     modelLimits(
@@ -86,6 +88,9 @@ export function renderServices(d: Dependencies) {
     const setup = d.setup;
     let editor: { kind: "option"; value: ServiceOption; isNew: boolean } | { kind: "connection"; value: ServiceConnection; isNew: boolean } | null =
         null;
+    let baseline: unknown;
+    const hasChanges = () => editor !== null && !sameEditorValues(editor.value, baseline);
+    const cancelEditor = () => (hasChanges() ? d.confirmDiscard(closeEditor) : closeEditor());
     const open = new Set<string>();
     const connection = (o: ServiceOption) => setup.Connections.find((c) => c.Id === o.ConnectionId);
     const validEndpoint = (endpoint: string) => {
@@ -111,6 +116,7 @@ export function renderServices(d: Dependencies) {
     function closeEditor() {
         const previous = editor;
         editor = null;
+        baseline = undefined;
         d.editing(false);
         render();
         if (previous) {
@@ -126,6 +132,8 @@ export function renderServices(d: Dependencies) {
         if (!d.editing(true, () => begin(value))) return;
         editor = value;
         render();
+        baseline = structuredClone(value.value);
+        d.editorChanged();
         d.target.querySelector<HTMLInputElement>("[data-config-transient] input")?.focus();
     }
     function render() {
@@ -371,7 +379,10 @@ export function renderServices(d: Dependencies) {
                     } catch {
                         if (live()) fallback("Model limits could not be fetched.");
                     } finally {
-                        if (context.isConnected && current === revision) pending(false);
+                        if (context.isConnected && current === revision) {
+                            pending(false);
+                            d.editorChanged();
+                        }
                     }
                 }
                 function schedule(delay: number) {
@@ -462,7 +473,7 @@ export function renderServices(d: Dependencies) {
                 d.changed();
                 closeEditor();
             }),
-            action("Cancel", closeEditor),
+            action("Cancel", cancelEditor),
         );
         const applyControl = buttons.querySelector<HTMLButtonElement>("button") ?? undefined;
         if (!edit.isNew)
@@ -573,7 +584,7 @@ export function renderServices(d: Dependencies) {
                 d.changed();
                 closeEditor();
             }),
-            action("Cancel", closeEditor),
+            action("Cancel", cancelEditor),
         );
         if (!edit.isNew) {
             const remove = action("Delete connection", () => {
@@ -598,4 +609,12 @@ export function renderServices(d: Dependencies) {
         return form;
     }
     render();
+    return {
+        hasChanges,
+        discard: closeEditor,
+        dispose: () => {
+            editor = null;
+            baseline = undefined;
+        },
+    };
 }

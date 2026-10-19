@@ -1,3 +1,4 @@
+import { sameEditorValues } from "../settings/settings-draft.ts";
 import { icon } from "../../shared/icons.ts";
 import { credentialAvailable, credentialEditor } from "../services/credentials.ts";
 import type { Configuration } from "../settings/contracts.ts";
@@ -11,12 +12,27 @@ interface Dependencies {
     check: (parent: HTMLElement, label: string | undefined, value: unknown, change: (value: boolean) => void) => HTMLInputElement;
     changed: (event?: Event) => void;
     editing: (owner: "source" | "service", value: boolean, resume?: () => void) => boolean;
+    editorChanged(): void;
+    confirmDiscard(discard: () => void): void;
     failure: (target: HTMLElement, message: string, details?: string[]) => void;
 }
 
 /** Owns sources section behavior and its installation lifetime. */
 export function createSourcesSection(deps: Dependencies) {
     let sourceDraft: Configuration["Sources"][number] | null = null;
+
+    let baseline: unknown;
+    const hasChanges = () => sourceDraft !== null && !sameEditorValues(sourceDraft, baseline);
+    function discard() {
+        const name = sourceDraft?.Name;
+        sourceDraft = null;
+        baseline = undefined;
+        deps.editing("source", false);
+        sources();
+        deps.query("#lb-sources")
+            .querySelector<HTMLElement>('[data-source="' + name + '"] .lb-settings-row-actions button')
+            ?.focus();
+    }
 
     const sourceHelp: Record<string, string[]> = {
         QQ: ["No setup required. Enable QQ and save settings; LyricBridge searches QQ Music automatically."],
@@ -123,6 +139,8 @@ export function createSourcesSection(deps: Dependencies) {
                             if (!deps.editing("source", true, openSourceEditor)) return;
                             sourceDraft = structuredClone(s);
                             sources();
+                            baseline = structuredClone(sourceDraft);
+                            deps.editorChanged();
                             target.querySelector<HTMLInputElement>("[data-config-transient] input")?.focus();
                         },
                         "quiet",
@@ -150,12 +168,7 @@ export function createSourcesSection(deps: Dependencies) {
                     guidance(instructions, sourceHelp[s.Name] || []);
                     const actions = deps.node("div");
                     actions.className = "lb-actions";
-                    const close = () => {
-                        sourceDraft = null;
-                        deps.editing("source", false);
-                        sources();
-                        target.querySelector<HTMLElement>('[data-source="' + s.Name + '"] .lb-settings-row-actions button')?.focus();
-                    };
+                    const close = discard;
                     actions.append(
                         button("Apply", () => {
                             if (draft.CredentialAction === "replace" && !draft.Credential.trim()) {
@@ -169,7 +182,7 @@ export function createSourcesSection(deps: Dependencies) {
                             deps.changed();
                             close();
                         }),
-                        button("Cancel", close),
+                        button("Cancel", () => (hasChanges() ? deps.confirmDiscard(close) : close())),
                     );
                     form.append(instructions, actions);
                     row.append(form);
@@ -182,6 +195,8 @@ export function createSourcesSection(deps: Dependencies) {
         });
     }
     return {
+        hasChanges,
+        discard,
         sourceHelp,
         guidance,
         sources,
@@ -190,6 +205,7 @@ export function createSourcesSection(deps: Dependencies) {
         },
         replaceSourceDraft(value: Configuration["Sources"][number] | null) {
             sourceDraft = value;
+            baseline = value && structuredClone(value);
         },
     };
 }

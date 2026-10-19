@@ -1,3 +1,12 @@
+/** Credential keep and absent actions represent the same editor value. */
+export function sameEditorValues(left: unknown, right: unknown) {
+    const normalize = (value: unknown) => {
+        const json = JSON.stringify(value, (key, item: unknown) => (key === "CredentialAction" && item === "keep" ? undefined : item));
+        return json === undefined ? undefined : (JSON.parse(json) as unknown);
+    };
+    return same(normalize(left), normalize(right));
+}
+
 /** Three-way configuration rebase. Arrays with stable identities merge by identity, not index. */
 interface DraftConflict {
     path: string;
