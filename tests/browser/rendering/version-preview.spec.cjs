@@ -103,7 +103,12 @@ test("preview bar stays anchored through playback, document and nested lyric scr
     await expect.poll(async () => Math.abs((await bar.boundingBox()).y - nested.y)).toBeLessThan(2);
     await expectPlaybackPreview(page, "Return to results");
     await page.screenshot({ path: info.outputPath("playback-preview-overlay.png") });
-    await page.locator("audio").evaluate((audio) => audio.play());
+    await page.locator("audio").evaluate((audio) => {
+        // WebKit can leave a resumed play() promise pending until the clip ends.
+        // Assert the observable playing state before testing Return's behavior.
+        void audio.play();
+    });
+    await expect.poll(() => page.locator("audio").evaluate((audio) => audio.paused)).toBe(false);
     await page.getByRole("button", { name: "Return to results", exact: true }).click();
     await expect(page.getByRole("button", { name: "Preview with playback", exact: true })).toBeFocused();
     expect(await page.locator("audio").evaluate((audio) => audio.paused)).toBe(false);
