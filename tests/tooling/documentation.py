@@ -50,6 +50,15 @@ class DocumentationTests(unittest.TestCase):
         self.write("docs/guide.md", "# Guide\n- Section\n    - [Missing](missing.md)\n")
         self.assertTrue(any("missing target" in e for e in check(self.root)))
 
+    def test_generated_changelog_links_are_checked_without_formatting(self) -> None:
+        self.write("CHANGELOG.md", "# Releases\n\n\n* [Missing](absent.md)\n")
+        errors = check(self.root)
+        self.assertEqual(1, len(errors))
+        self.assertIn("CHANGELOG.md", errors[0])
+        self.assertIn("missing target", errors[0])
+        self.write("CHANGELOG.md", "# Releases\n\n\n* [Home](README.md)\n")
+        self.assertEqual([], check(self.root))
+
     def test_linked_reference_image_uses_the_enclosing_definitions(self) -> None:
         self.write("cover.svg", "<svg/>")
         self.write(

@@ -19,7 +19,7 @@ For prose and link changes alone, run `pnpm check docs` for Markdown formatting 
 The link checker cannot establish accuracy or writing quality.
 
 Use `pnpm check frontend`, `pnpm check backend`, or `pnpm check tooling` for targeted checks. Each verifies formatting; `pnpm format` applies formatting across maintained languages and Markdown.
-Use `pnpm format docs` for root Markdown and `docs/`. Vendored notices retain their upstream formatting.
+Use `pnpm format docs` for root Markdown and `docs/`. Vendored notices and the generated changelog retain their own formatting; changelog links are still checked.
 `pnpm check tooling` also checks TOML formatting and GitHub workflows with the pinned actionlint Docker image, including ShellCheck.
 Workflow linting requires Docker; the repository mount is read-only and the container runs without network access.
 `pnpm test` runs frontend, backend, and tooling unit tests. Use a target to run one boundary, for example `pnpm test backend`. Backend runs reject accidental zero-test executions.

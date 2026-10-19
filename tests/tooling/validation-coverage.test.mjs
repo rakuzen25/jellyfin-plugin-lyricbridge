@@ -10,6 +10,19 @@ import { promisify } from "node:util";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const execute = promisify(execFile);
 
+test("generated root changelog is excluded from formatting while maintained Markdown remains covered", async () => {
+    const { getFileInfo } = await import("prettier");
+    const options = { ignorePath: path.join(root, ".prettierignore") };
+    const changelog = path.join(root, "CHANGELOG.md");
+    assert.equal((await getFileInfo(changelog, options)).ignored, true);
+    for (const file of ["README.md", "AGENTS.md", "docs/how-to/validate.md", "docs/CHANGELOG.md"]) {
+        assert.equal((await getFileInfo(path.join(root, file), options)).ignored, false, file);
+    }
+    const before = await readFile(changelog, "utf8");
+    await execute(path.join(root, "node_modules/.bin/prettier"), ["--check", changelog], { cwd: root });
+    assert.equal(await readFile(changelog, "utf8"), before);
+});
+
 test("Markdown and TOML checks reject bad layout, repair it, and remain idempotent", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "lyricbridge-format-"));
     try {
