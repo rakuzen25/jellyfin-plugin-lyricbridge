@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.2](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.2.1...v0.2.2) (2026-10-19)
+
+
+### Features
+
+* improve config editing experience ([fb4b976](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/fb4b976dfdff771ec0a03ef97c7c045b1d8e7cd8))
+
+
+### Bug Fixes
+
+* **deps:** update dependency lucide to v1.59.0 ([#41](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/issues/41)) ([ef17f53](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/ef17f535db579dfb38584eb39573aaa7adf0cdaf))
+* fix credentials input ([d8e7268](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/d8e7268366f3192a4eff6f32d4bd9825bde3d2e0))
+* fix dupliated reason ([41d80e2](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/41d80e290f6d0d0a107a074530ff82b844cf8179))
+
 ## [0.2.1](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.2.0...v0.2.1) (2026-10-18)
 
 
