@@ -280,7 +280,7 @@ schema = 1
   [
     "{python}",
     "-m",
-    "scripts.checks.architecture",
+    "jellyfin_plugin_toolkit.checks.architecture",
   ],
 ] }
 "test-tooling" = { "commands" = [["{python}", "-m", "scripts.tooling_tests"]] }

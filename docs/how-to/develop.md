@@ -17,7 +17,7 @@ Bootstrap verifies installed tools, restores frozen workspace dependencies, prep
 
 `plugin.toml` declares plugin identity, capabilities, architecture policy, validation groups and shipped inventory. `version.txt` remains authoritative for the plugin version; native toolchain pins and dependency locks retain their existing authority.
 
-`toolkit.lock.json` selects a GitHub toolkit release and archive SHA-256. The standard-library `./plugin` launcher verifies it before activating an ignored cache. Existing pnpm commands delegate to this launcher. The temporary `build-support/toolkit.tar.gz` candidate is verified with the same checksum and supports validation before the initial stable toolkit is manually published.
+`toolkit.lock.json` selects a GitHub toolkit release and archive SHA-256. The standard-library `./plugin` launcher verifies it before activating an ignored cache. Existing pnpm commands delegate to this launcher. Development checkouts download the published release into the ignored `.build/toolkit/` cache. Source distributions include the exact archive at `build-support/toolkit.tar.gz` for offline rebuilding.
 
 Reusable workflow SHAs and the versioned shared Renovate preset must match the toolkit archive's recorded source/version. Toolkit updates arrive as one manually merged Renovate PR; CI rejects partial updates. Common implementation and extension contracts live in the [toolkit repository](https://github.com/rakuzen25/jellyfin-plugin-toolkit).
 

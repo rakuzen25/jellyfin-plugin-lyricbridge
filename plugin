@@ -3,6 +3,7 @@
 
 import fcntl
 import hashlib
+import importlib
 import json
 import os
 import re
@@ -12,6 +13,14 @@ import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path, PurePosixPath
+
+
+def read_member(package: tarfile.TarFile, member: tarfile.TarInfo) -> bytes:
+    stream = package.extractfile(member)
+    if stream is None:
+        raise ValueError(f"Toolkit archive member is not a file: {member.name}")
+    with stream:
+        return stream.read()
 
 
 def install(root, download=False):
@@ -112,12 +121,12 @@ def _install_locked(root, download=False):
             or entries["toolkit-files.json"].size > 2_000_000
         ):
             raise ValueError("Toolkit metadata exceeds size limit")
-        metadata = json.load(package.extractfile(entries["toolkit-release.json"]))
+        metadata = json.loads(read_member(package, entries["toolkit-release.json"]))
         if metadata.get("version") != version[1:] or metadata.get("schema") != 1:
             raise ValueError("Toolkit archive version differs from lock")
-        inventory = json.load(package.extractfile(entries["toolkit-files.json"]))
+        inventory = json.loads(read_member(package, entries["toolkit-files.json"]))
         expected = {
-            name: hashlib.sha256(package.extractfile(member).read()).hexdigest()
+            name: hashlib.sha256(read_member(package, member)).hexdigest()
             for name, member in entries.items()
             if name != "toolkit-files.json"
         }
@@ -138,7 +147,7 @@ def _install_locked(root, download=False):
                 (target / m.name).is_file()
                 and not (target / m.name).is_symlink()
                 and hashlib.sha256((target / m.name).read_bytes()).digest()
-                == hashlib.sha256(package.extractfile(m).read()).digest()
+                == hashlib.sha256(read_member(package, m)).digest()
                 for m in members
                 if m.isfile()
             )
@@ -152,7 +161,7 @@ def _install_locked(root, download=False):
                         destination.mkdir(parents=True, exist_ok=True)
                     else:
                         destination.parent.mkdir(parents=True, exist_ok=True)
-                        destination.write_bytes(package.extractfile(member).read())
+                        destination.write_bytes(read_member(package, member))
                         destination.chmod(0o755 if member.mode & 0o111 else 0o644)
                 metadata = json.loads((staged / "toolkit-release.json").read_text())
                 if metadata["version"] != version[1:]:
@@ -192,15 +201,16 @@ if __name__ == "__main__":
                         + os.environ["JELLYFIN_PLUGIN_TOOLKIT_ROOT"]
                         + "\n"
                     )
-                    for key in (
-                        "JELLYFIN_PLUGIN_ROOT",
-                        "JELLYFIN_PLUGIN_TOOLKIT_ROOT",
-                        "PYTHONDONTWRITEBYTECODE",
-                    ):
-                        stream.write(key + "=" + os.environ[key] + "\n")
+                    stream.writelines(
+                        key + "=" + os.environ[key] + "\n"
+                        for key in (
+                            "JELLYFIN_PLUGIN_ROOT",
+                            "JELLYFIN_PLUGIN_TOOLKIT_ROOT",
+                            "PYTHONDONTWRITEBYTECODE",
+                        )
+                    )
         else:
-            from jellyfin_plugin_toolkit.cli import main
-
-            main()
+            # The verified installation is added to sys.path by install().
+            importlib.import_module("jellyfin_plugin_toolkit.cli").main()
     except (ValueError, OSError) as error:
         raise SystemExit(str(error)) from error

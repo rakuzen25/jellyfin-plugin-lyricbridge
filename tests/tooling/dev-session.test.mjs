@@ -6,7 +6,7 @@ import { once } from "node:events";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { rebuildQueue, classifyChange, proxyServer, session } from "../../scripts/dev/session.mjs";
+import { rebuildQueue, classifyChange, proxyServer, session } from "../../.build/toolkit/current/jellyfin_plugin_toolkit/dev/session.mjs";
 import { compileWeb, buildWeb } from "../../frontend/build.mjs";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -206,17 +206,26 @@ test("shutdown waits for the active build and drops edits and manual requests qu
 });
 
 test("watch inputs exclude tests, dependencies and generated trees", () => {
+    const configuration = {
+        frontend: { enabled: true },
+        backend: {
+            projects: {
+                Host: "src/Host/LyricBridge.csproj",
+                LyricsHelper: "vendor/Lyricify.Lyrics.Helper/Lyricify.Lyrics.Helper.csproj",
+            },
+        },
+    };
     for (const name of ["frontend/admin/config.ts", "frontend/admin/config.html", "frontend/assets/lyricbridge.css"])
-        assert.equal(classifyChange(name), "frontend");
+        assert.equal(classifyChange(name, configuration), "frontend");
     for (const name of [
         "src/Host/Api/Api.cs",
         "src/Host/packages.lock.json",
         "vendor/Lyricify.Lyrics.Helper/Lyricify.Lyrics.Helper.csproj",
         "Directory.Build.props",
     ])
-        assert.equal(classifyChange(name), "backend");
+        assert.equal(classifyChange(name, configuration), "backend");
     for (const name of ["frontend/foo.test.ts", "frontend/node_modules/a.ts", "src/Host/obj/generated.cs", ".build/dev/a.js"])
-        assert.equal(classifyChange(name), null);
+        assert.equal(classifyChange(name, configuration), null);
 });
 
 test("proxy preserves authentication/status, supplies live assets, injects reload only into the entry page and forwards WebSockets", async (t) => {
@@ -241,7 +250,10 @@ test("proxy preserves authentication/status, supplies live assets, injects reloa
             ["lyricbridge.js", Buffer.from("live script")],
         ]),
     };
-    const proxy = proxyServer(state);
+    const proxy = proxyServer(state, {
+        frontend: { reload_assets: ["config.html", "lyricbridge.js"] },
+        sandbox: { asset_prefix: "/LyricBridge/assets/", settings_page: "lyricbridge" },
+    });
     const proxyPort = await listen(proxy.server);
     t.after(async () => {
         await proxy.close();

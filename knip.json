@@ -2,8 +2,8 @@
     "$schema": "https://unpkg.com/knip@6/schema.json",
     "workspaces": {
         ".": {
-            "entry": ["tests/tooling/**/*.test.mjs", "scripts/dev/session.mjs"],
-            "project": ["*.mjs", "scripts/**/*.mjs", "tests/tooling/**/*.mjs"],
+            "entry": ["tests/tooling/**/*.test.mjs"],
+            "project": ["*.mjs", "tests/tooling/**/*.mjs"],
             "ignoreDependencies": ["@taplo/cli"]
         },
         "frontend": {

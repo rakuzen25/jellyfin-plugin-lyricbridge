@@ -13,7 +13,7 @@ permissions:
 jobs:
   notify:
     if: github.event_name == 'workflow_dispatch' || (!github.event.release.draft && !github.event.release.prerelease)
-    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/catalog-notify.yml@42ad9863b3a30c2244c5b20485c1233f765903cf # v0.1.0
+    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/catalog-notify.yml@991afcc828f7506e62ac7a640a260e815708912a # v0.1.0
     with:
       catalog_repository: rakuzen25/jellyfin-plugin-manifest
       tag: ${{ github.event.release.tag_name || inputs.tag }}
