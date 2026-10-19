@@ -25,7 +25,9 @@ Accounts, credentials, settings, and plugin data remain under ignored `.build/lo
 Frontend edits rebuild and reload the browser without restarting Jellyfin. Backend edits compile before restarting the server. Failed builds leave the last working version available; fix the error and save again. A failed replacement startup restores the previous plugin.
 Browser reloads can interrupt playback and unsaved forms.
 
-Press `r` to rebuild/restart, `o` to open the browser, or `h` for help. Ctrl+C stops the session and its container while retaining data. Only one session can own a checkout. The public port stays fixed; use `pnpm dev --port 18097` if 18096 is occupied. `--open` opens the browser after startup.
+Press `r` to rebuild/restart once, `p` to pause or resume automatic updates, `o` to open the browser, or `h` for help. Ctrl+C stops the session and its container while retaining data. Only one session can own a checkout. The public port stays fixed; use `pnpm dev --port 18097` if 18096 is occupied. `--open` opens the browser after startup.
+
+For a stable preview while editing, start with `pnpm dev --no-watch` or press `p` in a running session. The initial build always runs. Pausing lets any active build and restart finish before reporting “Preview stable”; subsequent edits are tracked without updating the preview. Press `r` for a full rebuild/restart while staying paused. Resuming catches up once with changed frontend/backend parts; if nothing changed since the last successful build, it does no work. Edits arriving during a build remain pending, and failed builds retain their changes for retry. Pause state lasts only for the current session. Non-terminal sessions can use `--no-watch` without interactive controls.
 
 Dev prepares missing official references and restores locked backend dependencies. If workspace dependencies are missing, run `pnpm install --frozen-lockfile` first.
 

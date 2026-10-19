@@ -236,6 +236,8 @@ def dev(args: argparse.Namespace) -> None:
 
         ensure()
         command = ["node", "scripts/dev/session.mjs", "--port", str(args.port)]
+        if args.no_watch:
+            command.append("--no-watch")
         if args.open:
             command.append("--open")
         if args.clear_media_mounts:

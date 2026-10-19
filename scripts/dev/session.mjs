@@ -7,20 +7,32 @@ import { fileURLToPath } from "node:url";
 import { compileWeb, writeGeneration, root, rendererAssets } from "../../frontend/build.mjs";
 
 /** Coalesce editor bursts, never overlap work, and retain edits received during builds. */
-export function rebuildQueue(build, report = console.error, delay = 150) {
+export function rebuildQueue(build, report = console.error, delay = 150, { paused = false, onState = () => {} } = {}) {
     let timer,
         active,
-        closed = false;
+        closed = false,
+        automatic = false,
+        manual = false;
     const pending = new Set();
+    const notify = () => onState(paused ? (active ? "pausing" : "paused") : "enabled");
+    const ready = () => manual || (!paused && automatic);
     async function drain() {
-        if (active || closed) return;
+        if (active || closed || !ready()) return;
         active = (async () => {
-            while (pending.size && !closed) {
+            while (!closed && ready()) {
                 const batch = new Set(pending);
                 pending.clear();
+                if (manual) {
+                    batch.add("frontend");
+                    batch.add("backend");
+                }
+                manual = false;
+                automatic = false;
                 try {
                     await build(batch);
                 } catch (error) {
+                    // Retain failed inputs, but wait for another request before retrying.
+                    for (const kind of batch) pending.add(kind);
                     report(error);
                 }
             }
@@ -29,19 +41,38 @@ export function rebuildQueue(build, report = console.error, delay = 150) {
             await active;
         } finally {
             active = undefined;
+            notify();
         }
+    }
+    function schedule() {
+        clearTimeout(timer);
+        if (!closed && ready()) timer = setTimeout(() => void drain(), delay);
     }
     return {
         request(kind) {
             if (closed) return;
             pending.add(kind);
-            clearTimeout(timer);
-            timer = setTimeout(() => void drain(), delay);
+            automatic = true;
+            schedule();
+        },
+        rebuild() {
+            if (closed) return;
+            manual = true;
+            schedule();
+        },
+        toggle() {
+            if (closed) return;
+            paused = !paused;
+            if (!paused && pending.size) automatic = true;
+            schedule();
+            notify();
         },
         async close() {
             closed = true;
             clearTimeout(timer);
             pending.clear();
+            manual = false;
+            automatic = false;
             await active;
         },
     };
@@ -261,17 +292,49 @@ export async function session(argv = process.argv.slice(2)) {
             throw error;
         }
     }
-    const queue = rebuildQueue(rebuild, (error) => {
-        if (!stopping) console.error("[dev] " + error.message + "; watching for changes.");
-    });
+    let updateState = argv.includes("--no-watch") ? "paused" : "enabled";
+    const queue = rebuildQueue(
+        rebuild,
+        (error) => {
+            if (!stopping)
+                console.error(
+                    "[dev] " +
+                        error.message +
+                        (updateState === "enabled" ? "; save again or press r to retry." : "; press r to retry or p to resume."),
+                );
+        },
+        150,
+        {
+            paused: argv.includes("--no-watch"),
+            onState(value) {
+                const changed = value !== updateState;
+                updateState = value;
+                if (!stopping && (changed || value === "paused")) {
+                    console.log(
+                        "[dev] " +
+                            (value === "enabled"
+                                ? "Automatic updates enabled."
+                                : value === "pausing"
+                                  ? "Pausing automatic updates; waiting for the current build…"
+                                  : current
+                                    ? "Preview stable; automatic updates paused."
+                                    : "Automatic updates paused; no successful preview yet."),
+                    );
+                }
+            },
+        },
+    );
     const watchers = [];
-    const help = () => console.log("[dev] r rebuild/restart · o open browser · h help · Ctrl+C stop (sandbox data retained)");
+    const help = () => {
+        console.log("[dev] Automatic updates " + updateState + ".");
+        console.log("[dev] r rebuild/restart once · p pause/resume updates · o open browser · h help · Ctrl+C stop (sandbox data retained)");
+    };
     function input(key) {
         if (key === "\u0003") void shutdown();
         else if (key.trim() === "r") {
-            queue.request("frontend");
-            queue.request("backend");
-        } else if (key.trim() === "o") open();
+            queue.rebuild();
+        } else if (key.trim() === "p") queue.toggle();
+        else if (key.trim() === "o") open();
         else if (key.trim() === "h") help();
     }
     function shutdown() {
@@ -338,8 +401,7 @@ export async function session(argv = process.argv.slice(2)) {
             process.stdin.on("data", input);
             process.stdin.resume();
         }
-        queue.request("frontend");
-        queue.request("backend");
+        queue.rebuild();
         if (argv.includes("--open")) {
             const timer = setInterval(() => {
                 if (state.port || stopping) {

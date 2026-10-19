@@ -9,6 +9,14 @@ from scripts.__main__ import main
 
 
 class TaskTests(unittest.TestCase):
+    def test_dev_watch_flag_defaults_and_parsing(self):
+        with patch("scripts.dev.local_jellyfin.dev") as dev:
+            main(["dev"])
+            self.assertFalse(dev.call_args.args[0].no_watch)
+            main(["dev", "--no-watch", "--port", "18097"])
+            self.assertTrue(dev.call_args.args[0].no_watch)
+            self.assertEqual(18097, dev.call_args.args[0].port)
+
     def test_backend_check_never_installs_dependencies(self):
         with (
             patch.object(tasks, "run") as run,

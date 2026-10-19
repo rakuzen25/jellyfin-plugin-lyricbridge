@@ -44,11 +44,165 @@ test("watch queue batches bursts, serializes work and processes edits received d
     release();
     await delay(20);
     await queue.close();
-    assert.deepEqual(batches, [["backend", "frontend"], ["frontend"]]);
+    assert.deepEqual(batches, [
+        ["backend", "frontend"],
+        ["backend", "frontend"],
+    ]);
     assert.deepEqual(errors, ["compile failure"]);
     queue.request("backend");
     await delay(5);
     assert.equal(batches.length, 2);
+});
+
+test("paused startup builds once, holds edits and resumes only changed parts", async () => {
+    const batches = [];
+    const queue = rebuildQueue(async (batch) => batches.push([...batch].sort()), assert.fail, 1, { paused: true });
+    queue.rebuild();
+    await delay(20);
+    assert.deepEqual(batches, [["backend", "frontend"]]);
+    queue.toggle();
+    await delay(20);
+    assert.equal(batches.length, 1, "resume without edits does no work");
+    queue.toggle();
+    queue.request("frontend");
+    queue.request("frontend");
+    await delay(20);
+    assert.equal(batches.length, 1);
+    queue.toggle();
+    await delay(20);
+    assert.deepEqual(batches[1], ["frontend"]);
+    await queue.close();
+});
+
+test("pause holds debounced work and waits for the active build before reporting stable", async () => {
+    const batches = [],
+        states = [];
+    let release;
+    const gate = new Promise((resolve) => {
+        release = resolve;
+    });
+    const queue = rebuildQueue(
+        async (batch) => {
+            batches.push([...batch].sort());
+            if (batches.length === 1) await gate;
+        },
+        assert.fail,
+        1,
+        { onState: (state) => states.push(state) },
+    );
+    queue.request("frontend");
+    queue.toggle();
+    await delay(20);
+    assert.equal(batches.length, 0);
+    queue.toggle();
+    await delay(20);
+    queue.request("backend");
+    queue.toggle();
+    assert.equal(states.at(-1), "pausing");
+    release();
+    await delay(20);
+    assert.equal(states.at(-1), "paused");
+    assert.equal(batches.length, 1);
+    queue.toggle();
+    await delay(20);
+    assert.deepEqual(batches, [["frontend"], ["backend"]]);
+    await queue.close();
+});
+
+test("manual refresh stays paused, clears incorporated changes and retains edits during the build", async () => {
+    const batches = [];
+    let release;
+    const gate = new Promise((resolve) => {
+        release = resolve;
+    });
+    const queue = rebuildQueue(
+        async (batch) => {
+            batches.push([...batch].sort());
+            if (batches.length === 2) await gate;
+        },
+        assert.fail,
+        1,
+        { paused: true },
+    );
+    queue.request("frontend");
+    queue.rebuild();
+    await delay(20);
+    queue.toggle();
+    await delay(20);
+    assert.equal(batches.length, 1, "manual refresh consumed the pending edit");
+    queue.toggle();
+    queue.rebuild();
+    await delay(20);
+    queue.request("frontend");
+    release();
+    await delay(20);
+    assert.equal(batches.length, 2, "manual refresh leaves automatic updates paused");
+    queue.toggle();
+    await delay(20);
+    assert.deepEqual(batches[2], ["frontend"]);
+    await queue.close();
+});
+
+test("failed paused builds retain inputs without retrying until resumed; close discards held work", async () => {
+    const batches = [],
+        errors = [];
+    const queue = rebuildQueue(
+        async (batch) => {
+            batches.push([...batch].sort());
+            if (batches.length === 1) throw new Error("broken");
+        },
+        (error) => errors.push(error.message),
+        1,
+        { paused: true },
+    );
+    queue.rebuild();
+    await delay(20);
+    assert.equal(batches.length, 1);
+    assert.deepEqual(errors, ["broken"]);
+    queue.toggle();
+    await delay(20);
+    assert.deepEqual(batches, [
+        ["backend", "frontend"],
+        ["backend", "frontend"],
+    ]);
+    queue.toggle();
+    queue.request("backend");
+    await queue.close();
+    queue.toggle();
+    queue.rebuild();
+    await delay(20);
+    assert.equal(batches.length, 2);
+});
+
+test("shutdown waits for the active build and drops edits and manual requests queued behind it", async () => {
+    let release,
+        builds = 0,
+        closed = false;
+    const gate = new Promise((resolve) => {
+        release = resolve;
+    });
+    const queue = rebuildQueue(
+        async () => {
+            builds++;
+            await gate;
+        },
+        assert.fail,
+        1,
+        { paused: true },
+    );
+    queue.rebuild();
+    await delay(20);
+    queue.request("frontend");
+    queue.rebuild();
+    const closing = queue.close().then(() => {
+        closed = true;
+    });
+    await delay(20);
+    assert.equal(closed, false);
+    release();
+    await closing;
+    assert.equal(builds, 1);
+    assert.equal(closed, true);
 });
 
 test("watch inputs exclude tests, dependencies and generated trees", () => {

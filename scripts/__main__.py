@@ -20,6 +20,9 @@ def main(argv: list[str] | None = None) -> None:
     )
     dev_parser.add_argument("--port", type=int, default=18096)
     dev_parser.add_argument("--open", action="store_true")
+    dev_parser.add_argument(
+        "--no-watch", action="store_true", help="Start with automatic updates paused"
+    )
     mounts = dev_parser.add_mutually_exclusive_group()
     mounts.add_argument("--media-mount", action="append")
     mounts.add_argument("--clear-media-mounts", action="store_true")

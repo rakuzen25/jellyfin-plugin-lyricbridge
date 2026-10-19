@@ -1,5 +1,6 @@
 """Sandbox replacement, rollback, mount, and ownership behavior without Docker."""
 
+import argparse
 import json
 import subprocess
 import tempfile
@@ -12,6 +13,37 @@ from scripts.dev.references import inventory, verify
 
 
 class LocalSandboxTests(unittest.TestCase):
+    def test_dev_forwards_no_watch_to_supervisor(self):
+        for no_watch in (False, True):
+            with (
+                self.subTest(no_watch=no_watch),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                child = MagicMock()
+                child.wait.return_value = 0
+                child.poll.return_value = 0
+                with (
+                    patch.object(sandbox, "DATA", Path(directory)),
+                    patch.object(sandbox, "media_paths"),
+                    patch("scripts.tasks.verify_tools"),
+                    patch("scripts.dev.references.ensure"),
+                    patch("pathlib.Path.exists", return_value=True),
+                    patch.object(
+                        sandbox.subprocess, "Popen", return_value=child
+                    ) as spawn,
+                    patch.object(sandbox, "stop"),
+                ):
+                    sandbox.dev(
+                        argparse.Namespace(
+                            no_watch=no_watch,
+                            open=False,
+                            port=18096,
+                            clear_media_mounts=False,
+                            media_mount=None,
+                        )
+                    )
+                self.assertEqual(no_watch, "--no-watch" in spawn.call_args.args[0])
+
     def test_readiness_waits_for_healthy_body_and_retries_startup_connection_resets(
         self,
     ):
