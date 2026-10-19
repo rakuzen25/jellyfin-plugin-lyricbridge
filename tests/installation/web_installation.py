@@ -1,21 +1,38 @@
+import re
 import subprocess
+import sys
 import tempfile
+import zipfile
 from pathlib import Path
+
+from scripts.common.process import ROOT
+from scripts.common.release_metadata import load_identity
 
 with tempfile.TemporaryDirectory(prefix="lyricbridge-web-") as directory:
     root = Path(directory)
+    assets = root / "candidate-assets"
+    archive = ROOT / "dist" / f"lyricbridge-web-{load_identity().version}.zip"
+    with zipfile.ZipFile(archive) as candidate:
+        candidate.extractall(assets)
     index = root / "index.html"
     original = '<html><head><script src="main.js"></script></head><body></body></html>'
     index.write_text(original)
     command = [
-        "python3",
+        sys.executable,
         "-m",
         "scripts.installation.web_assets",
         "--web-root",
         str(root),
+        "--assets",
+        str(assets),
     ]
     subprocess.run(command, check=True)
     installed = index.read_text()
+    for asset in assets.iterdir():
+        if asset.suffix in {".js", ".css"}:
+            assert (
+                root / "lyricbridge" / asset.name
+            ).read_bytes() == asset.read_bytes()
     subprocess.run(command, check=True)
     assert index.read_text() == installed
     assert installed.index("lyricbridge.js") < installed.index(
@@ -36,8 +53,6 @@ print(
     "PASS: idempotent web install, relative URLs, script order, backup and scoped uninstall."
 )
 
-import re
-
 with tempfile.TemporaryDirectory(prefix="lyricbridge-asset-version-") as directory:
     root = Path(directory)
     assets = root / "assets"
@@ -53,7 +68,7 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-asset-version-") as directo
     ):
         (assets / name).write_text(name)
     command = [
-        "python3",
+        sys.executable,
         "-m",
         "scripts.installation.web_assets",
         "--web-root",
