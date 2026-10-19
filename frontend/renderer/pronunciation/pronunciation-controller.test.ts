@@ -3,30 +3,14 @@ import { test } from "node:test";
 import { Lifecycle } from "../../shared/lifecycle.ts";
 import { createPronunciationController } from "./pronunciation-controller.ts";
 function fixture() {
-    const state = {
-        googleRomanizationCache: new Map<string, string>(),
-        lyrics: null,
-        googleRomanizationRequest: null,
-        googleRomanizationAttempted: new Set<string>(),
-        googleRomanizationFragmentCache: new Map<string, string>(),
-        generation: 1,
-        googleRomanizationState: "idle",
-        googleRomanizationError: "",
-        googleRomanizationLineCount: 0,
-        romanizationSource: "none",
-        romanizationMode: "native",
-        romanizationLineCount: 0,
-        romanizationAvailable: false,
-    };
     const lifecycle = new Lifecycle();
     return {
         ...createPronunciationController({
-            state,
+            lyricsPort: { snapshot: { lyrics: null, generation: 1 } },
             lifecycle,
             redecorateForRomanization: () => {},
             warn: () => {},
         }),
-        state,
         lifecycle,
     };
 }

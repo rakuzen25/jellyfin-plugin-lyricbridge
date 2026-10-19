@@ -95,6 +95,13 @@
             ],
             "datasourceTemplate": "docker",
             "versioningTemplate": "docker"
+        },
+        {
+            "customType": "regex",
+            "managerFilePatterns": ["/^scripts\\/common\\/images\\.json$/"],
+            "matchStrings": ["\"(?<depName>rhysd/actionlint):(?<currentValue>\\d+\\.\\d+\\.\\d+)@(?<currentDigest>sha256:[a-f0-9]{64})\""],
+            "datasourceTemplate": "docker",
+            "versioningTemplate": "docker"
         }
     ]
 }

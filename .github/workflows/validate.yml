@@ -61,7 +61,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup
-      - run: python3 -m scripts.checks.docs
+        with:
+          node: "true"
+      - run: pnpm check docs
       - run: python3 -m scripts.release prepare --repository "$REPOSITORY" --tag "$RELEASE_TAG" --environment "$GITHUB_ENV"
       - id: plan
         env:

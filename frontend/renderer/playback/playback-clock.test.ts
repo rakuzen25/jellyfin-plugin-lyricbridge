@@ -5,7 +5,14 @@ import type { ClockMedia, PlaybackClockState } from "./playback-clock.ts";
 import { projectClock, resetClock } from "./playback-clock.ts";
 
 test("clock anchors pauses, seeks and media replacement without stale projection", () => {
-    const media: ClockMedia = { currentTime: 10, playbackRate: 1, paused: false, seeking: false, ended: false, readyState: 4 };
+    const media: { -readonly [K in keyof ClockMedia]: ClockMedia[K] } = {
+        currentTime: 10,
+        playbackRate: 1,
+        paused: false,
+        seeking: false,
+        ended: false,
+        readyState: 4,
+    };
     const state: PlaybackClockState = {
         playbackClockMedia: null,
         playbackClockSeconds: 0,

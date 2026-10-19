@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PreferenceQueue } from "./preferences.ts";
+import { PreferenceQueue, PreferenceSaveError } from "./preferences.ts";
 
 function deferred<T>() {
     let resolve!: (value: T) => void;
@@ -67,6 +67,7 @@ test("keeps failed song writes for retry without redirecting to the current song
             saved++;
         },
         failed: (error, action) => {
+            assert.ok(error instanceof PreferenceSaveError);
             assert.equal(error.details.retryable, true);
             retry = action;
         },

@@ -67,7 +67,7 @@ function document(): BridgeDocument {
 
 test("track requests reuse their captured identity and cancellation releases the previous track", () => {
     const original = globalThis.window;
-    globalThis.window = { setTimeout, clearTimeout } as unknown as Window;
+    globalThis.window = { setTimeout, clearTimeout } as unknown as typeof window;
     const f = fixture();
     try {
         const request = new Request("https://fixture.invalid/Audio/first/Lyrics");
@@ -90,7 +90,7 @@ test("track requests reuse their captured identity and cancellation releases the
 
 test("late track reads cannot render or replace the newer track", async () => {
     const original = globalThis.window;
-    globalThis.window = { setTimeout, clearTimeout } as unknown as Window;
+    globalThis.window = { setTimeout, clearTimeout } as unknown as typeof window;
     let resolve!: (data: unknown) => void;
     const f = fixture(
         () =>
@@ -117,7 +117,7 @@ test("late track reads cannot render or replace the newer track", async () => {
 
 test("document commands preserve unrelated payload fields and stale revisions are rejected", () => {
     const original = globalThis.window;
-    globalThis.window = { setTimeout, clearTimeout } as unknown as Window;
+    globalThis.window = { setTimeout, clearTimeout } as unknown as typeof window;
     const f = fixture();
     try {
         const scope = f.session.begin(new Request("https://fixture.invalid/Audio/item/Lyrics"), "item");

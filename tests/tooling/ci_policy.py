@@ -63,6 +63,32 @@ class PolicyTests(IsolatedCiTestCase):
             preserve(output, {current.name})
             self.assertEqual(len(list(output.glob("previous-*"))), 1)
 
+    def test_added_validation_inputs_select_their_check_groups(self):
+        self.assertEqual(set(), ci_policy.impacts("AGENTS.md"))
+        self.assertIn("frontend", ci_policy.impacts("frontend/tsconfig.tests.json"))
+        self.assertIn("tooling", ci_policy.impacts("pyproject.toml"))
+        self.assertEqual(
+            set(ci_policy.GROUPS), ci_policy.impacts("scripts/common/images.json")
+        )
+
+    def test_validation_configuration_changes_invalidate_reused_evidence(self):
+        for path, groups in (
+            ("frontend/tsconfig.tests.json", {"frontend"}),
+            ("pyproject.toml", {"tooling"}),
+            ("scripts/common/images.json", set(ci_policy.GROUPS)),
+            (".github/actionlint.yaml", set(ci_policy.GROUPS)),
+        ):
+            with self.subTest(path=path), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                file = root / path
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text("first")
+                before = ci_policy.fingerprints(root)
+                file.write_text("second")
+                after = ci_policy.fingerprints(root)
+                for group in groups:
+                    self.assertNotEqual(before[group], after[group])
+
     def test_representative_impacts(self):
         cases = {
             "README.md": set(),

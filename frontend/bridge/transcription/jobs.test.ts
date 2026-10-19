@@ -39,6 +39,7 @@ function fixture(api: (path: string, method?: string, body?: unknown, signal?: A
             set: (id, value) => {
                 notices.set(id, value);
                 updates++;
+                return {} as HTMLElement;
             },
             remove: (id) => {
                 notices.delete(id);

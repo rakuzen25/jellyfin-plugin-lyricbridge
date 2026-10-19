@@ -20,6 +20,18 @@ class DocumentationTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
 
+    def test_root_markdown_links_are_checked_without_requiring_readme_navigation(
+        self,
+    ) -> None:
+        self.write("AGENTS.md", "# Instructions\n[Home](README.md)\n")
+        self.write("CONTRIBUTING.md", "# Contribute\n[Missing](absent.md)\n")
+        errors = check(self.root)
+        self.assertEqual(1, len(errors))
+        self.assertIn("CONTRIBUTING.md", errors[0])
+        self.assertIn("missing target", errors[0])
+        self.write("CONTRIBUTING.md", "# Contribute\n[Home](README.md)\n")
+        self.assertEqual([], check(self.root))
+
     def test_relative_links_images_directories_queries_and_encoded_paths(self) -> None:
         self.write("assets/cover image.svg", "<svg/>")
         self.write(
@@ -146,8 +158,9 @@ class DocumentationTests(unittest.TestCase):
         repository = Path(__file__).resolve().parents[2]
         workflow = (repository / ".github/workflows/validate.yml").read_text()
         impact = workflow.split("  impact:\n", 1)[1].split("  metadata:\n", 1)[0]
-        self.assertIn("      - run: python3 -m scripts.checks.docs\n", impact)
-        self.assertLess(impact.index("scripts.checks.docs"), impact.index("- id: plan"))
+        self.assertIn("      - run: pnpm check docs\n", impact)
+        self.assertIn('node: "true"', impact)
+        self.assertLess(impact.index("pnpm check docs"), impact.index("- id: plan"))
 
 
 if __name__ == "__main__":

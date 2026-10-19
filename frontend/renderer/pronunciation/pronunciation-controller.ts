@@ -26,7 +26,7 @@ function isFiniteNumber(value: unknown): value is number {
 
 interface Dependencies {
     lifecycle: Lifecycle;
-    lyricsPort: LyricSessionStatePort;
+    lyricsPort: { readonly snapshot: Pick<LyricSessionStatePort["snapshot"], "lyrics" | "generation"> };
     redecorateForRomanization: () => void;
     warn: (...args: unknown[]) => void;
 }

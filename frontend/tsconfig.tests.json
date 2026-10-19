@@ -1,0 +1,6 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": { "types": ["node"] },
+    "include": ["**/*.test.ts", "platform/globals.ts"],
+    "exclude": ["node_modules"]
+}

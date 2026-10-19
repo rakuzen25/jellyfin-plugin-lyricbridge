@@ -31,7 +31,7 @@ def main(argv: list[str] | None = None) -> None:
         targets = {
             "build": ["frontend", "backend"],
             "check": ["frontend", "backend", "tooling", "docs"],
-            "format": ["frontend", "backend", "tooling"],
+            "format": ["frontend", "backend", "tooling", "docs"],
             "test": [
                 "frontend",
                 "backend",
@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> None:
             clean_package(args.release, args.prepared_web)
     else:
         defaults = ["frontend", "backend", "tooling"] + (
-            ["docs"] if args.task == "check" else []
+            ["docs"] if args.task in {"check", "format"} else []
         )
         for target in [args.target] if args.target else defaults:
             if args.task == "check":

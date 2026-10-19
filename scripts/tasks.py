@@ -20,6 +20,7 @@ TOOLING_FORMAT = [
     "*.{json,mjs,yaml}",
     ".github/**/*.{yml,yaml}",
 ]
+DOCS_FORMAT = ["*.md", "docs/**/*.md"]
 FRONTEND_NODE_TESTS = ("renderer-contract.test.mjs", "typescript-toolchain.test.mjs")
 UNIT_MODULES = (
     "documentation",
@@ -108,7 +109,11 @@ def format_target(target: str, fix: bool) -> None:
     if target == "backend":
         dotnet_format(fix)
     else:
-        patterns = FRONTEND_FORMAT if target == "frontend" else TOOLING_FORMAT
+        patterns = {
+            "frontend": FRONTEND_FORMAT,
+            "tooling": TOOLING_FORMAT,
+            "docs": DOCS_FORMAT,
+        }[target]
         run(
             executable("pnpm"),
             "exec",
@@ -117,6 +122,14 @@ def format_target(target: str, fix: bool) -> None:
             *patterns,
         )
         if target == "tooling":
+            run(
+                executable("pnpm"),
+                "exec",
+                "taplo",
+                "fmt",
+                *([] if fix else ["--check"]),
+                "pyproject.toml",
+            )
             run(
                 python_checks(),
                 "-m",
@@ -129,10 +142,10 @@ def format_target(target: str, fix: bool) -> None:
 
 
 def check(target: str) -> None:
+    format_target(target, False)
     if target == "docs":
         run(sys.executable, "-m", "scripts.checks.docs")
         return
-    format_target(target, False)
     if target == "frontend":
         run(
             executable("pnpm"),
@@ -146,6 +159,16 @@ def check(target: str) -> None:
         run(executable("pnpm"), "exec", "knip")
         run("node", "frontend/check-boundaries.mjs")
         run(executable("pnpm"), "--dir", "frontend", "exec", "tsc", "--noEmit")
+        run(
+            executable("pnpm"),
+            "--dir",
+            "frontend",
+            "exec",
+            "tsc",
+            "--project",
+            "tsconfig.tests.json",
+            "--noEmit",
+        )
     elif target == "tooling":
         run(
             executable("pnpm"),
@@ -160,6 +183,18 @@ def check(target: str) -> None:
         run(python_checks(), "-m", "ruff", "check", "scripts", "tests")
         run(python_checks(), "-m", "mypy")
         run(sys.executable, "-m", "scripts.checks.architecture")
+        run(
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "-v",
+            str(ROOT) + ":/work:ro",
+            "-w",
+            "/work",
+            IMAGES["actionlint"],
+        )
 
 
 def backend_tests(extra: list[str]) -> None:

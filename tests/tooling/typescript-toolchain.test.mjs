@@ -34,3 +34,57 @@ for (const workspace of [".", "frontend"]) {
         assert.equal(stdout.trim(), `Version ${native.version}`);
     });
 }
+
+test("strict test project includes every frontend test without adding Node globals to production", async () => {
+    const { readdirSync } = await import("node:fs");
+    const require = createRequire(path.join(root, "frontend/package.json"));
+    const { default: ts } = await import(require.resolve("typescript"));
+    const directory = path.join(root, "frontend");
+    const read = (name) => {
+        const config = ts.readConfigFile(path.join(directory, name), ts.sys.readFile);
+        assert.equal(config.error, undefined);
+        const project = ts.parseJsonConfigFileContent(config.config, ts.sys, directory);
+        assert.deepEqual(project.errors, []);
+        return project;
+    };
+    const application = read("tsconfig.json");
+    const tests = read("tsconfig.tests.json");
+    const discovered = readdirSync(directory, { recursive: true })
+        .filter((file) => !file.split(path.sep).includes("node_modules") && file.endsWith(".test.ts"))
+        .map((file) => path.join(directory, file))
+        .sort();
+    assert.ok(discovered.length > 0);
+    assert.deepEqual(tests.fileNames.filter((file) => file.endsWith(".test.ts")).sort(), discovered);
+    assert.ok(!application.fileNames.some((file) => file.endsWith(".test.ts")));
+    assert.equal(tests.options.strict, true);
+    assert.equal(tests.options.noUncheckedIndexedAccess, true);
+    assert.deepEqual(application.options.types, []);
+    assert.deepEqual(tests.options.types, ["node"]);
+    assert.ok(tests.fileNames.includes(path.join(directory, "platform/globals.ts")));
+});
+
+test("test compiler rejects a type error even though Node type stripping can execute it", async () => {
+    const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const temporary = await mkdtemp(path.join(tmpdir(), "lyricbridge-typecheck-"));
+    try {
+        const fixture = path.join(temporary, "invalid.test.ts");
+        await writeFile(fixture, 'const value: number = "wrong";\nvoid value;\n');
+        const config = path.join(temporary, "tsconfig.json");
+        await writeFile(
+            config,
+            JSON.stringify({
+                extends: path.join(root, "frontend/tsconfig.tests.json"),
+                compilerOptions: { typeRoots: [path.join(root, "frontend/node_modules/@types")] },
+                include: [fixture],
+            }),
+        );
+        await execute(process.execPath, ["--experimental-strip-types", fixture]);
+        await assert.rejects(execute(path.join(root, "frontend/node_modules/.bin/tsc"), ["--project", config, "--noEmit"]), (error) => {
+            assert.match(error.stdout, /TS2322/);
+            return true;
+        });
+    } finally {
+        await rm(temporary, { recursive: true, force: true });
+    }
+});

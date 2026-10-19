@@ -175,8 +175,7 @@ def documents(root: Path) -> list[Path]:
     return [
         path
         for path in [
-            root / "README.md",
-            root / "CHANGELOG.md",
+            *sorted(root.glob("*.md")),
             *sorted((root / "docs").rglob("*.md")),
             *sorted((root / "vendor").glob("*.md")),
         ]

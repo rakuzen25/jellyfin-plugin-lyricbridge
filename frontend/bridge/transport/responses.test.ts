@@ -88,6 +88,7 @@ test("unavailable embedded choices resolve to Automatic without changing the res
     const parsed = parseDocument(input, defaults);
     assert.equal(parsed.auxiliaryChoices?.pronunciation, "auto");
     assert.equal(JSON.stringify(input), before);
+    assert.ok(input.lyrics.lines[0]);
     input.lyrics.lines[0].translations = { en: "Hello" };
     input.auxiliaryChoices.translation = "provider";
     input.preferences = { ...defaults, translationLanguage: "fr" };

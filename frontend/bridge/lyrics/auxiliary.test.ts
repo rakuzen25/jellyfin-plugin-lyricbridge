@@ -65,6 +65,8 @@ test("embedded availability includes background vocals and ignores blank or unre
 test("Automatic fills gaps while choosing the embedded version leaves missing rows blank", () => {
     const doc = fixture();
     const [first, gap] = doc.lyrics!.lines;
+    assert.ok(first);
+    assert.ok(gap);
     assert.equal(auxiliary(first, "translation", preferences, doc)?.key, "provider");
     assert.equal(auxiliary(gap, "translation", preferences, doc)?.key, "generated");
     assert.equal(auxiliary(gap, "pronunciation", preferences, doc)?.key, "local");

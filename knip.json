@@ -4,7 +4,7 @@
         ".": {
             "entry": ["tests/tooling/**/*.test.mjs", "scripts/dev/session.mjs"],
             "project": ["*.mjs", "scripts/**/*.mjs", "tests/tooling/**/*.mjs"],
-            "ignoreDependencies": ["prettier"],
+            "ignoreDependencies": ["prettier", "@taplo/cli"],
             "ignoreBinaries": ["xdg-open"]
         },
         "frontend": {

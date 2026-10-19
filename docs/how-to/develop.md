@@ -10,7 +10,7 @@ Install the versions pinned by [.python-version](../../.python-version), [.node-
 pnpm bootstrap
 ```
 
-Bootstrap verifies installed tools, restores frozen workspace dependencies, prepares `.venv` with the check dependencies, extracts verified references from the pinned official Jellyfin image, and restores locked backend dependencies. It does not install system tools.
+Bootstrap verifies installed tools, restores frozen workspace dependencies, prepares `.venv` with the check dependencies, extracts verified references from the pinned official Jellyfin image, and restores locked backend dependencies. It does not install system tools. Tooling checks run the pinned actionlint image through Docker; the first run needs access to pull that image.
 `LYRICBRIDGE_PYTHON`, `LYRICBRIDGE_DOTNET`, and `LYRICBRIDGE_PNPM` select alternate executable locations; `LYRICBRIDGE_REFERENCE_DIR` selects the references used by clean builds.
 
 ## Run an interactive sandbox

@@ -16,35 +16,31 @@
 
 ## [0.2.1](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.2.0...v0.2.1) (2026-10-18)
 
-
 ### Bug Fixes
 
-* fix ci ([f402782](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/f4027822022f45e7b3d0ad5963dcd0c765bb3998))
+- fix ci ([f402782](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/f4027822022f45e7b3d0ad5963dcd0c765bb3998))
 
 ## [0.2.0](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.1.3...v0.2.0) (2026-10-18)
 
-
 ### ⚠ BREAKING CHANGES
 
-* refactor codebase
+- refactor codebase
 
 ### Features
 
-* add data tab ([ea997d8](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/ea997d8c3653bc4b47514da26eaa30b757f83433))
-* add export feature ([33d4c79](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/33d4c79de524663e5de6ed58ceb2ef5a77dcba47))
-* enhance transcription workflow ([bcb623d](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/bcb623dcb8bf7a2525e3b44cace711e6438ebbdf))
-* standardize preview ([0592b0e](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/0592b0ee4519da2bff6772a92e65fd703c23d0d5))
-
+- add data tab ([ea997d8](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/ea997d8c3653bc4b47514da26eaa30b757f83433))
+- add export feature ([33d4c79](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/33d4c79de524663e5de6ed58ceb2ef5a77dcba47))
+- enhance transcription workflow ([bcb623d](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/bcb623dcb8bf7a2525e3b44cace711e6438ebbdf))
+- standardize preview ([0592b0e](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/0592b0ee4519da2bff6772a92e65fd703c23d0d5))
 
 ### Bug Fixes
 
-* **deps:** update dependency lucide to v1.57.0 ([#34](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/issues/34)) ([3df1b97](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/3df1b9701abb96dd2e045b16431420ba23e5393c))
-* **deps:** update dependency lucide to v1.58.0 ([#37](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/issues/37)) ([de1a774](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/de1a7744721d1f3c843c7b3db35aec98c2f19d8a))
-
+- **deps:** update dependency lucide to v1.57.0 ([#34](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/issues/34)) ([3df1b97](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/3df1b9701abb96dd2e045b16431420ba23e5393c))
+- **deps:** update dependency lucide to v1.58.0 ([#37](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/issues/37)) ([de1a774](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/de1a7744721d1f3c843c7b3db35aec98c2f19d8a))
 
 ### Code Refactoring
 
-* refactor codebase ([5c79f2a](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/5c79f2abe283595efb920ca8eaa228d1736e92fd))
+- refactor codebase ([5c79f2a](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/5c79f2abe283595efb920ca8eaa228d1736e92fd))
 
 ## [0.1.3](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.1.2...v0.1.3) (2026-10-14)
 
