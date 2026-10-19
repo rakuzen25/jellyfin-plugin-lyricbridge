@@ -270,10 +270,7 @@ schema = 1
   [
     "{python}",
     "-m",
-    "ruff",
-    "check",
-    "scripts",
-    "tests",
+    "jellyfin_plugin_toolkit.checks.tooling",
   ],
   [
     "{python}",

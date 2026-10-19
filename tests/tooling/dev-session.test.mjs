@@ -208,7 +208,12 @@ test("shutdown waits for the active build and drops edits and manual requests qu
 test("watch inputs exclude tests, dependencies and generated trees", () => {
     for (const name of ["frontend/admin/config.ts", "frontend/admin/config.html", "frontend/assets/lyricbridge.css"])
         assert.equal(classifyChange(name), "frontend");
-    for (const name of ["src/Host/Api/Api.cs", "src/Host/packages.lock.json", "vendor/Helper/Helper.csproj", "Directory.Build.props"])
+    for (const name of [
+        "src/Host/Api/Api.cs",
+        "src/Host/packages.lock.json",
+        "vendor/Lyricify.Lyrics.Helper/Lyricify.Lyrics.Helper.csproj",
+        "Directory.Build.props",
+    ])
         assert.equal(classifyChange(name), "backend");
     for (const name of ["frontend/foo.test.ts", "frontend/node_modules/a.ts", "src/Host/obj/generated.cs", ".build/dev/a.js"])
         assert.equal(classifyChange(name), null);
@@ -254,10 +259,10 @@ test("proxy preserves authentication/status, supplies live assets, injects reloa
     assert.equal(await script.text(), "live script");
     assert.equal(script.headers.get("cache-control"), "no-store");
     const index = await fetch(base + "/web/index.html");
-    assert.match(await index.text(), /__lyricbridge_dev\/client.js/);
+    assert.match(await index.text(), /__jellyfin_plugin_dev\/client.js/);
     const other = await fetch(base + "/web/other.html");
-    assert.doesNotMatch(await other.text(), /__lyricbridge_dev/);
-    const events = await fetch(base + "/__lyricbridge_dev/events");
+    assert.doesNotMatch(await other.text(), /__jellyfin_plugin_dev/);
+    const events = await fetch(base + "/__jellyfin_plugin_dev/events");
     const reader = events.body.getReader();
     assert.match(Buffer.from((await reader.read()).value).toString(), /data: 0/);
     proxy.reload();
@@ -293,7 +298,7 @@ test("production output contains no dev client and failed compilation retains th
     await buildWeb(output, fixture);
     const previous = await readFile(path.join(output, "config.html"), "utf8");
     assert.match(previous, /console.log/);
-    assert.doesNotMatch(previous, /__lyricbridge_dev|EventSource/);
+    assert.doesNotMatch(previous, /__jellyfin_plugin_dev|EventSource/);
     const files = await compileWeb(fixture);
     assert.deepEqual([...files.keys()].sort(), [
         "LUCIDE-LICENSE.txt",

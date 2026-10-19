@@ -49,3 +49,5 @@ Original plugin code and the Lyricify helper use Apache 2.0. The LyricMotion-der
 renderer uses MPL 2.0. See [distribution licenses and source](docs/reference/distribution.md) for
 dependency terms and corresponding-source requirements, and
 [upstream components](vendor/UPSTREAM.md) for pinned revisions and local modifications.
+
+Use `pnpm check` (or `./plugin check`) to verify formatting and linting across the frontend, C# backend, Python tooling, configuration and docs. Use `pnpm format` to apply formatting, or add a target such as `frontend`, `backend`, `tooling` or `docs`. Run `./plugin bootstrap` first; checks never install dependencies. CI runs these same checks and requires the aggregate `validation / validate` result.

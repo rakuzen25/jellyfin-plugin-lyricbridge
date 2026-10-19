@@ -96,7 +96,7 @@ test("Renovate, pnpm and pip enforce the same 24-hour release age", () => {
         assert.match(line.trim(), /^- "?[^*]+@\d+\.\d+\.\d+"?$/, "Exceptions must pin exact versions");
     }
     const tasks = readFileSync(new URL("../../.build/toolkit/current/jellyfin_plugin_toolkit/tasks.py", import.meta.url), "utf8");
-    assert.match(tasks, /["\']--uploaded-prior-to=P1D["\']/);
+    assert.match(tasks, /["']--uploaded-prior-to=P1D["']/);
     assert.match(tasks, /"jellyfin_plugin_toolkit\.checks\.check_pip"/);
     const setup = readFileSync(new URL("../../.build/toolkit/current/.github/actions/setup/action.yml", import.meta.url), "utf8");
     assert.match(setup, /--uploaded-prior-to=P1D/);

@@ -4,8 +4,7 @@
         ".": {
             "entry": ["tests/tooling/**/*.test.mjs", "scripts/dev/session.mjs"],
             "project": ["*.mjs", "scripts/**/*.mjs", "tests/tooling/**/*.mjs"],
-            "ignoreDependencies": ["prettier", "@taplo/cli"],
-            "ignoreBinaries": ["xdg-open"]
+            "ignoreDependencies": ["@taplo/cli"]
         },
         "frontend": {
             "entry": ["bridge.ts", "renderer.ts", "admin/config.ts", "**/*.test.ts", "build.mjs", "check-boundaries.mjs"],
