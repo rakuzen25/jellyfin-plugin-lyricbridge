@@ -132,7 +132,7 @@ jobs:
         if: needs.impact.outputs.frontend == 'true'
         run: (pnpm check frontend && pnpm test frontend) 2>&1 | tee dist/evidence/frontend-checks.log
       - run: (pnpm build frontend && python3 -m scripts.ci web-record) 2>&1 | tee dist/evidence/frontend-build.log
-      - run: python3 -m tests.installation.web_installation
+      - run: python3 -m tests.installation.web_installation --assets dist/web
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: browser-assets

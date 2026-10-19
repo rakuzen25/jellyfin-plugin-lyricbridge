@@ -1,3 +1,4 @@
+import argparse
 import re
 import subprocess
 import sys
@@ -8,12 +9,24 @@ from pathlib import Path
 from scripts.common.process import ROOT
 from scripts.common.release_metadata import load_identity
 
+parser = argparse.ArgumentParser(
+    description="Check web installation using candidate ZIP assets or an explicit build directory."
+)
+parser.add_argument(
+    "--assets",
+    type=Path,
+    help="Test these frontend assets instead of the candidate web ZIP",
+)
+args = parser.parse_args()
+
 with tempfile.TemporaryDirectory(prefix="lyricbridge-web-") as directory:
     root = Path(directory)
-    assets = root / "candidate-assets"
-    archive = ROOT / "dist" / f"lyricbridge-web-{load_identity().version}.zip"
-    with zipfile.ZipFile(archive) as candidate:
-        candidate.extractall(assets)
+    assets = args.assets
+    if assets is None:
+        assets = root / "candidate-assets"
+        archive = ROOT / "dist" / f"lyricbridge-web-{load_identity().version}.zip"
+        with zipfile.ZipFile(archive) as candidate:
+            candidate.extractall(assets)
     index = root / "index.html"
     original = '<html><head><script src="main.js"></script></head><body></body></html>'
     index.write_text(original)
