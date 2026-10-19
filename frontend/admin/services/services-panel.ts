@@ -92,6 +92,7 @@ export function renderServices(d: Dependencies) {
     const hasChanges = () => editor !== null && !sameEditorValues(editor.value, baseline);
     const cancelEditor = () => (hasChanges() ? d.confirmDiscard(closeEditor) : closeEditor());
     const open = new Set<string>();
+    const builtIn = (o: ServiceOption) => o.Provider === "Google" || o.Provider === "Kawazu";
     const connection = (o: ServiceOption) => setup.Connections.find((c) => c.Id === o.ConnectionId);
     const validEndpoint = (endpoint: string) => {
         try {
@@ -104,15 +105,14 @@ export function renderServices(d: Dependencies) {
     const connectionReady = (c: ServiceConnection | undefined) =>
         !!c && (c.Provider === "DeepL" ? credentialAvailable(c, c.ApiKey) && (!c.Endpoint || validEndpoint(c.Endpoint)) : validEndpoint(c.Endpoint));
     const setupReason = (o: ServiceOption) => {
-        if (o.Provider === "Google" || o.Provider === "Kawazu") return "";
+        if (builtIn(o)) return "";
         if (!connection(o)) return "Choose a connection";
         if (!connectionReady(connection(o))) return "Complete connection setup";
         if (o.Provider === "AI" && !o.Model.trim()) return "Model ID required";
         return "";
     };
     const configured = (o: ServiceOption) => !setupReason(o);
-    const status = (o: ServiceOption) =>
-        o.Provider === "Google" || o.Provider === "Kawazu" ? "Built in" : configured(o) ? "Configured" : "Needs setup";
+    const status = (o: ServiceOption) => (builtIn(o) ? "Built in" : configured(o) ? "Configured" : "Needs setup");
     function closeEditor() {
         const previous = editor;
         editor = null;
@@ -148,7 +148,7 @@ export function renderServices(d: Dependencies) {
                 if (card.open) open.add(id);
                 else open.delete(id);
             };
-            const list = setup.Options.filter((o) => o.Capability === id),
+            const list = setup.Options.filter((o) => o.Capability === id).sort((a, b) => Number(builtIn(b)) - Number(builtIn(a))),
                 available = list.filter((o) => o.Enabled && configured(o)).length;
             const state = id === "boundary-review" ? "Built in" : list.some(configured) ? "Configured" : "Needs setup";
             const heading = settingsRowHeader(
