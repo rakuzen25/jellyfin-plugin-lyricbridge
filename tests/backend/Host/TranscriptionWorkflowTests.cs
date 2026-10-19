@@ -14,7 +14,10 @@ public sealed class TranscriptionWorkflowTests : TestHost
     {
         var plugin = Plugin;
         plugin.Configuration.AllowUserRequests = allowRequests;
-        plugin.Configuration.ServiceSetup = ServiceSetup.Migrate([], new() { Enabled = enabled, Endpoint = configured ? "https://audio.example/v1" : "", Model = "audio-model", ApiKey = "private-test-key" });
+        var setup = ServiceSetup.Defaults();
+        var option = setup.Options.Single(o => o.Capability == "transcription"); option.Enabled = enabled; option.Model = "audio-model";
+        var connection = setup.Connections.Single(c => c.Id == option.ConnectionId); connection.Endpoint = configured ? "https://audio.example/v1" : ""; connection.ApiKey = "private-test-key";
+        plugin.Configuration.ServiceSetup = setup;
         var controller = new TranscriptionApi(null!, null!, null!, null!, null!, null!, new(() => plugin));
         var claims = administrator ? new[] { new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, Jellyfin.Api.Constants.UserRoles.Administrator) } : [];
         controller.ControllerContext = new() { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext { User = new(new System.Security.Claims.ClaimsIdentity(claims, "fixture")) } };
@@ -51,7 +54,7 @@ public sealed class TranscriptionWorkflowTests : TestHost
     public async Task ChunkRetryUsesCheckpointsAndOffsetsWithoutDuplicatingPaidCalls()
     {
         var token = TestContext.Current.CancellationToken;
-        using var store = Own(new Store(Root)); using var languages = Own(new LanguageServices(() => [new() { Name = "Google" }]));
+        using var store = Own(new Store(Root)); using var languages = Own(new LanguageServices(ServiceFixtures.Catalog(() => [new() { Name = "Google" }])));
         var calls = 0;
         using var http = new HttpClient(new ResponseHandler(_ =>
         {
@@ -61,7 +64,7 @@ public sealed class TranscriptionWorkflowTests : TestHost
         }));
         using var provider = Own(new TranscriptionProvider(http));
         var audio = new Audio(Root); var settings = new TranscriptionConfig { Enabled = true };
-        var handler = new TranscriptionTask(() => settings, store, audio, provider);
+        var handler = new TranscriptionTask(_ => settings, store, audio, provider);
         using var generation = Own(new Generation(() => new(true, true, 5, 3), store, languages, handlers: [handler]));
         await generation.StartAsync(token);
         var request = generation.RequestRemote(Request(), true);
@@ -84,11 +87,11 @@ public sealed class TranscriptionWorkflowTests : TestHost
     public async Task ExplicitCancellationStopsHttpAndCannotPublishOutput()
     {
         var token = TestContext.Current.CancellationToken;
-        using var store = Own(new Store(Root)); using var languages = Own(new LanguageServices(() => [new() { Name = "Google" }]));
+        using var store = Own(new Store(Root)); using var languages = Own(new LanguageServices(ServiceFixtures.Catalog(() => [new() { Name = "Google" }])));
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var http = new HttpClient(new Cancellable(entered, stopped)); using var provider = Own(new TranscriptionProvider(http));
-        var audio = new Audio(Root); var handler = new TranscriptionTask(() => new() { Enabled = true }, store, audio, provider);
+        var audio = new Audio(Root); var handler = new TranscriptionTask(_ => new() { Enabled = true }, store, audio, provider);
         using var generation = Own(new Generation(() => new(true, true, 5, 3), store, languages, handlers: [handler]));
         await generation.StartAsync(token); var job = generation.RequestRemote(Request(), true);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
@@ -110,10 +113,10 @@ public sealed class TranscriptionWorkflowTests : TestHost
     public async Task ConfigurationReplacementRequiresExplicitRetryAndFreshApproval()
     {
         var token = TestContext.Current.CancellationToken;
-        using var store = Own(new Store(Root)); using var languages = Own(new LanguageServices(() => [new() { Name = "Google" }]));
+        using var store = Own(new Store(Root)); using var languages = Own(new LanguageServices(ServiceFixtures.Catalog(() => [new() { Name = "Google" }])));
         using var provider = Own(new TranscriptionProvider(new HttpClient(new ResponseHandler(_ => new(HttpStatusCode.OK)))));
         var settings = new TranscriptionConfig { Enabled = true, Model = "first" };
-        var handler = new TranscriptionTask(() => settings, store, new Audio(Root), provider);
+        var handler = new TranscriptionTask(_ => settings, store, new Audio(Root), provider);
         using var generation = Own(new Generation(() => new(true, false, 5, 3), store, languages, handlers: [handler]));
         var input = Request(); var job = generation.RequestRemote(input, false); Assert.Equal("pending", job.State);
         settings = new() { Enabled = true, Model = "replacement" }; generation.ConfigurationChanged();

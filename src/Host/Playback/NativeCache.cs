@@ -17,6 +17,7 @@ public sealed class NativeCache : IStartupFilter
         {
             var match = Regex.Match(context.Request.Path.Value ?? "", @"/Audio/([a-fA-F0-9-]+)/Lyrics$", RegexOptions.IgnoreCase);
             if (context.Request.Method != "GET" || !match.Success || !Guid.TryParse(match.Groups[1].Value, out var id)) { await following(); return; }
+            if (context.RequestServices.GetService<Lazy<Plugin>>() is { } owner && owner.Value.Startup.State != "ready") { await following(); return; }
             var store = context.RequestServices.GetRequiredService<Store>();
             using var operation = store.Operation(store.Admit(id));
             var output = context.Response.Body; await using var buffered = new MemoryStream(); context.Response.Body = buffered;

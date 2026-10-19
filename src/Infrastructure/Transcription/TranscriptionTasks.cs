@@ -1,10 +1,10 @@
 namespace LyricBridge;
 
-public sealed class TranscriptionTask(Func<TranscriptionConfig> config, ITranscriptionRepository store, IAudioPreparation audio, TranscriptionProvider provider, Func<Job, TranscriptionConfig>? resolve = null) : IRemoteTaskHandler
+public sealed class TranscriptionTask(Func<Job, TranscriptionConfig> resolve, ITranscriptionRepository store, IAudioPreparation audio, TranscriptionProvider provider) : IRemoteTaskHandler
 {
     public string Kind => "transcription";
     private static TranscriptionConfig Snapshot(TranscriptionConfig c) => Codec.Deserialize<TranscriptionConfig>(Codec.Serialize(c))!;
-    public GenerationProfile Profile(Job job) => EffectiveProfile(resolve?.Invoke(job) ?? config(), job);
+    public GenerationProfile Profile(Job job) => EffectiveProfile(resolve(job), job);
     private GenerationProfile EffectiveProfile(TranscriptionConfig c, Job job)
     {
         TranscriptionConfig.Validate(c);
@@ -14,7 +14,7 @@ public sealed class TranscriptionTask(Func<TranscriptionConfig> config, ITranscr
     public void Release(Job job) { if (job.OutputDeleted || job.State is "complete" or "cancelled" or "rejected") { audio.Release(job); store.DiscardChunks(job.Id); } }
     public async Task Execute(Job job, IProgress<int> progress, CancellationToken token)
     {
-        var settings = Snapshot(resolve?.Invoke(job) ?? config());
+        var settings = Snapshot(resolve(job));
         if (EffectiveProfile(settings, job) != job.Profile) throw new ServiceFailure("settings_changed", "Transcription settings changed. Retry using current settings.");
         job.Stage = "Preparing audio";
         var prepared = await audio.Prepare(job, settings, progress, token);
@@ -62,10 +62,10 @@ public sealed class TranscriptionTask(Func<TranscriptionConfig> config, ITranscr
         return new(job.ItemId, job.UserId, job.Hash, text.ToString(), string.Join("\n", results.Select(t => t.ProviderText)), results[0].Language, timing, tokens, results.SelectMany(t => t.RawResponses).ToList(), job.Profile!, warnings, DateTimeOffset.UtcNow, job.Title, job.Artist, job.Request.OptionName);
     }
 }
-public sealed class BoundaryReviewTask(Func<ServiceConfig> config, ITranscriptionRepository store, TranscriptionProvider provider, IBoundaryStrategy strategy, Func<Job, ServiceConfig>? resolve = null) : IRemoteTaskHandler
+public sealed class BoundaryReviewTask(Func<Job, ServiceConfig> resolve, ITranscriptionRepository store, TranscriptionProvider provider, IBoundaryStrategy strategy) : IRemoteTaskHandler
 {
     public string Kind => "boundary-review";
-    public GenerationProfile Profile(Job job) => EffectiveProfile(resolve?.Invoke(job) ?? config());
+    public GenerationProfile Profile(Job job) => EffectiveProfile(resolve(job));
     private GenerationProfile EffectiveProfile(ServiceConfig c)
     {
         if (!Uri.TryCreate(c.Endpoint, UriKind.Absolute, out _) || string.IsNullOrWhiteSpace(c.Model)) throw new WorkflowException(409, "service_not_configured", "Ask an administrator to configure an AI boundary-review model.");
@@ -73,9 +73,9 @@ public sealed class BoundaryReviewTask(Func<ServiceConfig> config, ITranscriptio
     }
     public ReviewPlan Plan(Job job)
     {
-        var settings = resolve?.Invoke(job) ?? config();
+        var settings = resolve(job);
         var transcript = store.Transcript(job.Review!.TranscriptId) ?? throw new WorkflowException(409, "transcript_unavailable", "This transcription was deleted.");
-        var version = job.Review.Snapshot ?? store.BoundaryVersions(transcript.Id).FirstOrDefault(v => v.Id == job.Review.VersionId) ?? throw new WorkflowException(409, "version_unavailable", "Reopen a saved boundary version.");
+        var version = job.Review.Snapshot ?? throw new WorkflowException(409, "version_unavailable", "Reopen a saved boundary version.");
         version = version with { Settings = job.Review.Settings };
         var natural = TranscriptBoundaries.Optimize(transcript, version.Settings, strategy.Analyze(transcript, CancellationToken.None), strategy.Version);
         return BoundaryReviewPlanning.Create(transcript, version, settings, natural.EndTokenIds);
@@ -83,10 +83,10 @@ public sealed class BoundaryReviewTask(Func<ServiceConfig> config, ITranscriptio
     public void Release(Job job) { if (job.OutputDeleted || job.State is "complete" or "cancelled" or "rejected") store.DiscardReviewCheckpoints(job.Id); }
     public async Task Execute(Job job, IProgress<int> progress, CancellationToken token)
     {
-        var settings = Codec.Deserialize<ServiceConfig>(Codec.Serialize(resolve?.Invoke(job) ?? config()))!;
+        var settings = Codec.Deserialize<ServiceConfig>(Codec.Serialize(resolve(job)))!;
         if (EffectiveProfile(settings) != job.Profile) throw new ServiceFailure("settings_changed", "Review settings changed. Retry using current settings.");
         var transcript = store.Transcript(job.Review!.TranscriptId) ?? throw new WorkflowException(409, "transcript_unavailable", "This transcription was deleted.");
-        var version = job.Review.Snapshot ?? store.BoundaryVersions(transcript.Id).FirstOrDefault(v => v.Id == job.Review.VersionId) ?? throw new WorkflowException(409, "version_unavailable", "Reopen a saved boundary version.");
+        var version = job.Review.Snapshot ?? throw new WorkflowException(409, "version_unavailable", "Reopen a saved boundary version.");
         job.Stage = "Reviewing line breaks"; progress.Report(10);
         version = version with { Settings = job.Review.Settings };
         var natural = TranscriptBoundaries.Optimize(transcript, version.Settings, strategy.Analyze(transcript, token), strategy.Version, token);

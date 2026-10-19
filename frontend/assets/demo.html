@@ -180,12 +180,17 @@
                 return outcome;
             }
             function demoAssessment(order=0){return {score:100,tier:2,eligible:true,reasons:[],fields:[{field:"title",result:"Perfect",points:7},{field:"artists",result:"Perfect",points:7}],recording:"standard",candidateRecording:"standard",durationDifferenceMs:0,providerOrder:order,timing:{category:"mostly-word-timed",rank:3,coverage:100,sungLines:6,wordLines:6,invalidCues:0},revision:2};}
+            const demoOptions = [
+                {service:"Google",optionId:"demo-google-translation",name:"Google",translation:true,pronunciation:false,languages:["*"]},
+                {service:"Google",optionId:"demo-google-pronunciation",name:"Google",translation:false,pronunciation:true,languages:["*"]},
+                {service:"Kawazu",optionId:"demo-kawazu-pronunciation",name:"Japanese romaji",translation:false,pronunciation:true,languages:["ja"]}
+            ];
             window.fetch = async function (input, init) {
                 const request = new Request(input, init);
                 const path = new URL(request.url).pathname;
                 if(path.endsWith('/language-preferences')){if(request.method==='PUT')songOverrides=await request.json();if(request.method==='DELETE')songOverrides={};return new Response(JSON.stringify({songOverrides,accountPreferences:demoPreferences,preferences:payload().preferences}));}
                 if(path.endsWith('/language-version')){const body=await request.json();if(request.method==='DELETE'){deletedVersions.add(body.key);if(mixedChoices[body.kind]===body.key)mixedChoices[body.kind]='auto';}else mixedChoices[body.kind]=body.key;return new Response(null,{status:204});}
-                if(path.endsWith('/generate')){const body=await request.json(),job={id:'demo-job-'+Date.now(),hash:payload().lyrics.hash,request:body,state:'running',progress:0,started:Date.now()};demoJobs.push(job);return new Response(JSON.stringify(job));}
+                if(path.endsWith('/generate')){const body=await request.json(),selected=demoOptions.find(o=>o.optionId===body.optionId),job={id:'demo-job-'+Date.now(),hash:payload().lyrics.hash,request:{...body,service:selected.service,optionName:selected.name},state:'running',progress:0,started:Date.now()};demoJobs.push(job);return new Response(JSON.stringify(job));}
                 if(path.endsWith('/jobs')){for(const job of demoJobs){if(job.state==='running'){job.progress=Math.min(100,Math.floor((Date.now()-job.started)/50));if(job.progress===100){if(scenario==='generation-error'){job.state='failed';job.failure={code:'service_timeout',message:'Synthetic service timed out. Existing rows were retained.',retryable:true,diagnosticId:job.id};}else{job.state='complete';mixedDemo.push({key:job.id,hash:job.hash,kind:job.request.kind,language:job.request.language,service:job.request.service,model:'Synthetic result',createdAt:new Date().toISOString(),text:Object.fromEntries(texts.map((_,i)=>['l'+i,'Generated demo text '+(i+1)]))});}}}}return new Response(JSON.stringify(demoJobs));}
                 if(request.method==='GET' && /\/jobs\/[^/]+$/.test(path)){await window.fetch('/LyricBridge/jobs');const job=demoJobs.find(j=>path.endsWith('/'+j.id));return new Response(JSON.stringify(job),{status:job?200:404});}
                 if(/\/jobs\/[^/]+\/(cancel|retry)$/.test(path)){const job=demoJobs.find(j=>path.includes(j.id));if(job){job.state=path.endsWith('/cancel')?'cancelled':'running';job.started=Date.now();job.failure=null;}return new Response(null,{status:204});}
@@ -196,7 +201,7 @@
                 }
                 if (path.endsWith("/LyricBridge/sources"))
                     return new Response(JSON.stringify([{ name: "Demo fixture", enabled: true, configured: true }]));
-                if(path.endsWith("/LyricBridge/services"))return new Response(JSON.stringify([{service:"Google",translation:true,pronunciation:true,languages:["*"]},{service:"Kawazu",translation:false,pronunciation:true,languages:["ja"]}]));
+                if(path.endsWith("/LyricBridge/services"))return new Response(JSON.stringify(demoOptions));
                 if (path.includes("/LyricBridge/search/"))
                     return new Response(
                         JSON.stringify({

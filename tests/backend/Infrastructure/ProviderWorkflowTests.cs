@@ -9,7 +9,7 @@ public sealed class ProviderWorkflowTests : LanguageFixture
         var root = Root;
         Assert.True(new ProviderRegistry().Sources.Select(s => s.Name).SequenceEqual(new[] { "QQ", "NetEase", "Kugou", "Soda", "Musixmatch", "LRCLIB" }), "credential-dependent sources skipped");
         var store = Own(new Store(Path.Combine(root, "queue")));
-        var languages = Own(new LanguageServices(() => Services));
+        var languages = Own(new LanguageServices(ServiceFixtures.Catalog(() => Services)));
         var generation = Own(new Generation(Policy, store, languages));
         var rejectedItem = Guid.NewGuid();
         store.Put("rejected-match", rejectedItem.ToString("N"), new MatchRejection());
@@ -23,30 +23,30 @@ public sealed class ProviderWorkflowTests : LanguageFixture
         var lyrics = new RichLyrics { Hash = "content", Lines = [new() { Id = "l0", Text = "hello" }] };
         var user = Guid.NewGuid();
         var item = Guid.NewGuid();
-        Reject(() => generation.Request(user, item, lyrics, new(), false), "user requests default disabled");
-        var admin = generation.Request(user, item, lyrics, new(), true);
+        Reject(() => generation.Request(user, item, lyrics, new() { OptionId = "translation-Google" }, false), "user requests default disabled");
+        var admin = generation.Request(user, item, lyrics, new() { OptionId = "translation-Google" }, true);
         Assert.True(admin.State == "queued", "administrator immediate approval");
         generation.Action(admin.Id, "cancel", user, true);
         AllowUserRequests = true;
-        var first = generation.Request(user, item, lyrics, new() { Language = "ar" }, false);
+        var first = generation.Request(user, item, lyrics, new() { OptionId = "translation-Google", Language = "ar" }, false);
         Assert.True(first.State == "pending", "user approval pending");
-        Assert.True(generation.Request(user, item, lyrics, new() { Language = "ar" }, false).Id == first.Id, "duplicate requests deduplicated");
+        Assert.True(generation.Request(user, item, lyrics, new() { OptionId = "translation-Google", Language = "ar" }, false).Id == first.Id, "duplicate requests deduplicated");
         Reject(() => generation.Action(first.Id, "approve", user, false), "users cannot approve");
         generation.Action(first.Id, "approve", user, true);
         Assert.True(generation.Jobs().First(j => j.Id == first.Id).State == "queued", "admin approval");
-        generation.Request(user, item, lyrics, new() { Language = "ja" }, false);
-        generation.Request(user, item, lyrics, new() { Language = "de" }, false);
-        Reject(() => generation.Request(user, item, lyrics, new() { Language = "fr" }, false), "active request cap");
+        generation.Request(user, item, lyrics, new() { OptionId = "translation-Google", Language = "ja" }, false);
+        generation.Request(user, item, lyrics, new() { OptionId = "translation-Google", Language = "de" }, false);
+        Reject(() => generation.Request(user, item, lyrics, new() { OptionId = "translation-Google", Language = "fr" }, false), "active request cap");
         foreach (var job in generation.Jobs())
             if (job.State is "pending" or "queued")
                 generation.Action(job.Id, "cancel", user, true);
-        generation.Request(user, item, lyrics, new() { Language = "es" }, false);
-        Reject(() => generation.Request(user, item, lyrics, new() { Language = "ru" }, false), "rolling daily quota");
-        var key = languages.Key(lyrics, new());
+        generation.Request(user, item, lyrics, new() { OptionId = "translation-Google", Language = "es" }, false);
+        Reject(() => generation.Request(user, item, lyrics, new() { OptionId = "translation-Google", Language = "ru" }, false), "rolling daily quota");
+        var key = languages.Key(lyrics, new() { OptionId = "translation-Google" });
         store.Put("variant", key, new Variant(key, lyrics.Hash, "translation", "zh-Hans", "Google", "", new() { { "l0", "你好" } }, CacheKey: key));
-        Assert.True(generation.Request(user, item, lyrics, new(), false).State == "cached", "cached generation bypasses quota");
+        Assert.True(generation.Request(user, item, lyrics, new() { OptionId = "translation-Google" }, false).State == "cached", "cached generation bypasses quota");
         var changed = new RichLyrics { Hash = "different", Lines = lyrics.Lines };
-        Assert.True(languages.Key(changed, new()) != key, "content invalidates variant key");
+        Assert.True(languages.Key(changed, new() { OptionId = "translation-Google" }) != key, "content invalidates variant key");
     }
 
     [Fact]

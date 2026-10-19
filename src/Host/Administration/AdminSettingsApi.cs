@@ -77,9 +77,6 @@ public sealed partial class Plugin
                 throw new ArgumentException("Use explicit credential operations.");
             foreach (var source in next.Sources) source.Credential = Configuration.Sources.FirstOrDefault(s => s.Name == source.Name)?.Credential ?? "";
             foreach (var connection in next.ServiceSetup.Connections) connection.ApiKey = Configuration.ServiceSetup.Connections.FirstOrDefault(c => c.Id == connection.Id)?.ApiKey ?? "";
-            // Legacy credential-bearing configuration has no editor in the new interface.
-            next.Services = JsonSerializer.Deserialize<ServiceConfig[]>(JsonSerializer.Serialize(Configuration.Services))!;
-            next.Transcription = JsonSerializer.Deserialize<TranscriptionConfig>(JsonSerializer.Serialize(Configuration.Transcription))!;
             var operations = input.Credentials ?? [];
             if (operations.Count > 1000 || operations.Select(c => c.Kind + ":" + c.Id).Distinct().Count() != operations.Count)
                 throw new ArgumentException("Invalid credential operations.");

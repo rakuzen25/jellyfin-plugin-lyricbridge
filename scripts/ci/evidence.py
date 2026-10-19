@@ -110,7 +110,7 @@ def read_receipt(repository: str, run: dict) -> dict | None:
     if not isinstance(receipt, dict):
         raise TypeError("Receipt must be an object")
     if (
-        receipt.get("schema") not in {1, 2, ci_policy.SCHEMA}
+        receipt.get("schema") != ci_policy.SCHEMA
         or receipt.get("run_id") != str(run["id"])
         or receipt.get("repository") != repository
     ):
@@ -124,7 +124,7 @@ def read_receipt(repository: str, run: dict) -> dict | None:
     ):
         return None
     # head_sha is the orchestrating source; a receipt also records the checked tag.
-    if receipt.get("run_head_sha", receipt.get("workflow_sha")) != run.get("head_sha"):
+    if receipt.get("run_head_sha") != run.get("head_sha"):
         return None
     if receipt.get("run_attempt", 1) != run.get("run_attempt", 1):
         return None
@@ -167,7 +167,11 @@ def validated_ancestor(root: Path, repository: str, branch: str, policy: str) ->
         ):
             continue
         receipt = read_receipt(repository, run)
-        if not receipt or receipt.get("policy") != policy:
+        if (
+            not receipt
+            or receipt.get("schema") != ci_policy.SCHEMA
+            or receipt.get("policy") != policy
+        ):
             continue
         groups = receipt.get("groups", {})
         complete_full = receipt.get("full") and all(
@@ -411,7 +415,7 @@ def verify_run(repository: str, run_id: str, receipt: dict) -> None:
         for job in jobs
     ):
         raise ValueError("Run has not completed the aggregate validation gate")
-    if receipt.get("run_head_sha", receipt.get("workflow_sha")) != run.get("head_sha"):
+    if receipt.get("run_head_sha") != run.get("head_sha"):
         raise ValueError("Receipt does not identify the authenticated workflow source")
     # Upload-only retries remain fast, but old advisory observations are not fresh.
     observed = datetime.fromisoformat(receipt["validated_at"])

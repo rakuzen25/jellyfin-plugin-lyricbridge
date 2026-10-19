@@ -529,3 +529,58 @@ test("@workflow factory reset ignores an untouched editor and clears it when set
     await expect(page.getByRole("button", { name: "Save settings", exact: true })).toBeEnabled();
     expect(await unloadBlocked(page)).toBe(false);
 });
+
+test("@workflow blocked startup leaves diagnostics visible and normal settings unavailable", async ({ page }) => {
+    await mountAdmin(page, {
+        nativeControls: false,
+        startup: {
+            state: "blocked",
+            phase: "settings",
+            message: "Unsupported settings schema",
+            path: "/config/settings.xml",
+            diagnosticId: "diagnostic-fixture",
+        },
+    });
+    await expect(page.getByRole("region", { name: "Plugin startup and upgrades" })).toContainText("diagnostic-fixture");
+    await expect(tab(page, "General")).toBeHidden();
+    expect(await page.evaluate(() => window.adminFixture.calls.some((call) => call.path.endsWith("admin/settings")))).toBe(false);
+});
+
+test("@workflow upgrade notices can be acknowledged and backups require reviewed deletion", async ({ page }) => {
+    await mountAdmin(page, {
+        nativeControls: false,
+        upgrades: [
+            {
+                id: "upgrade-fixture",
+                domain: "database",
+                fromVersion: 11,
+                toVersion: 12,
+                sourcePluginVersion: "fixture-source",
+                targetPluginVersion: "fixture-target",
+                state: "complete",
+                completed: "2026-10-18T12:00:00Z",
+                acknowledged: false,
+                backupState: "available",
+                backupPath: "/data/state-upgrades/fixture.sqlite",
+                sourcePath: "/data/index.sqlite",
+                backupBytes: 1234,
+                expires: "2026-11-17T12:00:00Z",
+            },
+        ],
+    });
+    const panel = page.getByRole("region", { name: "Plugin startup and upgrades" });
+    await expect(panel).toContainText("LyricBridge upgraded saved data");
+    await panel.getByRole("button", { name: "Acknowledge upgrade" }).click();
+    await expect(panel).not.toContainText("LyricBridge upgraded saved data");
+    await panel.getByText("Upgrade history and backups", { exact: true }).click();
+    await expect(panel).toContainText("fixture-source");
+    await expect(panel.getByRole("link", { name: "Downgrade and restore a backup" })).toHaveAttribute("href", /install.md#downgrade-and-restore/);
+    await panel.getByRole("button", { name: "Review backup deletion" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText("/data/state-upgrades/fixture.sqlite");
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    expect(await page.evaluate(() => window.adminFixture.upgrades[0].backupState)).toBe("available");
+    await panel.getByRole("button", { name: "Review backup deletion" }).click();
+    await dialog.getByRole("button", { name: "Delete backup", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.adminFixture.upgrades[0].backupState)).toBe("deleted");
+});

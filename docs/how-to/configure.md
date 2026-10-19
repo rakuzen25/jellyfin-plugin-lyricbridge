@@ -6,6 +6,7 @@ For personal choices during playback, see [playback settings](playback.md).
 ## Save configuration safely
 
 Finish each inline editor with **Apply**, then select **Save settings** to persist the configuration.
+A blocked-startup notice pauses settings changes; [resolve startup or restore a backup](install.md#inspect-startup-and-upgrades) first.
 Changing tabs keeps pending edits. A failed save retains them.
 If another administrator changed settings, compare the versions, resolve conflicts, and explicitly save again.
 

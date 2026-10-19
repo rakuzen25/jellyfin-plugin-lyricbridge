@@ -13,15 +13,12 @@ public sealed class TranscriptionConfig
     public int MaxInputMb { get; set; } = 256;
     public int TimeoutSeconds { get; set; } = 120;
     public bool Enabled { get; set; }
-    public bool ReviewUsesAiService { get; set; } = true;
-    public ServiceConfig Review { get; set; } = new() { Name = "AI" };
     public static void Validate(TranscriptionConfig c)
     {
         if (!Uri.TryCreate(c.Endpoint, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || uri.UserInfo.Length != 0 || uri.Fragment.Length != 0 || uri.Query.Length != 0 ||
             string.IsNullOrWhiteSpace(c.Model) || c.Model.Length > 200 || c.UploadFormat is not ("wav" or "flac" or "opus") || c.MaxUploadMb is < 1 or > 1024 || c.MaxInputMb is < 1 or > 4096 || c.TimeoutSeconds is < 5 or > 3600)
             throw new ArgumentException("Invalid transcription endpoint, model, format or limits.");
-        if (!c.ReviewUsesAiService && (!Uri.TryCreate(c.Review.Endpoint, UriKind.Absolute, out var review) || review.Scheme is not ("http" or "https") || review.UserInfo.Length != 0 || review.Fragment.Length != 0 || review.Query.Length != 0 || string.IsNullOrWhiteSpace(c.Review.Model) || c.Review.TimeoutSeconds is < 5 or > 600 || !new[] { "", "none", "minimal", "low", "medium", "high", "xhigh" }.Contains(c.Review.ReasoningEffort)))
-            throw new ArgumentException("Invalid boundary review service.");
+
     }
 }
 public sealed record TimedToken(string Id, string Text, string Separator, int Position, int EndPosition, long Start, long End);

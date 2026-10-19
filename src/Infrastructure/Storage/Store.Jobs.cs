@@ -69,7 +69,7 @@ public sealed partial class Store
             {
                 var job = ReadRecord<Job>(c, tx, "job", id);
                 if (job == null || !JobLifecycle.Terminal(job.State) || user.HasValue && job.UserId != user || before.HasValue && (job.TerminalAt == null || job.TerminalAt > before)) continue;
-                // Preserve quota accounting even when removing legacy history immediately.
+                // Preserve quota accounting even when removing finished history immediately.
                 using var ledger = c.CreateCommand(); ledger.Transaction = tx;
                 ledger.CommandText = "INSERT OR IGNORE INTO records SELECT 'job-admission',id,json_object('userId',json_extract(payload,'$.userId'),'created',json_extract(payload,'$.created')) FROM records WHERE kind='job' AND id=$id AND json_extract(payload,'$.created')>$since";
                 ledger.Parameters.AddWithValue("$id", id); ledger.Parameters.AddWithValue("$since", UtcTimestampConverter.Format(DateTime.UtcNow.AddHours(-24))); ledger.ExecuteNonQuery();

@@ -42,7 +42,7 @@ public sealed class EmbeddedVersionTests : IDisposable
         var before = Codec.Serialize(store.All<AuxiliarySelection>("auxiliary-choice"));
         var registry = ProviderRegistry.WithSources(); var retrieval = new Retrieval(store, registry, NullLogger<Retrieval>.Instance);
         using var discovery = new Discovery(store, registry, retrieval); using var local = new LocalPronunciation(store);
-        var query = new LyricQueryService(null!, store, retrieval, discovery, new PreferenceService(store, () => new()), local, new LanguageServices(() => []), () => [], () => false);
+        var query = new LyricQueryService(null!, store, retrieval, discovery, new PreferenceService(store, () => new()), local, new LanguageServices(ServiceFixtures.Catalog(() => [])), () => [], () => false);
         var payload = query.Build(item, user, true, new() { State = "ready", Lyrics = lyrics }, readOnly: true);
         Assert.Equal("auto", payload.AuxiliaryChoices.Translation); Assert.Equal("auto", payload.AuxiliaryChoices.Pronunciation);
         Assert.Equal(before, Codec.Serialize(store.All<AuxiliarySelection>("auxiliary-choice"))); Assert.Null(store.GetDocument(lyrics.Hash));
@@ -56,7 +56,7 @@ public sealed class EmbeddedVersionTests : IDisposable
         var registry = ProviderRegistry.WithSources(); var retrieval = new Retrieval(store, registry, NullLogger<Retrieval>.Instance);
         using var discovery = new Discovery(store, registry, retrieval); using var local = new LocalPronunciation(store);
         var enabled = false;
-        var query = new LyricQueryService(null!, store, retrieval, discovery, new PreferenceService(store, () => new()), local, new LanguageServices(() => []), () => [], () => false, () => enabled);
+        var query = new LyricQueryService(null!, store, retrieval, discovery, new PreferenceService(store, () => new()), local, new LanguageServices(ServiceFixtures.Catalog(() => [])), () => [], () => false, () => enabled);
         query.Build(item, user, true, new() { State = "ready", Lyrics = lyrics });
         Assert.Equal("unavailable", local.Status(lyrics, new()).State);
         Assert.Equal("queued", local.Ensure(lyrics, new(), true).State);

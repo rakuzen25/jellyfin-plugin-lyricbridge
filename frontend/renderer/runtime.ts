@@ -893,4 +893,3 @@ export function installRenderer() {
 }
 
 /** @public Preserves the supported type import independently of installation inference. */
-export type { RendererApi } from "../contracts/renderer.ts";

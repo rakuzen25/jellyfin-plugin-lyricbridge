@@ -1,3 +1,4 @@
+import { createUpgradesPanel } from "./upgrades-panel.ts";
 import { FeedbackScope } from "../shared/feedback.ts";
 import type { DataHost } from "./data/data-contracts.ts";
 import { createDataPanel } from "./data/data-panel.ts";
@@ -50,6 +51,12 @@ import { revealSelectedTab } from "./ui/ui.ts";
         if (!element) throw new Error("Missing configuration control: " + selector);
         return element as S extends keyof Controls ? Controls[S] : HTMLElement;
     }
+    const upgradeSurface = node("section");
+    upgradeSurface.className = "lb-settings-surface";
+    upgradeSurface.hidden = true;
+    upgradeSurface.setAttribute("aria-label", "Plugin startup and upgrades");
+    query("#lb-config-tabs").before(upgradeSurface);
+    const upgrades = createUpgradesPanel(upgradeSurface, call);
     let config: Configuration, savedConfig: Configuration;
     let saving = false;
     const settings = new SettingsController(call);
@@ -190,6 +197,7 @@ import { revealSelectedTab } from "./ui/ui.ts";
         });
     }
     page.addEventListener("viewhide", () => {
+        upgrades.dispose();
         feedbackVisible = false;
         navigation?.active(false);
         requestsPanel.hide();
@@ -197,6 +205,7 @@ import { revealSelectedTab } from "./ui/ui.ts";
         feedbackScope.dispose();
     });
     page.addEventListener("viewdestroy", () => {
+        upgrades.dispose();
         feedbackVisible = false;
         navigation.active(false);
         feedbackScope.dispose();
@@ -609,6 +618,17 @@ import { revealSelectedTab } from "./ui/ui.ts";
         saveButton.disabled = true;
         notice(status, "Loading settings…");
         try {
+            const startup = await upgrades.refresh();
+            if (startup.state !== "ready") {
+                query("#lb-config-tabs").hidden = true;
+                page.querySelectorAll<HTMLElement>('[role="tabpanel"], .lb-config-footer').forEach((element) => {
+                    element.hidden = true;
+                });
+                notice(status, "Plugin work is paused. Review startup status above.");
+                return;
+            }
+            query("#lb-config-tabs").hidden = false;
+            page.querySelector<HTMLElement>(".lb-config-footer")!.hidden = false;
             if (!(await settings.load())) {
                 loaded = !!settings.snapshot().configuration;
                 saveButton.disabled = !loaded || dataMaintenance || activeEditor !== null;
@@ -621,28 +641,6 @@ import { revealSelectedTab } from "./ui/ui.ts";
             sourcesSection.replaceSourceDraft(null);
             config = snapshot.configuration!;
             conflictPanel.hidden = true;
-            config.Transcription ??= {
-                Enabled: false,
-                Endpoint: "https://api.groq.com/openai/v1",
-                Model: "whisper-large-v3",
-                ApiKey: "",
-                UploadFormat: "opus",
-                MaxUploadMb: 25,
-                MaxInputMb: 256,
-                TimeoutSeconds: 120,
-                ReviewUsesAiService: true,
-                Review: {
-                    Name: "AI",
-                    Enabled: true,
-                    Endpoint: "",
-                    Model: "",
-                    ApiKey: "",
-                    TimeoutSeconds: 120,
-                    ContextBefore: 0,
-                    ContextAfter: 0,
-                    ReasoningEffort: "",
-                },
-            };
             settings.accept({ configuration: config, revision: snapshot.revision });
             savedConfig = settings.snapshot().baseline!;
             storageRuntime = await call<typeof storageRuntime>("admin/runtime").catch(() => ({}));
@@ -671,6 +669,7 @@ import { revealSelectedTab } from "./ui/ui.ts";
         positionFooter();
         if (!loaded) loadSettings();
         else {
+            void upgrades.refresh();
             refreshDependentControls();
             notice(status, dirty ? "Unsaved changes" : "");
             if (!page.querySelector<HTMLElement>('[data-tab="Requests"]')!.hidden) void loadRequests();

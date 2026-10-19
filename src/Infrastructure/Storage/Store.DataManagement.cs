@@ -140,7 +140,7 @@ public sealed partial class Store
     public object InspectBookkeeping()
     {
         using var c = Open(); var tables = new Dictionary<string, long>();
-        foreach (var table in new[] { "managed_migrations", "deletion_clock", "deletion_revisions", "retained_documents", "transient_records", "record_references" })
+        foreach (var table in new[] { "deletion_clock", "deletion_revisions", "retained_documents", "transient_records", "record_references" })
         {
             using var cmd = c.CreateCommand(); cmd.CommandText = "SELECT COUNT(*) FROM " + table;
             tables[table] = Convert.ToInt64(cmd.ExecuteScalar());

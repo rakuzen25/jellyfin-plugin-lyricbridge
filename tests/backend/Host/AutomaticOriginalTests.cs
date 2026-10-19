@@ -69,13 +69,7 @@ public sealed class AutomaticOriginalTests : IDisposable
         Assert.NotNull(store.Get<Variant>("variant", "translation"));
     }
 
-    [Fact]
-    public void LegacySavedOriginalsDefaultToExplicitRetention()
-    {
-        var original = new SavedOriginal(Guid.NewGuid(), "hash", "Local", "", "title", "artist", false, DateTimeOffset.UtcNow, null, 0);
-        var json = Codec.Serialize(original).Replace(",\"autoSaved\":false", "");
-        Assert.False(Codec.Deserialize<SavedOriginal>(json)!.AutoSaved);
-    }
+
 
     [Fact]
     public async Task NativeLoadingSavesBeforePayloadAndPreservesManualPrecedence()
@@ -84,7 +78,7 @@ public sealed class AutomaticOriginalTests : IDisposable
         var native = DispatchProxy.Create<ILyricManager, AutomaticNativeProxy>(); var proxy = (AutomaticNativeProxy)(object)native;
         var retrieval = new Retrieval(store, ProviderRegistry.WithSources(), NullLogger<Retrieval>.Instance);
         using var discovery = new Discovery(store, ProviderRegistry.WithSources(), retrieval); using var local = new LocalPronunciation(store);
-        var query = new LyricQueryService(native, store, retrieval, discovery, new PreferenceService(store, () => new()), local, new LanguageServices(() => []), () => [], () => false);
+        var query = new LyricQueryService(native, store, retrieval, discovery, new PreferenceService(store, () => new()), local, new LanguageServices(ServiceFixtures.Catalog(() => [])), () => [], () => false);
         var token = TestContext.Current.CancellationToken;
         var lyrics = await query.Read(item, token); Assert.NotNull(lyrics);
         Assert.Equal(lyrics.Hash, Assert.Single(store.SavedOriginals(item.Id)).Hash);
@@ -105,7 +99,7 @@ public sealed class AutomaticOriginalTests : IDisposable
         ((AutomaticNativeProxy)(object)native).Response = () => Task.FromResult(response);
         var registry = ProviderRegistry.WithSources(); var retrieval = new Retrieval(store, registry, NullLogger<Retrieval>.Instance);
         using var discovery = new Discovery(store, registry, retrieval); using var local = new LocalPronunciation(store);
-        var query = new LyricQueryService(native, store, retrieval, discovery, new PreferenceService(store, () => new()), local, new LanguageServices(() => []), () => [], () => false);
+        var query = new LyricQueryService(native, store, retrieval, discovery, new PreferenceService(store, () => new()), local, new LanguageServices(ServiceFixtures.Catalog(() => [])), () => [], () => false);
         var item = new Audio { Id = Guid.NewGuid(), Name = "Fixture" };
         Assert.Null(await query.Read(item, TestContext.Current.CancellationToken)); Assert.Empty(store.SavedOriginals(item.Id));
     }
@@ -116,7 +110,7 @@ public sealed class AutomaticOriginalTests : IDisposable
         var store = new Store(directory); var native = DispatchProxy.Create<ILyricManager, AutomaticNativeProxy>(); var proxy = (AutomaticNativeProxy)(object)native;
         var registry = ProviderRegistry.WithSources(); var retrieval = new Retrieval(store, registry, NullLogger<Retrieval>.Instance);
         using var discovery = new Discovery(store, registry, retrieval); using var local = new LocalPronunciation(store);
-        var query = new LyricQueryService(native, store, retrieval, discovery, new PreferenceService(store, () => new()), local, new LanguageServices(() => []), () => [], () => false);
+        var query = new LyricQueryService(native, store, retrieval, discovery, new PreferenceService(store, () => new()), local, new LanguageServices(ServiceFixtures.Catalog(() => [])), () => [], () => false);
         var item = new Audio { Id = Guid.NewGuid(), Name = "Fixture" }; var token = TestContext.Current.CancellationToken;
         var first = await query.Read(item, token); var pending = new TaskCompletionSource<string>(); proxy.Response = () => pending.Task;
         var read = query.Read(item, token); store.DeleteOriginal(item.Id, first!.Hash);

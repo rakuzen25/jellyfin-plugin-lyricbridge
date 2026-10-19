@@ -39,7 +39,7 @@ public sealed class HostLifetimeTests
     {
         await using var host = new TestHost();
         var store = host.Own(new Store(Path.Combine(host.Root, "data")));
-        var languages = host.Own(new LanguageServices(() => host.Plugin.Configuration.Services));
+        var languages = host.Own(new LanguageServices(new ServiceCatalog(() => host.Plugin.Configuration.ServiceSetup)));
         using var generation = new Generation(host.Policy, store, languages);
         var subscriptions = 0;
         generation.ObserveConfiguration(

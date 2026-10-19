@@ -12,12 +12,8 @@ public sealed class VariantHistoryTests : LanguageFixture
         var old = (c.Endpoint, c.Model, c.ReasoningEffort, c.TimeoutSeconds);
         var requests = AllowUserRequests;
         var store = Own(new Store(Path.Combine(root, "version-history")));
-        var services = Own(new LanguageServices(() => Services, new HttpClient(new Handler())));
+        var services = Own(new LanguageServices(ServiceFixtures.Catalog(() => Services), new HttpClient(new Handler())));
         var worker = Own(new Generation(Policy, store, services));
-        var legacy = new Variant("legacy", "base", "translation", "zh", "QQ", "Supplied · 12", new());
-        var donor = new RichLyrics { Hash = "donor", Source = "NetEase", ProviderId = "34" };
-        store.Put("document", donor.Hash, donor);
-        store.Put("mixed-origin", legacy.Key, new MixedOrigin(donor.Hash));
         try
         {
             c.Endpoint = "http://fixture/v1";
@@ -28,34 +24,34 @@ public sealed class VariantHistoryTests : LanguageFixture
             store.Put("document", doc.Hash, doc);
             var user = Guid.NewGuid();
             var item = Guid.NewGuid();
-            var first = worker.Request(user, item, doc, new() { Service = "AI" }, true);
+            var first = worker.Request(user, item, doc, new() { OptionId = "translation-AI", Service = "AI" }, true);
             await worker.StartAsync(TestContext.Current.CancellationToken);
             await Completed(first);
             var firstVersion = store.Get<Variant>("variant", first.VariantKey)!;
             Assert.True(firstVersion.Text["l0"] == "版本1", "first generation saved");
             var second = worker.Request(user, item, doc, new()
             {
-                Service = "AI",
+                OptionId = "translation-AI", Service = "AI",
                 ForceNew = true
             }, true);
             var duplicate = worker.Request(user, item, doc, new()
             {
-                Service = "AI",
+                OptionId = "translation-AI", Service = "AI",
                 ForceNew = true
             }, true);
             Assert.True(duplicate.Id == second.Id, "force-new in-flight deduplication");
             await Completed(second);
             Assert.True(first.VariantKey != second.VariantKey && store.Variants(doc.Hash).Count == 2, "immutable versions retained");
             Assert.True(store.Get<Variant>("variant", first.VariantKey)!.Text["l0"] == "版本1", "old text unchanged");
-            Assert.True(worker.Cached(doc, new() { Service = "AI" })!.Text["l0"] == "版本2", "latest compatible version is reusable cache");
-            var free = worker.Request(Guid.NewGuid(), item, doc, new() { Service = "AI" }, false);
+            Assert.True(worker.Cached(doc, new() { OptionId = "translation-AI", Service = "AI" })!.Text["l0"] == "版本2", "latest compatible version is reusable cache");
+            var free = worker.Request(Guid.NewGuid(), item, doc, new() { OptionId = "translation-AI", Service = "AI" }, false);
             Assert.True(free.State == "cached", "cached versions need no external request");
             AllowUserRequests = false;
             try
             {
                 worker.Request(Guid.NewGuid(), item, doc, new()
                 {
-                    Service = "AI",
+                    OptionId = "translation-AI", Service = "AI",
                     ForceNew = true
                 }, false);
                 throw new Exception("force-new bypassed permission");
@@ -69,7 +65,7 @@ public sealed class VariantHistoryTests : LanguageFixture
             Assert.True(store.DeleteVariant(second.VariantKey, doc.Hash, "translation"), "saved version deleted");
             Assert.True(store.Get<AuxiliarySelection>("auxiliary-choice", "user-a") == null && store.Get<AuxiliarySelection>("auxiliary-choice", "user-b") == null, "deleted selections fall back for all users");
             Assert.True(store.Get<AuxiliarySelection>("auxiliary-choice", "other")?.Key == first.VariantKey, "other selections retained");
-            Assert.True(worker.Cached(doc, new() { Service = "AI" })?.Key == first.VariantKey, "cache falls back to retained version");
+            Assert.True(worker.Cached(doc, new() { OptionId = "translation-AI", Service = "AI" })?.Key == first.VariantKey, "cache falls back to retained version");
             store.Put("variant", "local", new Variant("local", doc.Hash, "pronunciation", "ja", "Kawazu", "", new()));
             Assert.True(!store.DeleteVariant("local", doc.Hash, "pronunciation"), "automatic local pronunciation protected");
             Assert.True(!store.DeleteVariant(second.VariantKey, doc.Hash, "translation"), "already deleted version unavailable");

@@ -4,31 +4,9 @@ import type { Configuration } from "./contracts.ts";
 import { SettingsController, type SettingsRequest, type SettingsSnapshot } from "./settings-controller.ts";
 
 function configuration(): Configuration {
-    const service = {
-        Name: "AI",
-        Enabled: true,
-        Endpoint: "",
-        ApiKey: "",
-        Model: "",
-        ContextBefore: 0,
-        ContextAfter: 0,
-        ReasoningEffort: "",
-        TimeoutSeconds: 120,
-    };
     return {
-        ServiceSetup: { Version: 1, Connections: [], Options: [] },
-        Transcription: {
-            Enabled: false,
-            Endpoint: "",
-            Model: "",
-            ApiKey: "",
-            UploadFormat: "opus",
-            MaxUploadMb: 25,
-            MaxInputMb: 256,
-            TimeoutSeconds: 120,
-            ReviewUsesAiService: true,
-            Review: service,
-        },
+        SchemaVersion: 1,
+        ServiceSetup: { Connections: [], Options: [] },
         EnableWebRenderer: true,
         StoragePath: "",
         MinimumMatch: 70,
@@ -39,7 +17,6 @@ function configuration(): Configuration {
         UserRequestDailyQuota: 5,
         UserRequestActiveCap: 3,
         Sources: [],
-        Services: [service],
         Defaults: {
             SourceLanguage: "auto",
             TranslationLanguage: "zh-Hans",

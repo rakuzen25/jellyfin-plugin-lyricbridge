@@ -48,8 +48,8 @@ export interface BridgeDocument {
 }
 
 export interface ServiceCapability {
-    optionId?: string;
-    name?: string;
+    optionId: string;
+    name: string;
     service: string;
     translation: boolean;
     pronunciation: boolean;

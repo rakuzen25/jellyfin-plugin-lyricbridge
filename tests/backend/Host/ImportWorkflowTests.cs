@@ -20,7 +20,7 @@ public sealed class ImportWorkflowTests : IDisposable
         store.ApplySelection(item.Id, new(new() { Lines = [new() { Id = "old", Text = "previous" }], Manual = true }, null));
         var registry = ProviderRegistry.WithSources(); var retrieval = new Retrieval(store, registry, NullLogger<Retrieval>.Instance);
         using var discovery = new Discovery(store, registry, retrieval); using var local = new LocalPronunciation(store);
-        var languages = new LanguageServices(() => []); using var generation = new Generation(() => new(true, true, 5, 3), store, languages);
+        var languages = new LanguageServices(ServiceFixtures.Catalog(() => [])); using var generation = new Generation(() => new(true, true, 5, 3), store, languages);
         var preferences = new PreferenceService(store, () => new());
         var query = new LyricQueryService(null!, store, retrieval, discovery, preferences, local, languages, () => [], () => true);
         var service = new SelectionService(store, retrieval, discovery, null!, query);

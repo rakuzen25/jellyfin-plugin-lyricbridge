@@ -26,11 +26,11 @@ public sealed class WorkflowConcurrencyTests : IDisposable
     {
         var store = new Store(directory); var user = Guid.NewGuid();
         var settings = new ServiceConfig { Name = "AI", Endpoint = "http://fixture.invalid/v1", Model = "fixture" };
-        var language = new LanguageServices(() => [settings]);
+        var language = new LanguageServices(ServiceFixtures.Catalog(() => [settings]));
         using var worker = new Generation(() => new(true, false, 5, 3), store, language);
         var results = await Task.WhenAll(Enumerable.Range(0, 40).Select(index => Task.Run(() =>
         {
-            try { return worker.Request(user, Guid.NewGuid(), new() { Hash = "doc" + index, Lines = [new() { Id = "line", Text = "hello", Language = "en" }] }, new() { Service = "AI" }, false); }
+            try { return worker.Request(user, Guid.NewGuid(), new() { Hash = "doc" + index, Lines = [new() { Id = "line", Text = "hello", Language = "en" }] }, new() { OptionId = "translation-AI", Service = "AI" }, false); }
             catch (InvalidOperationException) { return null; }
         })));
         Assert.Equal(3, results.Count(result => result is not null)); Assert.Equal(3, store.CountActiveJobs(user));

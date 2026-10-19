@@ -450,21 +450,12 @@ export function createLyricSession(deps: Dependencies) {
         const withoutHash = raw.split("#", 1)[0];
         const queryIndex = requireValue(withoutHash).indexOf("?");
         const rawPath = queryIndex >= 0 ? requireValue(withoutHash).slice(0, queryIndex) : withoutHash;
-        const query = queryIndex >= 0 ? requireValue(withoutHash).slice(queryIndex + 1) : "";
         const path = requireValue(rawPath)
             .replace(/^https?:\/\/[^/]+/i, "")
             .replace(/\/{2,}/g, "/")
             .toLowerCase();
 
-        /*
-         * Jellyfin normally carries the item id in the path. Keep an item-id
-         * query parameter too for compatibility with alternate client routes,
-         * while deliberately ignoring auth/cache query parameters so duplicate
-         * requests for the same song share one generation.
-         */
-        const itemMatch = query.match(/(?:^|&)(?:itemid|item_id)=([^&]+)/i);
-
-        return itemMatch ? `${path}?itemid=${requireValue(itemMatch[1]).toLowerCase()}` : path;
+        return path;
     }
 
     function beginLyricsRequest(url: string) {

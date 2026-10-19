@@ -8,9 +8,6 @@ public sealed class GenerationRequest
     public string? OptionId { get; set; }
     public string? OptionName { get; set; }
     [System.Text.Json.Serialization.JsonIgnore]
-    public bool ServiceSpecified { get; private set; }
-    private string service = "Google";
-    [System.Text.Json.Serialization.JsonIgnore]
     public string? LogCorrelationId { get; set; }
     public Dictionary<string, string> SkippedRows { get; set; } = new();
     public bool ForceNew { get; set; }
@@ -20,7 +17,7 @@ public sealed class GenerationRequest
     public int? ContextAfter { get; set; }
     public string Kind { get; set; } = "translation";
     public string Language { get; set; } = "zh-Hans";
-    public string Service { get => service; set { service = value; ServiceSpecified = true; } }
+    public string Service { get; set; } = "";
     public string SourceLanguage { get; set; } = "auto";
 }
 

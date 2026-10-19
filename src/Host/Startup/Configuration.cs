@@ -11,9 +11,9 @@ namespace LyricBridge;
 
 public sealed class Configuration : BasePluginConfiguration
 {
-    private ServiceSetup? serviceSetup;
-    public ServiceSetup ServiceSetup { get => serviceSetup ?? LyricBridge.ServiceSetup.Migrate(Services, Transcription); set => serviceSetup = value; }
-    public TranscriptionConfig Transcription { get; set; } = new();
+    public const int CurrentSchema = 1;
+    public int SchemaVersion { get; set; } = CurrentSchema;
+    public ServiceSetup ServiceSetup { get; set; } = ServiceSetup.Defaults();
     public bool EnableWebRenderer { get; set; } = true;
     public string StoragePath { get; set; } = "";
     public SourceConfig[] Sources { get; set; } = new[] { "QQ", "NetEase", "Kugou", "Soda", "Musixmatch", "Spotify", "AppleMusic", "LRCLIB" }.Select(n => new SourceConfig { Name = n }).ToArray();
@@ -34,5 +34,4 @@ public sealed class Configuration : BasePluginConfiguration
     public int UserRequestDailyQuota { get; set; } = 5;
     public int UserRequestActiveCap { get; set; } = 3;
     public Preferences Defaults { get; set; } = new();
-    public ServiceConfig[] Services { get; set; } = new[] { "Google", "DeepL", "AI", "LibreTranslate" }.Select(n => new ServiceConfig { Name = n }).ToArray();
 }

@@ -16,6 +16,7 @@ public sealed class MissingLyricsTask(ILibraryManager library, ILyricManager loc
     public IEnumerable<TaskTriggerInfo> GetDefaultTriggers() => [new() { Type = TaskTriggerInfoType.IntervalTrigger, IntervalTicks = TimeSpan.FromDays(1).Ticks }];
     public async Task ExecuteAsync(IProgress<double> progress, CancellationToken token)
     {
+        if (plugin.Value.Startup.State != "ready") { progress.Report(100); return; }
         if (!plugin.Value.Configuration.ScheduledRetrieval) { progress.Report(100); return; }
         int start = 0;
         while (true)

@@ -50,3 +50,15 @@ Shared immutable content remains until its last dependency is released; an assoc
 
 These distinctions explain why deletion can report blocked dependencies and why a completed proposal survives dismissal.
 See [data management](../how-to/manage-data.md) for operator consequences and [validation design](validation.md) for how the boundaries are checked.
+
+## Convert persisted state at one boundary
+
+Runtime services consume current settings and storage models. The startup coordinator initializes settings before storage and gates workers, APIs, native lyric integration, and scheduled work until both are ready.
+Failures leave Jellyfin and the independent administrator status endpoints available.
+
+Settings and SQLite have independent schema versions. Each domain can register one explicit predecessor with one direct upgrade to current; conversion never falls through to runtime readers or chains across releases.
+The baseline ships an empty registry. Replace the predecessor step when advancing that domain's supported upgrade boundary.
+
+The upgrade runner journals intent and creates a private backup before conversion. XML replacement is atomic; database conversion and version stamping share one transaction.
+Each domain commits independently. Startup reconstructs interrupted completion from persisted schema markers, so a completed conversion doesn't run twice.
+Completed-upgrade notices survive restart and acknowledgement; backup files expire after 30 days. Their journal and lifecycle belong to the upgrade boundary rather than ordinary lyric retention.

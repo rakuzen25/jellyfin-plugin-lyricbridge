@@ -38,22 +38,7 @@ public sealed class JobLifecycleTests : StorageFixture
         recent.State = "queued"; store.SaveJob(recent); Assert.Null(store.GetJob(recent.Id)!.TerminalAt);
         recent.State = "failed"; store.SaveJob(recent); Assert.True(store.GetJob(recent.Id)!.TerminalAt > now.AddMinutes(-1));
     }
-    [Fact]
-    public void LegacyJobsGetFullRetentionWindowOnOpenAndRecentAdmissionsAreSeeded()
-    {
-        var id = Guid.NewGuid().ToString("N"); var user = Guid.NewGuid();
-        using (var store = new Store(Root)) { store.JobHistory(null, 0, 1); }
-        using (var c = new SqliteConnection("Data Source=" + Path.Combine(Root, "index.sqlite")))
-        {
-            c.Open(); using var command = c.CreateCommand(); command.CommandText = "INSERT INTO records VALUES('job',$id,$payload)";
-            command.Parameters.AddWithValue("$id", id); command.Parameters.AddWithValue("$payload", Codec.Serialize(new Job { Id = id, UserId = user, State = "failed" })); command.ExecuteNonQuery();
-        }
-        using (var reopened = new Store(Root))
-        {
-            Assert.NotNull(reopened.GetJob(id)!.TerminalAt); Assert.Empty(reopened.ExpireJobHistory(DateTimeOffset.UtcNow));
-            reopened.RemoveFinishedJobs([id]); Assert.Equal(1, reopened.CountAdmissions(user, DateTime.UtcNow.AddHours(-24)));
-        }
-    }
+
     [Fact]
     public void ReviewCheckpointsExpireAfterFailureAndAreClearedBeforeLateRetry()
     {

@@ -11,11 +11,9 @@ public sealed partial class Store
         var records = ReadRecords(c, tx);
         var originals = records.Where(r => r.Kind == "transcript-original").Select(r => Codec.Deserialize<TranscriptOriginal>(r.Payload)!)
             .Where(o => o.TranscriptId == source.Id && (entry == null || o.VersionId == entry.VersionId)).Select(o => new OriginalDependency(o.ItemId, o.OutputHash)).ToList();
-        var requests = entry == null ? [] : records.Where(r => r.Kind == "job").Select(r => Codec.Deserialize<Job>(r.Payload)!)
-            .Where(j => j.State is "pending" or "queued" or "running" && j.Review is { Snapshot: null } review && review.TranscriptId == source.Id && review.VersionId == entry.VersionId).Select(j => j.Id).ToList();
+        var requests = new List<string>();
         var reason = !admin && source.UserId != user ? "Only the owner or an administrator can delete this result."
-            : originals.Count > 0 ? "Used by saved originals: " + string.Join(", ", originals.Select(o => o.ItemId + " / " + o.OutputHash)) + ". Delete those originals first."
-            : requests.Count > 0 ? "Required by active legacy review requests: " + string.Join(", ", requests) + ". Finish or cancel them first." : null;
+            : originals.Count > 0 ? "Used by saved originals. Remove their association first." : null;
         return new(reason == null, reason, originals, requests);
     }
     public DeletionCapability Deletion(string transcriptId, string? entryId, Guid user, bool admin)
@@ -81,8 +79,7 @@ public sealed partial class Store
             if (entryId.StartsWith("review:", StringComparison.Ordinal)) WriteUnchecked<object>(c, tx, "boundary-review-result", entryId[7..], null);
             var records = ReadRecords(c, tx);
             var needed = records.Any(r => r.Kind == "saved-boundary-entry" && Codec.Deserialize<SavedBoundaryEntry>(r.Payload)!.VersionId == entry.VersionId)
-                || records.Any(r => r.Kind == "transcript-original" && Codec.Deserialize<TranscriptOriginal>(r.Payload)!.VersionId == entry.VersionId)
-                || records.Any(r => r.Kind == "job" && Codec.Deserialize<Job>(r.Payload) is { State: "pending" or "queued" or "running", Review: { Snapshot: null } review } && review.VersionId == entry.VersionId);
+                || records.Any(r => r.Kind == "transcript-original" && Codec.Deserialize<TranscriptOriginal>(r.Payload)!.VersionId == entry.VersionId);
             if (!needed) WriteUnchecked<object>(c, tx, "boundary-version", entry.VersionId, null);
             tx.Commit();
         }

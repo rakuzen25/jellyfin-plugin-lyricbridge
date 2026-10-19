@@ -210,9 +210,10 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
     public async Task<IActionResult> Pronunciation(Guid id, PronunciationInput input, CancellationToken token)
     {
         var item = Item(id); if (item == null) return NotFound();
+        var option = Catalog.Resolve("pronunciation", input.OptionId);
+        if (option.Provider != "Kawazu") return Error(400, "invalid_service_option", "Choose a local Japanese romaji option for this action.");
         var doc = await Read(item, token);
         if (doc == null || Codec.ContentHash(doc) != input.Hash) return Error(409, "lyric_version_changed", "Reload this song’s current lyrics before generating pronunciation.");
-        _ = Catalog.Resolve("pronunciation", input.OptionId, "Kawazu");
         var prefs = EffectivePrefs(id);
         if (input.Retry) local.Retry(doc, prefs, input.IncludeSupplied);
         var state = local.Ensure(doc, prefs, input.IncludeSupplied);
@@ -294,7 +295,7 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
     public async Task<IActionResult> Generate(Guid id, GenerationRequest request, CancellationToken token)
     {
         var item = Item(id); if (item == null) return NotFound(); var lyrics = await Read(item, token); if (lyrics == null) return Error(409, "no_sung_lyrics", "Load sung lyrics before requesting translation or pronunciation."); lyrics.Hash = Codec.ContentHash(lyrics); query.SaveDocument(lyrics); if (!LanguageTag(request.Language) || request.Kind is not ("translation" or "pronunciation")) return Error(400, "invalid_request", "Choose a valid language and generation kind."); request.SourceLanguage = EffectivePrefs(id).SourceLanguage;
-        try { if (request.OptionId == null && !request.ServiceSpecified) return Error(400, "service_choice_required", "Choose a service option for this request."); if (!languages.Available(languages.Config(request))) return Error(409, "service_not_configured", "Ask an administrator to set up this service."); return JsonData(generation.Request(UserId, id, lyrics, request, Admin)); }
+        try { if (string.IsNullOrWhiteSpace(request.OptionId)) return Error(400, "service_choice_required", "Choose a service option for this request."); return JsonData(generation.Request(UserId, id, lyrics, request, Admin)); }
         catch (UnauthorizedAccessException) { return Error(403, "requests_disabled", "External generation requests are disabled for your account."); }
         catch (ArgumentException) { return Error(400, "unsupported_service", "Choose an available service."); }
         catch (InvalidOperationException e) { return Error(409, e.Message.StartsWith("Daily") ? "daily_quota" : "active_quota", e.Message, true); }
@@ -346,8 +347,6 @@ public sealed class Api(SelectionService selection, LanguageVersionService versi
     public IActionResult WebRenderer() => Admin ? JsonData(renderer.Status) : Forbid();
     [HttpPost("admin/web-renderer/repair")]
     public async Task<IActionResult> RepairWebRenderer(CancellationToken token) => Admin ? JsonData(await renderer.Repair(token)) : Forbid();
-    [AllowAnonymous, HttpGet("assets/{name}")]
-    public IActionResult Asset(string name) { if (name is not ("lyricbridge.js" or "lyricbridge.css" or "jellyfin-lyric-motion.js" or "jellyfin-lyric-motion.css")) return NotFound(); var stream = typeof(Plugin).Assembly.GetManifestResourceStream("Jellyfin.Plugin.LyricBridge.Web." + name); return stream == null ? NotFound() : File(stream, name.EndsWith(".js") ? "application/javascript" : name.EndsWith(".css") ? "text/css" : "text/html"); }
     private static bool LanguageTag(string value) => PreferenceService.LanguageTag(value);
 }
 public sealed record SearchInput(string? Title = null, string? Artist = null, string? Source = null);

@@ -24,16 +24,16 @@ public sealed class ContextTests : LanguageFixture
             catch (InvalidDataException) { }
         }
         var handler = new ContextHandler();
-        var services = Own(new LanguageServices(() => Services, new HttpClient(handler)));
+        var services = Own(new LanguageServices(ServiceFixtures.Catalog(() => Services), new HttpClient(handler)));
         var config = Services.First(s => s.Name == "DeepL");
         var oldKey = config.ApiKey;
         config.ApiKey = "synthetic";
         try
         {
-            var request = new GenerationRequest { Service = "DeepL", ContextBefore = 1, ContextAfter = 1 };
+            var request = new GenerationRequest { OptionId = "translation-DeepL", Service = "DeepL", ContextBefore = 1, ContextAfter = 1 };
             var plain = services.Key(doc, new()
             {
-                Service = "DeepL",
+                OptionId = "translation-DeepL", Service = "DeepL",
                 ContextBefore = 0,
                 ContextAfter = 0
             });
@@ -46,7 +46,7 @@ public sealed class ContextTests : LanguageFixture
         handler.Contexts.Clear();
         var google = await services.Generate(doc, new()
         {
-            Service = "Google",
+            OptionId = "translation-Google", Service = "Google",
             ContextBefore = 1,
             ContextAfter = 1
         }, new Progress<int>(), TestContext.Current.CancellationToken);
@@ -58,7 +58,7 @@ public sealed class ContextTests : LanguageFixture
         {
             var libre = await services.Generate(doc, new()
             {
-                Service = "LibreTranslate",
+                OptionId = "translation-LibreTranslate", Service = "LibreTranslate",
                 ContextBefore = 1,
                 ContextAfter = 1
             }, new Progress<int>(), TestContext.Current.CancellationToken);
@@ -70,7 +70,7 @@ public sealed class ContextTests : LanguageFixture
         {
             await services.Generate(doc, new()
             {
-                Service = "Google",
+                OptionId = "translation-Google", Service = "Google",
                 ContextBefore = 1
             }, new Progress<int>(), TestContext.Current.CancellationToken);
             throw new Exception("lost marker accepted");

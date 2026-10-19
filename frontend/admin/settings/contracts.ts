@@ -30,7 +30,6 @@ export interface ServiceOption {
     MaxInputMb: number;
 }
 export interface ServiceSetup {
-    Version: number;
     Connections: ServiceConnection[];
     Options: ServiceOption[];
 }
@@ -38,17 +37,6 @@ interface SourceConfiguration extends CredentialState {
     Name: string;
     Enabled: boolean;
     Credential: string;
-}
-interface ServiceConfiguration {
-    Name: string;
-    Enabled: boolean;
-    Endpoint: string;
-    ApiKey: string;
-    Model: string;
-    ContextBefore: number;
-    ContextAfter: number;
-    ReasoningEffort: string;
-    TimeoutSeconds: number;
 }
 interface DisplayDefaults {
     [key: string]: string | number | boolean;
@@ -63,21 +51,9 @@ interface DisplayDefaults {
     ShowTranslation: boolean;
     JapaneseRomaji: boolean;
 }
-interface TranscriptionConfiguration {
-    Enabled: boolean;
-    Endpoint: string;
-    Model: string;
-    ApiKey: string;
-    UploadFormat: string;
-    MaxUploadMb: number;
-    MaxInputMb: number;
-    TimeoutSeconds: number;
-    ReviewUsesAiService: boolean;
-    Review: ServiceConfiguration;
-}
 export interface Configuration {
     ServiceSetup: ServiceSetup;
-    Transcription: TranscriptionConfiguration;
+    SchemaVersion: number;
     [key: string]: unknown;
     EnableWebRenderer: boolean;
     StoragePath: string;
@@ -89,7 +65,6 @@ export interface Configuration {
     UserRequestDailyQuota: number;
     UserRequestActiveCap: number;
     Sources: SourceConfiguration[];
-    Services: ServiceConfiguration[];
     Defaults: DisplayDefaults;
 }
 export interface JobSummary {
@@ -125,8 +100,6 @@ declare global {
     const ApiClient: {
         ajax(options: { type: string; url: string; dataType: string; contentType: string; data?: string }): Promise<unknown>;
         getUrl(path: string): string;
-        getPluginConfiguration(id: string): Promise<Configuration>;
-        updatePluginConfiguration(id: string, value: Configuration): Promise<unknown>;
     };
 }
 

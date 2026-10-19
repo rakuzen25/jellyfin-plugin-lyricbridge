@@ -68,7 +68,7 @@ test("@workflow generation approval, settings change and explicit retry remain v
     const panel = page.locator('.lb-generation[data-kind="translation"]');
     await page.locator('[data-song-kind="translation"]').getByRole("button", { name: "Generate translation", exact: true }).click();
     await expect(panel.getByRole("button", { name: "Start generation", exact: true })).toBeDisabled();
-    await panel.getByLabel("Generation method", { exact: true }).selectOption("Google");
+    await panel.getByLabel("Generation method", { exact: true }).selectOption("demo-google-translation");
     await panel.getByRole("button", { name: "Start generation", exact: true }).click();
     await expect(page.locator(".lb-job-progress")).toContainText("pending");
     await page.locator(".lb-popup").getByRole("button", { name: "Close", exact: true }).click();
@@ -256,13 +256,13 @@ test("@workflow auxiliary version metadata uses labelled rows and one generation
     await trigger.click();
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
     const method = setup.getByLabel("Generation method");
-    await method.selectOption("Google");
+    await method.selectOption("demo-google-translation");
     await setup.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(setup).toBeHidden();
     await expect(trigger).toBeFocused();
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
     await trigger.click();
-    await expect(method).toHaveValue("Google");
+    await expect(method).toHaveValue("demo-google-translation");
     await expect(setup.getByRole("button", { name: "Start generation", exact: true })).toBeVisible();
 });
 

@@ -74,23 +74,9 @@ export function isLyricsUrl(url: unknown) {
         const parsed = new URL(url, location.href);
         const path = parsed.pathname || "";
 
-        if (/\/(?:Audio|Items)\/[^/]+\/Lyrics(?:\/|$)/i.test(path)) {
-            return true;
-        }
-
-        if (/\/Lyrics\/[^/]+(?:\/|$)/i.test(path)) {
-            return true;
-        }
-
-        if (/\/Lyrics\/?$/i.test(path)) {
-            return !!(parsed.searchParams.get("itemId") || parsed.searchParams.get("item_id"));
-        }
+        return /\/Audio\/[^/]+\/Lyrics\/?$/i.test(path);
     } catch {
-        return (
-            /\/(?:Audio|Items)\/[^/?#]+\/Lyrics(?:[/?#]|$)/i.test(url) ||
-            /\/Lyrics\/[^/?#]+(?:[/?#]|$)/i.test(url) ||
-            /\/Lyrics(?:\/?\?(?:[^#]*&)?(?:itemId|item_id)=)/i.test(url)
-        );
+        return false;
     }
 
     return false;
@@ -115,23 +101,12 @@ export function elementHasLiveLayout(element: HTMLElement | null | undefined) {
 export function getCurrentLyricsContainer(enhancedOnly = false) {
     const selector = enhancedOnly ? ".lyricsContainer.ak-karaoke-container" : ".lyricsContainer";
 
-    let candidates: HTMLElement[] = [];
+    let candidates: HTMLElement[];
 
     try {
-        if (typeof document.querySelectorAll === "function") {
-            candidates = Array.from(document.querySelectorAll<HTMLElement>(selector));
-        }
+        candidates = Array.from(document.querySelectorAll<HTMLElement>(selector));
     } catch {
         candidates = [];
-    }
-
-    if (!candidates.length) {
-        try {
-            const fallback = document.querySelector<HTMLElement>(selector);
-            if (fallback) candidates.push(fallback);
-        } catch {
-            // No matching lyric DOM yet.
-        }
     }
 
     const live = candidates.filter((element) => elementHasLiveLayout(element));
@@ -158,7 +133,7 @@ export function getCurrentLyricPage() {
     try {
         pages = Array.from(document.querySelectorAll<HTMLElement>(".lyricPage"));
     } catch {
-        // Older embedded DOM implementations may expose only querySelector.
+        // Route teardown may remove the page during discovery.
     }
 
     const live = pages.filter((page) => elementHasLiveLayout(page));

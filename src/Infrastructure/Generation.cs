@@ -86,7 +86,7 @@ public sealed class Generation(Func<GenerationPolicy> policy, IGenerationReposit
             }
             request.TimeoutSeconds = services.Config(request).TimeoutSeconds;
             if (request.Service == "AI")
-                request.ReasoningEffort = services.Config("AI").ReasoningEffort;
+                request.ReasoningEffort = services.Config(request).ReasoningEffort;
             request = Codec.Deserialize<GenerationRequest>(Codec.Serialize(request))!;
             var profile = services.Profile(request);
             var key = LanguageServices.Key(lyrics.Hash, profile);
@@ -110,7 +110,6 @@ public sealed class Generation(Func<GenerationPolicy> policy, IGenerationReposit
     }
     private GenerationProfile CurrentProfile(Job job)
     {
-        services.Restore(job);
         return job.TaskKind == "language" ? services.CurrentProfile(job.Request) : tasks.TryGetValue(job.TaskKind, out var handler) ? handler.Profile(job) : throw new ArgumentException("Unsupported task.");
     }
     private Job AdmitJob(Job job, bool admin, long epoch, RichLyrics? lyrics = null)

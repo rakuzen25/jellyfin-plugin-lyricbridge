@@ -563,7 +563,7 @@ class PolicyTests(IsolatedCiTestCase):
         run = self.trusted_run()
         run["conclusion"] = "failure"  # attach can fail after complete validation
         receipt = {
-            "workflow_sha": "workflow",
+            "run_head_sha": "workflow",
             "validated_at": datetime.now(UTC).isoformat(),
         }
         jobs = {
@@ -590,7 +590,7 @@ class PolicyTests(IsolatedCiTestCase):
 
     def test_old_release_receipt_requires_fresh_advisories(self):
         receipt = {
-            "workflow_sha": "workflow",
+            "run_head_sha": "workflow",
             "validated_at": (datetime.now(UTC) - timedelta(days=2)).isoformat(),
         }
         with (
@@ -753,7 +753,7 @@ class CumulativeCoverageTests(IsolatedCiTestCase):
             )
             self.assertEqual(read.call_count, 2)
 
-    def test_legacy_full_accepted_but_legacy_narrow_rejected(self):
+    def test_unsupported_schemas_are_rejected_for_full_and_narrow_receipts(self):
         for full in (False, True):
             with (
                 self.subTest(full=full),
@@ -773,7 +773,7 @@ class CumulativeCoverageTests(IsolatedCiTestCase):
                             ROOT, "owner/repo", "main", "policy"
                         )
                     ),
-                    full,
+                    False,
                 )
 
     def test_cumulative_identity_and_policy_must_match(self):

@@ -143,10 +143,10 @@ public sealed class TranscriptionTests : StorageFixture
     [Fact]
     public async Task SharedCoordinatorCountsLanguageAndAudioAdmissionsAtomically()
     {
-        using var store = Own(new Store(Root)); using var services = Own(new LanguageServices(() => [new() { Name = "Google" }]));
+        using var store = Own(new Store(Root)); using var services = Own(new LanguageServices(ServiceFixtures.Catalog(() => [new() { Name = "Google" }])));
         var handler = new StubTask(); using var generation = Own(new Generation(() => new(true, false, 100, 3), store, services, handlers: [handler]));
         var user = Guid.NewGuid(); var lyrics = new RichLyrics { Hash = "fixture", Lines = [new() { Id = "l0", Text = "hello" }] };
-        generation.Request(user, Guid.NewGuid(), lyrics, new(), false);
+        generation.Request(user, Guid.NewGuid(), lyrics, new() { OptionId = "translation-Google" }, false);
         var submissions = Enumerable.Range(0, 20).Select(_ => Task.Run(() =>
         {
             try { generation.RequestRemote(new() { TaskKind = "transcription", ItemId = Guid.NewGuid(), UserId = user, Hash = Guid.NewGuid().ToString("N"), Audio = new(), Request = new() { Kind = "transcription", Service = "Transcription" } }, false); return true; }
@@ -176,7 +176,7 @@ public sealed class TranscriptionTests : StorageFixture
         Assert.Empty(store.SavedEntries(source.Id)); Assert.Empty(store.BoundaryVersions(source.Id)); Assert.NotNull(store.Transcript(source.Id));
     }
     [Fact]
-    public void EntryDeletionExplainsOriginalAndLegacyJobDependenciesAndChecksOwnership()
+    public void EntryDeletionExplainsOriginalDependenciesAndChecksOwnership()
     {
         using var store = new Store(Root); var source = Parse(); var version = Initial(source);
         store.Put("transcript", source.Id, source);
@@ -185,9 +185,7 @@ public sealed class TranscriptionTests : StorageFixture
         Assert.Throws<WorkflowException>(() => store.DeleteEntry(source.ItemId, source.Id, entry.Id, Guid.NewGuid(), false));
         var review = new Job { ItemId = source.ItemId, Hash = source.Id, TaskKind = "boundary-review", State = "running", Review = new(source.Id, version.Id, new()) };
         store.Put("job", review.Id, review);
-        Assert.Contains(review.Id, store.Deletion(source.Id, entry.Id, source.UserId, false).Requests);
-        Assert.Throws<WorkflowException>(() => store.DeleteEntry(source.ItemId, source.Id, entry.Id, source.UserId, false));
-        review.Review = review.Review with { Snapshot = version }; store.Put("job", review.Id, review);
+        review.Review = review.Review! with { Snapshot = version }; store.Put("job", review.Id, review);
         Assert.True(store.Deletion(source.Id, entry.Id, source.UserId, false).Allowed);
         var lyrics = store.CommitBoundary(source.ItemId, source, version, store.SelectionIdentity(source.ItemId), entry.Id);
         var dependency = Assert.Single(store.Deletion(source.Id, entry.Id, source.UserId, false).Originals);
@@ -229,27 +227,7 @@ public sealed class TranscriptionTests : StorageFixture
         store.DeleteEntry(source.ItemId, source.Id, entries[0].Id, source.UserId, false);
         Assert.Equal(entries[1].Id, Assert.Single(store.SavedEntries(source.Id)).Id); Assert.Single(store.ReviewResults(source.Id)); Assert.Single(store.BoundaryVersions(source.Id));
     }
-    [Fact]
-    public void LegacySavedEntryMigrationIsDurableAndDoesNotResurrectDeletedEntries()
-    {
-        var source = Parse(); var version = Initial(source);
-        using (var store = new Store(Root))
-        {
-            store.Put("transcript", source.Id, source); store.Put("boundary-version", version.Id, version);
-            store.Put("boundary-review-result", "receipt", new BoundaryReviewResult("receipt", source.Id, version.Id, Profile, DateTimeOffset.UtcNow));
-        }
-        using (var c = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=" + Path.Combine(Root, "index.sqlite")))
-        {
-            c.Open(); using var command = c.CreateCommand(); command.CommandText = "DELETE FROM managed_migrations"; command.ExecuteNonQuery();
-        }
-        using (var store = new Store(Root))
-        {
-            Assert.Equal(2, store.SavedEntries(source.Id).Count);
-            store.DeleteEntry(source.ItemId, source.Id, "review:receipt", source.UserId, false);
-            var entry = Assert.Single(store.SavedEntries(source.Id)); store.DeleteEntry(source.ItemId, source.Id, entry.Id, source.UserId, false);
-        }
-        using (var store = new Store(Root)) { Assert.Empty(store.SavedEntries(source.Id)); Assert.NotNull(store.Transcript(source.Id)); }
-    }
+
     private sealed class StubTask : IRemoteTaskHandler
     {
         public string Kind => "transcription";

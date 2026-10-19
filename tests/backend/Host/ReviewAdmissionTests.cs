@@ -10,6 +10,17 @@ using Xunit;
 public sealed class ReviewAdmissionTests : TestHost
 {
     [Fact]
+    public async Task LocalPronunciationCannotExecuteAnExternalOption()
+    {
+        var item = new Audio { Id = Guid.NewGuid() };
+        var library = DispatchProxy.Create<ILibraryManager, OriginalLibraryProxy>(); ((OriginalLibraryProxy)(object)library).Item = item;
+        var controller = new Api(null!, null!, null!, null!, new(library), null!, null!, null!, null!, null!, null!, null!, new(() => Plugin));
+        controller.ControllerContext = new() { HttpContext = new DefaultHttpContext { User = new(new ClaimsIdentity([new Claim(ClaimTypes.Role, Jellyfin.Api.Constants.UserRoles.Administrator)], "fixture")) } };
+        var google = Plugin.Configuration.ServiceSetup.Options.Single(option => option.Provider == "Google" && option.Capability == "pronunciation");
+        var result = Assert.IsType<JsonResult>(await controller.Pronunciation(item.Id, new("unused", OptionId: google.Id), TestContext.Current.CancellationToken));
+        Assert.Equal(400, result.StatusCode); Assert.Contains("invalid_service_option", Codec.Serialize(result.Value));
+    }
+    [Fact]
     public void PlanIdentityIsRequiredAndChangedInputCannotAdmitStalePlan()
     {
         var token = TestContext.Current.CancellationToken;
@@ -19,8 +30,8 @@ public sealed class ReviewAdmissionTests : TestHost
         var setup = new ServiceSetup { Connections = [new() { Id = "review", Name = "Review", Endpoint = "https://fixture.invalid/v1" }], Options = [new() { Id = "review", Name = "Review", Capability = "boundary-review", ConnectionId = "review", Provider = "AI", Model = "fixture" }] };
         Plugin.Configuration.ServiceSetup = setup;
         var catalog = new ServiceCatalog(() => setup); using var provider = new TranscriptionProvider(); var strategy = new LinguisticBoundaries();
-        var handler = new BoundaryReviewTask(() => new(), store, provider, strategy, catalog.Review);
-        using var languages = new LanguageServices(() => []); using var generation = new Generation(() => new(true, true, 5, 3), store, languages, handlers: [handler]);
+        var handler = new BoundaryReviewTask(catalog.Review, store, provider, strategy);
+        using var languages = new LanguageServices(ServiceFixtures.Catalog(() => [])); using var generation = new Generation(() => new(true, true, 5, 3), store, languages, handlers: [handler]);
         var profile = new GenerationProfile("Transcription", "fixture", "model", "transcription", "", "en", "", 0, 0, 1);
         var source = TranscriptionResponse.Parse("{\"text\":\"Hi\",\"language\":\"en\",\"words\":[{\"word\":\"Hi\",\"start\":0,\"end\":1}]}", item.Id, user, "source", profile, false);
         store.Put("transcript", source.Id, source);

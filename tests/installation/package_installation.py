@@ -557,7 +557,16 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         call(
             public_api + "/pronunciation",
             "POST",
-            {"hash": rich["lyrics"]["hash"], "includeSupplied": True, "retry": True},
+            {
+                "hash": rich["lyrics"]["hash"],
+                "includeSupplied": True,
+                "retry": True,
+                "optionId": next(
+                    o["id"]
+                    for o in call_json("/LyricBridge/service-options")
+                    if o["provider"] == "Kawazu" and o["capability"] == "pronunciation"
+                ),
+            },
         )
         for _ in range(100):
             rich = call_json(public_api + "/lyrics")
@@ -579,20 +588,18 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         # The owned HTTP server also acts as a deterministic OpenAI-compatible audio/text endpoint.
         # Real Jellyfin FFmpeg prepares both library audio and the synthetic WAV upload.
         original_hash = rich["lyrics"]["hash"]
-        configuration.pop("ServiceSetup", None)
-        transcription = configuration["Transcription"]
-        transcription.update(
-            {
-                "Enabled": True,
-                "Endpoint": f"http://{gateway}:{catalog.server_port}/mock/v1",
-                "Model": "fixture",
-                "ApiKey": "fixture-transcription-key",
-                "ReviewUsesAiService": False,
-            }
-        )
-        transcription["Review"].update(
-            {"Endpoint": transcription["Endpoint"], "Model": "fixture"}
-        )
+        setup = configuration["ServiceSetup"]
+        for option in setup["Options"]:
+            if option["Capability"] in ("transcription", "boundary-review"):
+                option["Enabled"] = True
+                option["Model"] = "fixture"
+                connection = next(
+                    c for c in setup["Connections"] if c["Id"] == option["ConnectionId"]
+                )
+                connection["Endpoint"] = (
+                    f"http://{gateway}:{catalog.server_port}/mock/v1"
+                )
+                connection["ApiKey"] = "fixture-transcription-key"
         call(f"/Plugins/{PLUGIN}/Configuration", "POST", configuration)
 
         def completed(job):
@@ -852,8 +859,7 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         restored = call_json(f"/Plugins/{PLUGIN}/Configuration")
         assert restored["StoragePath"] in ("", overview["activeStoragePath"])
         assert all(not source["Credential"] for source in restored["Sources"])
-        assert all(not service["ApiKey"] for service in restored["Services"])
-        assert not restored["Transcription"]["ApiKey"]
+        assert all(not c["ApiKey"] for c in restored["ServiceSetup"]["Connections"])
         assert not call_json("/LyricBridge/admin/runtime")["restartRequired"]
         restart_server()
         restarted = call_json(f"/Plugins/{PLUGIN}/Configuration")
@@ -866,6 +872,84 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
             source["Enabled"] = False
         print(
             "PASS: administrator Data API, credential exclusion, factory reset, active-path retention and restart persistence.",
+            flush=True,
+        )
+        # A rejected settings schema must leave Jellyfin, the admin page, assets,
+        # and independent diagnostics reachable without rewriting the settings file.
+        plugin_info = next(
+            p
+            for p in call_json("/Plugins")
+            if p["Id"].lower().replace("-", "") == PLUGIN.replace("-", "")
+        )
+        settings_path = (
+            "/config/plugins/configurations/" + plugin_info["ConfigurationFileName"]
+        )
+        saved_xml = docker("exec", CONTAINER, "cat", settings_path)
+        invalid_xml = saved_xml.replace(
+            "<SchemaVersion>1</SchemaVersion>", "<SchemaVersion>999</SchemaVersion>"
+        )
+        assert invalid_xml != saved_xml
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                "-i",
+                CONTAINER,
+                "sh",
+                "-c",
+                'cat > "$1"',
+                "sh",
+                settings_path,
+            ],
+            input=invalid_xml,
+            text=True,
+            check=True,
+        )
+        restart_server()
+        startup = call_json("/LyricBridge/admin/startup")
+        assert startup["state"] == "blocked" and startup["phase"] == "settings", startup
+        assert docker("exec", CONTAINER, "cat", settings_path) == invalid_xml
+        assert call_json("/LyricBridge/admin/upgrades") == []
+        try:
+            call_json("/LyricBridge/service-options")
+            raise AssertionError("Blocked plugin accepted normal work")
+        except urllib.error.HTTPError as error:
+            assert error.code == 503
+        assert (
+            "LyricBridgeConfig"
+            in urllib.request.urlopen(
+                urllib.request.Request(
+                    base + "/web/configurationpage?name=lyricbridge",
+                    headers={"Authorization": authorization + f', Token="{token}"'},
+                )
+            )
+            .read()
+            .decode()
+        )
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                "-i",
+                CONTAINER,
+                "sh",
+                "-c",
+                'cat > "$1"',
+                "sh",
+                settings_path,
+            ],
+            input=saved_xml,
+            text=True,
+            check=True,
+        )
+        restart_server()
+        for _ in range(100):
+            if call_json("/LyricBridge/admin/startup")["state"] == "ready":
+                break
+            time.sleep(0.1)
+        assert call_json("/LyricBridge/admin/startup")["state"] == "ready"
+        print(
+            "PASS: rejected schema preserves settings; Jellyfin and admin diagnostics remain available.",
             flush=True,
         )
         configuration["EnableWebRenderer"] = False

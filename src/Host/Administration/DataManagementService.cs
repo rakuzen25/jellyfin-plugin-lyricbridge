@@ -132,8 +132,8 @@ public sealed partial class DataManagementService(Store store, ManagedLibraryMai
     private string[] Secrets()
     {
         var config = plugin.Value.Configuration;
-        return config.Sources.Select(s => s.Credential).Concat(config.Services.Select(s => s.ApiKey))
-            .Concat(config.ServiceSetup.Connections.Select(c => c.ApiKey)).Concat([config.Transcription.ApiKey, config.Transcription.Review.ApiKey])
+        return config.Sources.Select(s => s.Credential)
+            .Concat(config.ServiceSetup.Connections.Select(c => c.ApiKey))
             .Where(s => !string.IsNullOrEmpty(s)).Distinct().ToArray();
     }
     private JsonNode? Clean(JsonNode? node)
@@ -336,7 +336,7 @@ public sealed partial class DataManagementService(Store store, ManagedLibraryMai
         if (chosen.Any(r => r.Kind == "saved-original")) effects.Add("Deleting a selected original selects its newest surviving version. Deleting the last original suppresses automatic retrieval. Shared content is retained while required.");
         if (chosen.Any(r => r.Kind == "variant")) effects.Add("Deleting a shared language version removes it for every listed song/account and clears choices that select it.");
         if (chosen.Any(r => r.Kind == "job")) effects.Add("Removing finished history ends retry availability and does not restore request quota. Independently saved results remain.");
-        if (IsReset(selection.Action)) effects.Add(selection.Action == "factory-reset" ? "Clears all plugin data, settings and credentials. Keeps the active storage directory. Default provider settings can retrieve lyrics again." : selection.Action == "library-reset" ? "Stops work and clears the managed library. Settings, credentials and account/song preferences remain. Automatic retrieval can refill storage." : "Resets the previewed account/song preferences and auxiliary choices to inherited defaults.");
+        if (IsReset(selection.Action)) effects.Add(selection.Action == "factory-reset" ? "Clears all plugin data, settings, credentials and automatic upgrade backups and records. Keeps the active storage directory. Default provider settings can retrieve lyrics again." : selection.Action == "library-reset" ? "Stops work and clears the managed library. Settings, credentials and account/song preferences remain. Automatic retrieval can refill storage." : "Resets the previewed account/song preferences and auxiliary choices to inherited defaults.");
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)); var expires = DateTimeOffset.UtcNow.AddMinutes(10);
         lock (tickets)
         {
@@ -438,6 +438,7 @@ public sealed partial class DataManagementService(Store store, ManagedLibraryMai
             phase = "audio staging"; await audio.StopUploads(); audio.Clear();
             if (ticket.Selection.Action == "factory-reset")
             {
+                phase = "upgrade backups"; plugin.Value.Upgrades.Clear();
                 phase = "configuration"; plugin.Value.ResetDataConfiguration(store.ActiveStoragePath);
                 phase = "preferences"; store.ResetAllPreferences();
             }

@@ -25,7 +25,7 @@ public sealed class ExportWorkflowTests : IDisposable
         Assert.True(store.SaveTiming(item.Id, store.Selection(item.Id), new(lyrics.Hash, TimingService.Fingerprint(lyrics), 0.25)));
         var registry = ProviderRegistry.WithSources(); var retrieval = new Retrieval(store, registry, NullLogger<Retrieval>.Instance);
         using var discovery = new Discovery(store, registry, retrieval); using var local = new LocalPronunciation(store);
-        var languages = new LanguageServices(() => []); using var generation = new Generation(() => new(true, true, 5, 3), store, languages);
+        var languages = new LanguageServices(ServiceFixtures.Catalog(() => [])); using var generation = new Generation(() => new(true, true, 5, 3), store, languages);
         var preferences = new PreferenceService(store, () => new());
         var query = new LyricQueryService(null!, store, retrieval, discovery, preferences, local, languages, () => [], () => true);
         var service = new SelectionService(store, retrieval, discovery, null!, query);

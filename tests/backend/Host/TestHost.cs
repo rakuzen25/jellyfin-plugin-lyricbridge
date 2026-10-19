@@ -20,6 +20,9 @@ public class TestHost : StorageFixture
         ((Proxy)(object)paths).Root = root;
         var serializer = DispatchProxy.Create<IXmlSerializer, Proxy>();
         var plugin = new Plugin(paths, serializer);
+        if (plugin.Startup.State == "blocked") throw new InvalidOperationException(plugin.Startup.Message);
+        // Unit hosts simulate completed host initialization; startup acceptance uses PluginRuntime.
+        typeof(Plugin).GetMethod("SetStartup", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(plugin, [new PluginStartupStatus("ready", "complete")]);
         plugin.UpdateConfiguration(new Configuration());
         return plugin;
     }

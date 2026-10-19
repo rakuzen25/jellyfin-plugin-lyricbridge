@@ -7,7 +7,7 @@ public sealed class StorageIntegrationTests
     [InlineData(0)]
     [InlineData(3)]
     [InlineData(4)]
-    [InlineData(6)]
+    [InlineData(7)]
     public void UnsupportedPreviewStorageIsNotReinterpreted(int schema)
     {
         var root = Path.Combine(Path.GetTempPath(), "lyricbridge-schema-" + Guid.NewGuid().ToString("N"));

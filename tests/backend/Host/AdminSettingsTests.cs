@@ -13,12 +13,9 @@ public sealed class AdminSettingsTests : TestHost
     {
         Assert.Equal(Jellyfin.Api.Constants.UserRoles.Administrator, typeof(AdminSettingsApi).GetCustomAttribute<AuthorizeAttribute>()?.Roles);
         Plugin.Configuration.Sources.Single(s => s.Name == "Spotify").Credential = "saved-source-secret";
-        Plugin.Configuration.Services[0].ApiKey = "legacy-service-secret";
-        Plugin.Configuration.Transcription.ApiKey = "legacy-transcription-secret";
-        Plugin.Configuration.Transcription.Review.ApiKey = "legacy-review-secret";
         Plugin.Configuration.ServiceSetup = new() { Connections = [new() { Id = "connection", Name = "Fixture", Provider = "AI", Endpoint = "https://example.test/v1", ApiKey = "saved-connection-secret" }] };
         var snapshot = Plugin.ReadAdminSettings(); var json = snapshot.Configuration.ToJsonString();
-        foreach (var secret in new[] { "saved-source-secret", "legacy-service-secret", "legacy-transcription-secret", "legacy-review-secret", "saved-connection-secret" }) Assert.DoesNotContain(secret, json);
+        foreach (var secret in new[] { "saved-source-secret", "saved-connection-secret" }) Assert.DoesNotContain(secret, json);
         Assert.Contains("CredentialPresent", json); Assert.Contains("CredentialVersion", json);
     }
     [Fact]
@@ -26,11 +23,10 @@ public sealed class AdminSettingsTests : TestHost
     {
         var source = Plugin.Configuration.Sources.Single(s => s.Name == "Spotify"); source.Credential = "old-source";
         Plugin.Configuration.ServiceSetup = new() { Connections = [new() { Id = "connection", Name = "Fixture", Provider = "AI", Endpoint = "https://example.test/v1", ApiKey = "old-connection" }] };
-        Plugin.Configuration.Services[0].ApiKey = "legacy";
         var first = Plugin.ReadAdminSettings(); var draft = Draft(first); draft.MinimumMatch = 75;
         var saved = Plugin.SaveAdminSettings(new(draft, first.Revision, [new("source", "Spotify", "replace", "replacement"), new("connection", "connection", "clear")]));
         Assert.Equal("replacement", Plugin.Configuration.Sources.Single(s => s.Name == "Spotify").Credential);
-        Assert.Empty(Plugin.Configuration.ServiceSetup.Connections[0].ApiKey); Assert.Equal("legacy", Plugin.Configuration.Services[0].ApiKey);
+        Assert.Empty(Plugin.Configuration.ServiceSetup.Connections[0].ApiKey);
         Assert.Equal(75, Plugin.Configuration.MinimumMatch); Assert.NotEqual(first.Revision, saved.Revision);
         Assert.Throws<WorkflowException>(() => Plugin.SaveAdminSettings(new(draft, first.Revision)));
         var keep = Plugin.SaveAdminSettings(new(Draft(saved), saved.Revision));
@@ -40,7 +36,7 @@ public sealed class AdminSettingsTests : TestHost
         Plugin.EndDataMaintenance();
     }
     [Fact]
-    public void RejectedSavesDoNotModifyLiveCredentialsAndLegacyWritesInvalidateRevision()
+    public void RejectedSavesDoNotModifyLiveCredentialsAndDirectSettingsWritesInvalidateRevision()
     {
         var before = Plugin.ReadAdminSettings(); var draft = Draft(before);
         Assert.Throws<ArgumentException>(() => Plugin.SaveAdminSettings(new(draft, before.Revision, [new("path", "anything", "clear")])));

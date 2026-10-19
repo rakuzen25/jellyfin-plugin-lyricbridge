@@ -13,7 +13,7 @@ public sealed class AiThinkingTests : LanguageFixture
         var old = (config.Endpoint, config.Model, config.ReasoningEffort, config.TimeoutSeconds, config.ApiKey);
         var httpLog = new CaptureLogger<LanguageServices>();
         var handler = new Handler();
-        var services = Own(new LanguageServices(() => Services, new HttpClient(handler), httpLog));
+        var services = Own(new LanguageServices(ServiceFixtures.Catalog(() => Services), new HttpClient(handler), httpLog));
         var doc = new RichLyrics { Hash = "thinking-fixture", Lines = [new() { Id = "line", Text = "Hello", Language = "en" }] };
         try
         {
@@ -21,28 +21,16 @@ public sealed class AiThinkingTests : LanguageFixture
             config.Model = "fixture";
             config.ReasoningEffort = "";
             config.ApiKey = "synthetic-secret-never-log";
-            var request = new GenerationRequest { Service = "AI" };
+            var request = new GenerationRequest { OptionId = "translation-AI", Service = "AI" };
             var defaultKey = services.Key(doc, request);
             await services.Generate(doc, request, new Progress<int>(), TestContext.Current.CancellationToken);
             Assert.True(!handler.Body!.RootElement.TryGetProperty("reasoning_effort", out _) && handler.Body.RootElement.GetProperty("temperature").GetInt32() == 0, "default omits optional reasoning settings");
             var prompt = handler.Body.RootElement.GetProperty("messages")[0].GetProperty("content").GetString()!;
             Assert.True(prompt.Contains("ONLY its translation") && prompt.Contains("Do not add romaji") && !prompt.Contains("For pronunciation"), "translation prompt excludes pronunciation task");
-            var oldCache = Codec.Hash(Codec.Serialize(new
-            {
-                doc.Hash,
-                request.Kind,
-                request.Language,
-                request.SourceLanguage,
-                request.Service,
-                config.Model,
-                config.Endpoint,
-                Version = 1
-            }));
-            Assert.True(oldCache != defaultKey, "corrected prompt gets fresh cache identity");
-            request.Kind = "pronunciation";
+            request.Kind = "pronunciation"; request.OptionId = "pronunciation-AI";
             await services.Generate(doc, request, new Progress<int>(), TestContext.Current.CancellationToken);
             Assert.True(handler.Body.RootElement.GetProperty("messages")[0].GetProperty("content").GetString()!.Contains("Do not translate"), "pronunciation prompt excludes translation task");
-            request.Kind = "translation";
+            request.Kind = "translation"; request.OptionId = "translation-AI";
             Assert.True(httpLog.Text.Contains("HTTP sending") && httpLog.Text.Contains("status 200") && httpLog.Text.Contains("gen-fixture"), "HTTP phases and provider ID logged");
             Assert.True(!httpLog.Text.Contains("Hello") && !httpLog.Text.Contains("/v1"), "HTTP logs exclude lyrics and path");
             config.ReasoningEffort = "high";
@@ -68,9 +56,9 @@ public sealed class AiThinkingTests : LanguageFixture
             var timeoutStore = Own(new Store(Path.Combine(root, "thinking-timeout")));
             timeoutStore.Put("document", doc.Hash, doc);
             var log = new CaptureLogger<Generation>();
-            var timeoutService = Own(new LanguageServices(() => Services, new HttpClient(new TimeoutHandler())));
+            var timeoutService = Own(new LanguageServices(ServiceFixtures.Catalog(() => Services), new HttpClient(new TimeoutHandler())));
             var worker = Own(new Generation(Policy, timeoutStore, timeoutService, log));
-            var timeoutJob = worker.Request(Guid.NewGuid(), Guid.NewGuid(), doc, new() { Service = "AI" }, true);
+            var timeoutJob = worker.Request(Guid.NewGuid(), Guid.NewGuid(), doc, new() { OptionId = "translation-AI", Service = "AI" }, true);
             await worker.StartAsync(TestContext.Current.CancellationToken);
             for (int attempt = 0; attempt < 70 && timeoutStore.Get<Job>("job", timeoutJob.Id)?.State != "failed"; attempt++)
                 await Task.Delay(100, TestContext.Current.CancellationToken);

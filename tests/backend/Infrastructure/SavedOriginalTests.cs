@@ -175,7 +175,7 @@ public sealed class SavedOriginalTests : IDisposable
         Assert.Equal(history.State, store.GetJob(job.Id)!.State); Assert.True(store.GetJob(job.Id)!.OutputDeleted);
         Assert.False(store.PersistRequest(job, store.Epoch, original, true)); AssertNoDanglingReferences();
         store = new Store(directory); Assert.True(store.GetJob(job.Id)!.OutputDeleted);
-        using var worker = new Generation(() => new(true, true, 5, 3), store, new LanguageServices(() => []));
+        using var worker = new Generation(() => new(true, true, 5, 3), store, new LanguageServices(ServiceFixtures.Catalog(() => [])));
         Assert.Equal("output_deleted", Assert.Throws<WorkflowException>(() => worker.Action(job.Id, "retry", job.UserId, true)).Code);
     }
     [Fact]

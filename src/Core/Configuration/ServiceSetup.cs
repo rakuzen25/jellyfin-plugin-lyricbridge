@@ -30,7 +30,6 @@ public sealed class ServiceOption
 }
 public sealed class ServiceSetup
 {
-    public int Version { get; set; } = 1;
     public ServiceConnection[] Connections { get; set; } = [];
     public ServiceOption[] Options { get; set; } = [];
     public static readonly string[] Capabilities = ["transcription", "translation", "pronunciation", "boundary-review"];
@@ -52,7 +51,7 @@ public sealed class ServiceSetup
     }
     public void Validate(ServiceSetup? previous = null)
     {
-        if (Version != 1 || Connections == null || Options == null || Connections.Any(c => c == null) || Options.Any(o => o == null)) throw new ArgumentException("Invalid service configuration.");
+        if (Connections == null || Options == null || Connections.Any(c => c == null) || Options.Any(o => o == null)) throw new ArgumentException("Invalid service configuration.");
         static bool Id(string value) => !string.IsNullOrEmpty(value) && value.Length <= 100 && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
         if (Connections.Any(c => !Id(c.Id) || string.IsNullOrWhiteSpace(c.Name) || c.Name.Length > 100 || c.Provider is not ("AI" or "DeepL" or "LibreTranslate") || !string.IsNullOrEmpty(c.Endpoint) && !EndpointValid(c.Endpoint)) || Connections.Select(c => c.Id).Distinct().Count() != Connections.Length || Connections.Select(c => c.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != Connections.Length) throw new ArgumentException("Use unique connection names and valid HTTP(S) API URLs without credentials, queries or fragments.");
         if (Options.Any(o => string.IsNullOrWhiteSpace(o.Name) || o.Model == null || o.ReasoningEffort == null) || Options.Select(o => o.Id).Distinct().Count() != Options.Length || Options.GroupBy(o => o.Capability).Any(g => g.Select(o => o.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != g.Count())) throw new ArgumentException("Use unique option names within each capability.");
@@ -69,38 +68,37 @@ public sealed class ServiceSetup
                 if (Options.Any(o => o.ConnectionId == old.Id) && (next == null || next.Provider != old.Provider)) throw new ArgumentException("Remove referencing options before deleting a connection or changing its type.");
             }
     }
-    public static ServiceSetup Migrate(ServiceConfig[] services, TranscriptionConfig transcription)
+    public static ServiceSetup Defaults()
     {
-        var connections = new List<ServiceConnection>(); var options = new List<ServiceOption>();
-        string Connect(string seed, string name, string provider, string endpoint, string key)
+        static string Id() => Guid.NewGuid().ToString("N");
+        var ai = new ServiceConnection { Id = Id(), Name = "AI service" };
+        var deepL = new ServiceConnection { Id = Id(), Name = "DeepL", Provider = "DeepL" };
+        var libre = new ServiceConnection { Id = Id(), Name = "LibreTranslate", Provider = "LibreTranslate" };
+        var audio = new ServiceConnection { Id = Id(), Name = "Transcription service", Endpoint = "https://api.groq.com/openai/v1" };
+        ServiceOption Option(string capability, string provider, ServiceConnection? connection = null, string? name = null) =>
+            new() { Id = Id(), Capability = capability, Provider = provider, Name = name ?? provider, ConnectionId = connection?.Id };
+        return new()
         {
-            var existing = connections.FirstOrDefault(c => c.Provider == provider && c.Endpoint == endpoint && c.ApiKey == key);
-            if (existing != null) return existing.Id;
-            var label = name; for (var i = 2; connections.Any(c => c.Name == label); i++) label = name + " " + i;
-            var c = new ServiceConnection { Id = "connection-" + seed, Name = label, Provider = provider, Endpoint = endpoint, ApiKey = key }; connections.Add(c); return c.Id;
-        }
-        ServiceOption From(string id, string capability, string name, ServiceConfig s) => new() { Id = id, Capability = capability, Name = name, Provider = s.Name, ConnectionId = s.Name is "Google" or "Kawazu" ? null : Connect(s.Name.ToLowerInvariant(), s.Name == "AI" ? "AI service" : s.Name, s.Name, s.Endpoint, s.ApiKey), Model = s.Model, TimeoutSeconds = s.TimeoutSeconds, ReasoningEffort = s.ReasoningEffort, ContextBefore = s.ContextBefore, ContextAfter = s.ContextAfter };
-        foreach (var s in services)
-        {
-            options.Add(From("legacy-translation-" + s.Name.ToLowerInvariant(), "translation", s.Name, s));
-            if (s.Name is "Google" or "AI") options.Add(From("legacy-pronunciation-" + s.Name.ToLowerInvariant(), "pronunciation", s.Name, s));
-        }
-        options.Add(new() { Id = "legacy-pronunciation-kawazu", Capability = "pronunciation", Name = "Japanese romaji", Provider = "Kawazu" });
-        options.Add(new() { Id = "legacy-transcription", Name = "Audio transcription", Capability = "transcription", Provider = "AI", ConnectionId = Connect("transcription", "Transcription service", "AI", transcription.Endpoint, transcription.ApiKey), Enabled = transcription.Enabled, Model = transcription.Model, TimeoutSeconds = transcription.TimeoutSeconds, UploadFormat = transcription.UploadFormat, MaxUploadMb = transcription.MaxUploadMb, MaxInputMb = transcription.MaxInputMb });
-        var review = transcription.ReviewUsesAiService ? services.FirstOrDefault(s => s.Name == "AI") ?? new() { Name = "AI" } : transcription.Review;
-        options.Add(new() { Id = "legacy-boundary-review", Name = "AI line-break review", Capability = "boundary-review", Provider = "AI", ConnectionId = Connect("review", "Review service", "AI", review.Endpoint, review.ApiKey), Model = review.Model, TimeoutSeconds = review.TimeoutSeconds, ReasoningEffort = review.ReasoningEffort });
-        return new() { Connections = connections.ToArray(), Options = options.ToArray() };
+            Connections = [deepL, ai, libre, audio],
+            Options = [Option("translation", "Google"), Option("translation", "DeepL", deepL),
+                Option("translation", "AI", ai), Option("translation", "LibreTranslate", libre),
+                Option("pronunciation", "Google"), Option("pronunciation", "AI", ai),
+                Option("pronunciation", "Kawazu", name: "Japanese romaji"),
+                new() { Id = Id(), Name = "Audio transcription", Capability = "transcription", Provider = "AI", ConnectionId = audio.Id, Enabled = false, Model = "whisper-large-v3" },
+                Option("boundary-review", "AI", ai, "AI line-break review")]
+        };
     }
+
 }
 public sealed record ServiceOptionInfo(string Id, string Name, string Capability, string Provider, string Model, string Status, int MaxInputMb, int MaxUploadMb, string[] Languages);
 public sealed class ServiceCatalog(Func<ServiceSetup> configuration)
 {
     public ServiceSetup Configuration => configuration();
     public IReadOnlyList<ServiceOptionInfo> Options() => Configuration.Options.Select(o => new ServiceOptionInfo(o.Id, o.Name, o.Capability, o.Provider, o.Model, !o.Enabled ? "Disabled" : Configuration.Ready(o) ? "Ready" : "Needs setup", o.MaxInputMb, o.MaxUploadMb, o.Provider == "Google" && o.Capability == "pronunciation" ? ["ja", "ko", "zh", "zh-CN", "zh-TW", "ru", "ar", "hi", "th", "el"] : o.Provider == "Kawazu" ? ["ja"] : ["*"])).ToList();
-    public ServiceOption Resolve(string capability, string? id, string? legacyProvider = null)
+    public ServiceOption Resolve(string capability, string? id)
     {
         var setup = Configuration;
-        var matches = setup.Options.Where(o => o.Capability == capability && (id != null ? o.Id == id : o.Provider == legacyProvider && o.Enabled)).ToList();
+        var matches = setup.Options.Where(o => o.Capability == capability && !string.IsNullOrWhiteSpace(id) && o.Id == id).ToList();
         if (matches.Count != 1) throw new WorkflowException(409, "service_choice_required", "Choose an available service option for this request.");
         var option = matches[0];
         if (!setup.Ready(option)) throw new WorkflowException(409, "service_not_configured", "This option is disabled or needs setup. Choose another option or ask an administrator to configure it.");
@@ -111,32 +109,21 @@ public sealed class ServiceCatalog(Func<ServiceSetup> configuration)
         var c = Configuration.Connections.FirstOrDefault(c => c.Id == option.ConnectionId);
         return new() { Name = option.Provider, Endpoint = c?.Endpoint ?? "", ApiKey = c?.ApiKey ?? "", Model = option.Model, TimeoutSeconds = option.TimeoutSeconds, ModelContextWindow = option.ModelContextWindow, ModelCompletionLimit = option.ModelCompletionLimit, ReasoningEffort = option.ReasoningEffort, ContextBefore = option.ContextBefore, ContextAfter = option.ContextAfter };
     }
-    public void Restore(Job job)
-    {
-        if (job.Request.OptionId != null || job.Profile == null) return;
-        var capability = job.TaskKind == "language" ? job.Request.Kind : job.TaskKind;
-        var id = capability == "transcription" ? "legacy-transcription" : capability == "boundary-review" ? "legacy-boundary-review" : "legacy-" + capability + "-" + job.Request.Service.ToLowerInvariant();
-        var option = Configuration.Options.FirstOrDefault(o => o.Id == id && o.Capability == capability);
-        if (option == null) return;
-        job.Request.OptionId = option.Id; job.Request.OptionName ??= option.Name;
-        if (job.Audio != null) job.Audio = job.Audio with { OptionId = option.Id };
-        if (job.Review != null) job.Review = job.Review with { OptionId = option.Id };
-    }
     public ServiceConfig Language(GenerationRequest request)
     {
-        var option = Resolve(request.Kind, request.OptionId, request.Service);
+        var option = Resolve(request.Kind, request.OptionId);
         request.OptionId = option.Id; request.OptionName = option.Name; request.Service = option.Provider;
         return Settings(option);
     }
     public TranscriptionConfig Transcription(Job job)
     {
-        var option = Resolve("transcription", job.Audio?.OptionId ?? job.Request.OptionId, "AI"); job.Request.OptionId = option.Id; job.Request.OptionName = option.Name;
+        var option = Resolve("transcription", job.Audio?.OptionId); job.Request.OptionId = option.Id; job.Request.OptionName = option.Name;
         var c = Settings(option);
         return new() { Enabled = true, Endpoint = c.Endpoint, ApiKey = c.ApiKey, Model = c.Model, TimeoutSeconds = c.TimeoutSeconds, UploadFormat = option.UploadFormat, MaxInputMb = option.MaxInputMb, MaxUploadMb = option.MaxUploadMb };
     }
     public ServiceConfig Review(Job job)
     {
-        var option = Resolve("boundary-review", job.Review?.OptionId ?? job.Request.OptionId, "AI"); job.Request.OptionId = option.Id; job.Request.OptionName = option.Name;
+        var option = Resolve("boundary-review", job.Review?.OptionId); job.Request.OptionId = option.Id; job.Request.OptionName = option.Name;
         return Settings(option);
     }
 }

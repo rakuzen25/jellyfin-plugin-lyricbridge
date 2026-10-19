@@ -64,9 +64,7 @@ export function createGenerationController(dependencies: Dependencies) {
         text.setAttribute("role", "status");
         parent.append(text);
         try {
-            const selected = services().find(
-                (s) => (s.optionId || s.service) === service && (kind === "translation" ? s.translation : s.pronunciation),
-            );
+            const selected = services().find((s) => s.optionId === service && (kind === "translation" ? s.translation : s.pronunciation));
             if (!selected) throw new Error("Choose an available service option.");
             if (kind === "pronunciation" && !selected.pronunciation) throw new Error("This service cannot generate pronunciation.");
             if (forceNew && (!documentState().auxiliaryChoices?.[kind] || requireValue(documentState().auxiliaryChoices)[kind] === "auto")) {
@@ -97,8 +95,7 @@ export function createGenerationController(dependencies: Dependencies) {
                     ...options,
                     kind,
                     language: documentState().preferences.translationLanguage,
-                    service: selected.service,
-                    ...(selected.optionId ? { optionId: selected.optionId } : {}),
+                    optionId: selected.optionId,
                     forceNew,
                 }),
             );

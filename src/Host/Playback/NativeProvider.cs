@@ -10,6 +10,7 @@ public sealed class NativeProvider(Retrieval retrieval, Store store, Lazy<Plugin
     public string Name => "LyricBridge";
     public async Task<IEnumerable<RemoteLyricInfo>> SearchAsync(LyricSearchRequest request, CancellationToken token)
     {
+        if (plugin.Value.Startup.State != "ready") return [];
         if (request.IsAutomated && !plugin.Value.Configuration.ScheduledRetrieval) return [];
         var track = new TrackMultiArtistMetadata { Title = request.SongName, Artists = request.ArtistNames?.ToList() ?? [], Album = request.AlbumName, AlbumArtists = request.AlbumArtistsNames?.ToList() ?? [], DurationMs = request.Duration is long d ? (int)(d / 10000) : null };
         var candidates = await retrieval.Candidates(track, token, !request.IsAutomated);
@@ -24,6 +25,7 @@ public sealed class NativeProvider(Retrieval retrieval, Store store, Lazy<Plugin
     }
     public async Task<LyricResponse?> GetLyricsAsync(string id, CancellationToken token)
     {
+        if (plugin.Value.Startup.State != "ready") return null;
         var candidate = store.GetCandidate(id); if (candidate == null) return null;
         // This operation returns a stream. LyricBridge never saves beside MediaPath.
         var document = await retrieval.Fetch(candidate, token); return document == null ? null : Response(document);

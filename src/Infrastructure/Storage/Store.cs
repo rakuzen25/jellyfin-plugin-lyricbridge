@@ -3,6 +3,15 @@ namespace LyricBridge;
 
 public sealed partial class Store : IJobRepository, IDisposable
 {
+    public const int CurrentSchema = 6;
+    public void Initialize() { using var connection = Open(); }
+    public static void ValidateSchema(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        using var command = connection.CreateCommand(); command.Transaction = transaction;
+        command.CommandText = "SELECT kind,id,payload FROM records LIMIT 0"; command.ExecuteNonQuery();
+        command.CommandText = "PRAGMA quick_check";
+        if (!Equals(command.ExecuteScalar(), "ok")) throw new InvalidDataException("Database integrity check failed.");
+    }
     private readonly Lazy<string> connectionString;
     private readonly object connectionGate = new();
     private string? poolConnectionString;
@@ -25,7 +34,7 @@ public sealed partial class Store : IJobRepository, IDisposable
     }
 
     public Store(string directory) : this(() => directory) { }
-    public Store(Func<string> directoryFactory)
+    public Store(Func<string> directoryFactory, Func<StateUpgrades>? upgrades = null)
     {
         connectionString = new Lazy<string>(() =>
         {
@@ -37,14 +46,17 @@ public sealed partial class Store : IJobRepository, IDisposable
             poolConnectionString = result;
             using var c = new SqliteConnection(result);
             c.Open();
+            if (upgrades != null) upgrades().Database(c, CurrentSchema, ValidateSchema);
+            else
+            {
+                using var version = c.CreateCommand(); version.CommandText = "PRAGMA user_version";
+                var schema = Convert.ToInt32(version.ExecuteScalar());
+                version.CommandText = "SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'";
+                if (schema != CurrentSchema && (schema != 0 || Convert.ToInt32(version.ExecuteScalar()) != 0))
+                    throw new InvalidDataException("Unsupported LyricBridge database schema. Stop Jellyfin, back up storage and use an empty directory.");
+            }
             using var cmd = c.CreateCommand();
-            cmd.CommandText = "PRAGMA user_version";
-            var schema = Convert.ToInt32(cmd.ExecuteScalar());
-            cmd.CommandText = "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='records'";
-            var existing = Convert.ToInt32(cmd.ExecuteScalar()) != 0;
-            if (schema != 5 && (schema != 0 || existing))
-                throw new InvalidDataException("Unsupported LyricBridge database schema. Stop Jellyfin, back up the LyricBridge storage directory, and configure a new empty storage directory. Existing data has not been changed.");
-            cmd.CommandText = "PRAGMA journal_mode=WAL; PRAGMA user_version=5; CREATE TABLE IF NOT EXISTS records (kind TEXT NOT NULL, id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(kind,id)); CREATE INDEX IF NOT EXISTS jobs_user_created ON records(json_extract(payload,'$.userId'),json_extract(payload,'$.created'),id) WHERE kind='job'; CREATE INDEX IF NOT EXISTS jobs_created ON records(json_extract(payload,'$.created'),id) WHERE kind='job'; CREATE INDEX IF NOT EXISTS jobs_user_state ON records(json_extract(payload,'$.userId'),json_extract(payload,'$.state'),json_extract(payload,'$.cacheKey')) WHERE kind='job'; CREATE INDEX IF NOT EXISTS jobs_state ON records(json_extract(payload,'$.state'),json_extract(payload,'$.created')) WHERE kind='job'; CREATE INDEX IF NOT EXISTS variants_hash ON records(json_extract(payload,'$.hash')) WHERE kind='variant';";
+            cmd.CommandText = $"PRAGMA journal_mode=WAL; PRAGMA user_version={CurrentSchema}; CREATE TABLE IF NOT EXISTS records (kind TEXT NOT NULL, id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(kind,id)); CREATE INDEX IF NOT EXISTS jobs_user_created ON records(json_extract(payload,'$.userId'),json_extract(payload,'$.created'),id) WHERE kind='job'; CREATE INDEX IF NOT EXISTS jobs_created ON records(json_extract(payload,'$.created'),id) WHERE kind='job'; CREATE INDEX IF NOT EXISTS jobs_user_state ON records(json_extract(payload,'$.userId'),json_extract(payload,'$.state'),json_extract(payload,'$.cacheKey')) WHERE kind='job'; CREATE INDEX IF NOT EXISTS jobs_state ON records(json_extract(payload,'$.state'),json_extract(payload,'$.created')) WHERE kind='job'; CREATE INDEX IF NOT EXISTS variants_hash ON records(json_extract(payload,'$.hash')) WHERE kind='variant';";
             cmd.ExecuteNonQuery();
             InitializeRetention(c);
             return result;

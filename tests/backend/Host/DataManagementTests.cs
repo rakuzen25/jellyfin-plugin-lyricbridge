@@ -13,16 +13,6 @@ public class DataLookupProxy : DispatchProxy
     protected override object? Invoke(MethodInfo? method, object?[]? args) => null;
 }
 
-public class DataFailingSerializer : DispatchProxy
-{
-    public bool Fail;
-    protected override object? Invoke(MethodInfo? method, object?[]? args)
-    {
-        if (Fail && method?.Name.StartsWith("Serialize", StringComparison.Ordinal) == true) throw new IOException("Synthetic configuration persistence failure.");
-        return null;
-    }
-}
-
 public sealed class DataManagementTests : TestHost
 {
     private sealed class Audio : IAudioPreparation
@@ -36,7 +26,7 @@ public sealed class DataManagementTests : TestHost
     private (DataManagementService Data, Store Store, Audio Audio) Create(Plugin? owner = null)
     {
         var store = Own(new Store(Path.Combine(Root, "custom")));
-        var languages = Own(new LanguageServices(() => []));
+        var languages = Own(new LanguageServices(ServiceFixtures.Catalog(() => [])));
         var retrieval = new Retrieval(store, ProviderRegistry.WithSources(), NullLogger<Retrieval>.Instance);
         var discovery = Own(new Discovery(store, ProviderRegistry.WithSources(), retrieval));
         var local = Own(new LocalPronunciation(store)); var generation = Own(new Generation(() => new(true, true, 100, 10), store, languages));
@@ -126,16 +116,15 @@ public sealed class DataManagementTests : TestHost
         Assert.Throws<WorkflowException>(() => data.Entities(false, null, null, false, -1, 50));
     }
     [Fact]
-    public void ConfigurationAndRawDetailsExcludeLegacyCurrentAndNestedCredentials()
+    public void ConfigurationAndRawDetailsExcludeCurrentAndNestedCredentials()
     {
         var (data, store, _) = Create();
         Plugin.Configuration.Sources[0].Credential = "source-secret-fixture";
-        Plugin.Configuration.Services[0].ApiKey = "legacy-secret-fixture";
-        Plugin.Configuration.Transcription.ApiKey = "transcription-secret-fixture";
+        Plugin.Configuration.Sources[1].Credential = "raw-secret-fixture";
         Plugin.Configuration.ServiceSetup = new() { Connections = [new() { Id = "test", Name = "test", ApiKey = "connection-secret-fixture" }] };
-        store.Put("raw", "fixture", new RawLyrics("legacy-secret-fixture", RawResponse: "{\"authorization\":\"unknown-secret-fixture\",\"nested\":{\"api_key\":\"other-secret-fixture\"}}"));
+        store.Put("raw", "fixture", new RawLyrics("raw-secret-fixture", RawResponse: "{\"authorization\":\"unknown-secret-fixture\",\"nested\":{\"api_key\":\"other-secret-fixture\"}}"));
         var config = Codec.Serialize(data.Configuration()); var raw = Codec.Serialize(data.Detail(new("raw", "fixture")));
-        foreach (var secret in new[] { "source-secret-fixture", "legacy-secret-fixture", "transcription-secret-fixture", "connection-secret-fixture", "unknown-secret-fixture", "other-secret-fixture" })
+        foreach (var secret in new[] { "source-secret-fixture", "raw-secret-fixture", "connection-secret-fixture", "unknown-secret-fixture", "other-secret-fixture" })
         { Assert.DoesNotContain(secret, config); Assert.DoesNotContain(secret, raw); }
         Assert.Contains("apiKeyPresent", config); Assert.Contains("authorizationPresent", raw);
         store.Put("raw", "opaque", new RawLyrics("hello", RawResponse: "Authorization: Bearer unknown-opaque-secret"));
@@ -243,8 +232,7 @@ public sealed class DataManagementTests : TestHost
         await Confirm(data, data.Preview(Guid.Empty, new("factory-reset")));
         Assert.Empty(store.InspectData()); Assert.Equal(store.ActiveStoragePath, Plugin.Configuration.StoragePath);
         Assert.Equal(0, ((Dictionary<string, long>)store.InspectBookkeeping())["deletion_revisions"]);
-        Assert.All(Plugin.Configuration.Sources, source => Assert.Empty(source.Credential)); Assert.All(Plugin.Configuration.Services, service => Assert.Empty(service.ApiKey));
-        Assert.Empty(Plugin.Configuration.Transcription.ApiKey); Assert.All(Plugin.Configuration.ServiceSetup.Connections, c => Assert.Empty(c.ApiKey));
+        Assert.All(Plugin.Configuration.Sources, source => Assert.Empty(source.Credential));
         using var stale = store.Operation(old); store.SaveAccountPreferences(user, new()); Assert.Null(store.AccountPreferences(user));
         using var restarted = new Store(store.ActiveStoragePath); Assert.Empty(restarted.InspectData());
     }
@@ -260,14 +248,12 @@ public sealed class DataManagementTests : TestHost
     [Fact]
     public async Task ConfigurationPersistenceFailureDoesNotReportACompletedFactoryReset()
     {
-        var paths = DispatchProxy.Create<IApplicationPaths, Proxy>(); ((Proxy)(object)paths).Root = Path.Combine(Root, "settings"); Directory.CreateDirectory(((Proxy)(object)paths).Root);
-        var serializer = DispatchProxy.Create<IXmlSerializer, DataFailingSerializer>();
-        var owner = new Plugin(paths, serializer); owner.UpdateConfiguration(new Configuration());
+        var owner = TestHost.CreatePlugin(Path.Combine(Root, "settings"));
         var (data, store, _) = Create(owner); var song = Guid.NewGuid(); store.Save(song, Lyrics("saved"));
-        ((DataFailingSerializer)(object)serializer).Fail = true;
+        File.Delete(owner.ConfigurationFilePath); Directory.CreateDirectory(owner.ConfigurationFilePath);
         var result = await Confirm(data, data.Preview(Guid.Empty, new("factory-reset")));
         Assert.False(result.Complete); Assert.Equal("configuration", result.Phase); Assert.Single(store.SavedOriginals(song)); Assert.False(store.IsResetting);
-        ((DataFailingSerializer)(object)serializer).Fail = false;
+        Directory.Delete(owner.ConfigurationFilePath);
         Assert.True((await Confirm(data, data.Preview(Guid.Empty, new("factory-reset")))).Complete);
     }
     [Fact]

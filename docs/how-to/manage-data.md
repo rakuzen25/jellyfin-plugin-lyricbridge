@@ -55,9 +55,15 @@ Select the narrowest operation that meets your goal:
 
 Library reset stops active work. Enabled retrieval can refill storage afterward.
 
-Factory reset also clears credentials and cancels pending relocation. Resolve unsaved settings edits before proceeding.
+Factory reset also clears credentials, automatic upgrade backups and their history, and cancels pending relocation. Resolve unsaved settings edits before proceeding.
 If reset partially fails, inspect its reported phase and remaining data before previewing a retry.
 Previous storage locations are not cleaned automatically.
+
+## Manage automatic upgrade backups
+
+Use **Upgrade history and backups** on the plugin settings page to acknowledge completed upgrades or preview and confirm backup deletion.
+Backups expire 30 days after creation; library and preference resets retain them. Factory reset removes them.
+For recovery, follow [downgrade and restore](install.md#downgrade-and-restore-an-upgrade-backup) before deleting a needed backup.
 
 ## Diagnose a request
 

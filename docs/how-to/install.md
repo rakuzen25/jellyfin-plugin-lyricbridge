@@ -18,6 +18,7 @@ The plugin includes its dependencies, pronunciation dictionaries, and web render
 ## Back up or relocate storage
 
 Keep the complete plugin storage directory with your Jellyfin configuration backups. It contains saved lyrics, preferences, requests, and transcripts.
+Back up the plugin settings XML and the upgrade directory shown in **Upgrade history and backups** as well; a custom lyric storage path can place these outside that directory.
 Use a writable filesystem that supports SQLite locking. Media-library mounts can stay read-only.
 
 For Docker, bind a host directory to a container path before entering that path in **Lyric storage directory**. Entering a host path alone does not create a mount.
@@ -32,6 +33,40 @@ A path change requires restart. Until then, data actions affect the active direc
 If startup rejects an unsupported storage schema, preserve the old directory and configure empty replacement storage. Do not overwrite the rejected database.
 
 Jellyfin's **Save lyrics into media folders** setting controls its standard lyric files. LyricBridge's rich lyrics always use separate plugin storage.
+
+## Inspect startup and upgrades
+
+Open **Dashboard → Plugins → LyricBridge** to inspect startup status and **Upgrade history and backups**.
+A blocked startup pauses LyricBridge work while Jellyfin remains available. The page shows the failed phase, affected path, and diagnostic ID for the server logs.
+Correct the reported problem, then restart Jellyfin.
+
+This testing baseline requires fresh settings and storage. Preserve existing testing files before choosing fresh state; this release supplies no upgrade steps.
+To start fresh, stop Jellyfin and move the reported settings XML and complete plugin storage directories to a separate backup location, then restart. Removing settings selects the default storage location; preserve custom storage separately.
+Future releases can upgrade one explicitly supported predecessor automatically before plugin work starts.
+Successful upgrades show a notice until an administrator selects **Acknowledge upgrade**.
+
+Automatic backups retain their original schema. The history shows source and target plugin versions, backup locations, sizes, and expiry dates.
+Backups expire 30 days after creation; cleanup runs at startup and daily. Once verification succeeds, use **Review backup deletion** and confirm **Delete backup** to reclaim space earlier.
+Acknowledgement retains the backup until deletion or expiry. Keep independent backups if you need a longer recovery window.
+
+## Downgrade and restore an upgrade backup
+
+Use this procedure when an upgrade causes problems and its automatic backup is still available.
+Restore the recorded source release and matching state together; the installed release may not understand the backup's schema.
+Settings backups can contain credentials. Keep all copies private.
+
+1. Open **Upgrade history and backups** and record the source plugin version, affected domain, original file path, backup path, and expiry date for each upgrade involved.
+2. Download the recorded source release's plugin archive and matching web archive from the project's releases. Suspend any automated plugin replacement until recovery is verified.
+3. Stop Jellyfin and confirm the process has exited.
+4. Copy the failing plugin settings file, complete storage directory (including SQLite sidecars and staged audio), and upgrade backup directory to a separate recovery location. Copy the automatic backups there before their expiry.
+5. Move the installed LyricBridge plugin directory outside Jellyfin's plugin discovery directory. Install the source release's plugin archive in its place; retain its matching manifest and dependencies.
+6. Copy each settings backup to its recorded original settings-file path. Restore only the domains covered by the selected upgrade records.
+7. Move the stopped database's `index.sqlite-wal` and `index.sqlite-shm` sidecars to the recovery location, if present. Copy the database backup to its recorded original database path. The automatic SQLite backup already includes committed WAL data; don't attach sidecars from the failing database.
+8. Restore the original file ownership and access permissions. Reinstall matching web assets into separately hosted clients; server-managed integration reconciles its assets on startup.
+9. Start Jellyfin and reload browser clients. Inspect startup status and logs, then verify settings, saved lyrics, playback, and the transcription or generation workflows you use.
+
+Restoring a backup discards changes made to that domain after the backup. Keep the failing-state copy until recovery is verified.
+If a required backup has expired or been deleted, use an independent backup or fresh plugin state.
 
 ## Repair web integration
 

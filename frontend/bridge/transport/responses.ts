@@ -220,8 +220,9 @@ export function parseServices(value: unknown): ServiceCapability[] {
             (v: unknown): v is ServiceCapability =>
                 isRecord(v) &&
                 typeof v.service === "string" &&
-                (v.optionId == null || typeof v.optionId === "string") &&
-                (v.name == null || typeof v.name === "string") &&
+                typeof v.optionId === "string" &&
+                v.optionId.length > 0 &&
+                typeof v.name === "string" &&
                 typeof v.translation === "boolean" &&
                 typeof v.pronunciation === "boolean" &&
                 strings(v.languages),

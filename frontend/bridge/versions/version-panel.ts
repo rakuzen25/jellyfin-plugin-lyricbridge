@@ -728,7 +728,7 @@ export function createVersionPanel(dependencies: Dependencies) {
                     );
                     const choices: [string, string][] = available
                         .filter((s) => (s.service === "Kawazu" ? kind === "pronunciation" && japanese : documentState().canGenerate))
-                        .map((s) => [s.optionId || s.service, s.name || (s.service === "Kawazu" ? "Local (Kawazu)" : s.service)]);
+                        .map((s) => [s.optionId, s.name]);
                     if (!choices.length) {
                         prepareBody.append(e("p", "lb-help", "External generation is unavailable for your account."));
                         return;
@@ -761,7 +761,7 @@ export function createVersionPanel(dependencies: Dependencies) {
                     );
                     thinking.dataset.generationKey = "reasoningEffort";
                     const showAdvanced = (value: string) => {
-                        const provider = available.find((s) => (s.optionId || s.service) === value)?.service || value;
+                        const provider = available.find((s) => s.optionId === value)?.service;
                         advanced.hidden = !value || provider === "Kawazu";
                         requireValue(thinking.closest<HTMLElement>(".lb-field")).hidden = provider !== "AI";
                         for (const input of advanced.querySelectorAll<HTMLElement>('[data-generation-key^="context"]'))
@@ -778,8 +778,8 @@ export function createVersionPanel(dependencies: Dependencies) {
                         "Start generation",
                         async () => {
                             if (!method.value) return;
-                            const selected = available.find((s) => (s.optionId || s.service) === method.value);
-                            if ((selected?.service || method.value) !== "Kawazu") {
+                            const selected = available.find((s) => s.optionId === method.value);
+                            if (selected?.service !== "Kawazu") {
                                 const chosen = method.value;
                                 start.disabled = true;
                                 method.disabled = true;
@@ -801,7 +801,7 @@ export function createVersionPanel(dependencies: Dependencies) {
                                     hash: requireValue(documentState().lyrics).hash,
                                     includeSupplied: true,
                                     retry: true,
-                                    ...(selected?.optionId ? { optionId: selected.optionId } : {}),
+                                    optionId: requireValue(selected).optionId,
                                 });
                                 if (context.scope !== target) return;
                                 await refreshSong();

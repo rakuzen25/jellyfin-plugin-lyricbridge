@@ -13,16 +13,16 @@ public sealed class GenerationProfileTests : LanguageFixture
         var original = (config.Endpoint, config.Model, config.ApiKey);
         try
         {
-            config.Endpoint = "http://synthetic.invalid/v1?secret=endpoint-secret";
+            config.Endpoint = "http://synthetic.invalid/endpoint-secret/v1";
             config.Model = "model-a";
             config.ApiKey = "credential-secret";
             var handler = new SnapshotHandler();
-            var services = Own(new LanguageServices(() => Services, new HttpClient(handler)));
+            var services = Own(new LanguageServices(ServiceFixtures.Catalog(() => Services), new HttpClient(handler)));
             var store = Own(new Store(Path.Combine(root, "generation-profile")));
             var doc = new RichLyrics { Hash = "profile-fixture", Lines = [new() { Id = "line", Text = "hello", Language = "en" }] };
             store.Put("document", doc.Hash, doc);
             var worker = Own(new Generation(Policy, store, services));
-            var job = worker.Request(Guid.NewGuid(), Guid.NewGuid(), doc, new() { Service = "AI" }, true);
+            var job = worker.Request(Guid.NewGuid(), Guid.NewGuid(), doc, new() { OptionId = "translation-AI", Service = "AI" }, true);
             var originalKey = job.CacheKey;
             Assert.True(!Codec.Serialize(job).Contains("secret"), "profile must not persist endpoint or credential secrets");
             config.Model = "model-b";
@@ -41,9 +41,9 @@ public sealed class GenerationProfileTests : LanguageFixture
             Assert.True(variant.Profile == retry.Profile, "saved version retains generation profile");
             Assert.True(variant.CacheKey == retry.CacheKey, "result keeps dispatched identity");
             await worker.StopAsync(TestContext.Current.CancellationToken);
-            var before = services.CurrentProfile(new() { Service = "AI" });
+            var before = services.CurrentProfile(new() { OptionId = "translation-AI", Service = "AI" });
             config.ApiKey = "another-secret";
-            Assert.True(before == services.CurrentProfile(new() { Service = "AI" }), "credential rotation preserves profile");
+            Assert.True(before == services.CurrentProfile(new() { OptionId = "translation-AI", Service = "AI" }), "credential rotation preserves profile");
         }
         finally { (config.Endpoint, config.Model, config.ApiKey) = original; }
     }

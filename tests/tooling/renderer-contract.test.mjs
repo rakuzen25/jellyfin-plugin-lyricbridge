@@ -27,15 +27,12 @@ test("shared globals and bridge consumers retain their contract boundaries", () 
     assert.throws(() => checkRendererContract("bridge/runtime.ts", 'window["JellyfinLyricMotion"]?.dispose();'), /narrow port/);
 });
 
-test("renderer contracts preserve the legacy API and type partial hosts and narrow bridge access", () => {
+test("renderer contracts type partial hosts and narrow bridge access", () => {
     const file = fileURLToPath(new URL("../../frontend/renderer/contract.fixture.ts", import.meta.url));
     const source = `
         import type { RendererApi, RendererBridgePort, RendererPort } from "../contracts/renderer.ts";
-        import type { RendererApi as LegacyApi } from "./runtime.ts";
         import type { LyricSessionStatePort } from "./lyrics/session-ports.ts";
         declare const session: LyricSessionStatePort;
-        type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
-        const legacy: Equal<RendererApi, LegacyApi> = true;
         declare const full: RendererApi;
         const bridge: RendererBridgePort = full;
         const tv: RendererPort = { version: "fixture", enabled: false };

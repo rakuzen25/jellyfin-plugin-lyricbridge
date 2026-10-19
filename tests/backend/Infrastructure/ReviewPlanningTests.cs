@@ -58,7 +58,7 @@ public sealed class ReviewPlanningTests : StorageFixture
         using (var store = new Store(Root))
         using (var provider = new TranscriptionProvider())
         {
-            var task = new BoundaryReviewTask(() => new() { Endpoint = "https://fixture.invalid/v1", Model = "fixture" }, store, provider, new LinguisticBoundaries());
+            var task = new BoundaryReviewTask(_ => new() { Endpoint = "https://fixture.invalid/v1", Model = "fixture" }, store, provider, new LinguisticBoundaries());
             Assert.Equal(1, task.Plan(store.GetJob(jobId)!).RequestCount);
             Assert.Empty(store.SavedEntries(source.Id));
         }
@@ -107,15 +107,15 @@ public sealed class ReviewPlanningTests : StorageFixture
             return new(HttpStatusCode.OK) { Content = new StringContent(Codec.Serialize(new { choices = new[] { new { message = new { content = Codec.Serialize(new { endTokenIds = new[] { input.RootElement.GetProperty("requiredFinalEndTokenId").GetString() } }) } } } })) };
         }));
         using var provider = new TranscriptionProvider(http); var strategy = new LinguisticBoundaries();
-        var task = new BoundaryReviewTask(() => config, store, provider, strategy);
-        var job = new Job { TaskKind = "boundary-review", State = "running", ItemId = source.ItemId, UserId = source.UserId, Hash = source.Id, Review = new(source.Id, version.Id, new()) };
+        var task = new BoundaryReviewTask(_ => config, store, provider, strategy);
+        var job = new Job { TaskKind = "boundary-review", State = "running", ItemId = source.ItemId, UserId = source.UserId, Hash = source.Id, Review = new(source.Id, version.Id, new(), Snapshot: version) };
         job.Profile = task.Profile(job); store.Put("job", job.Id, job);
         await Assert.ThrowsAsync<ServiceFailure>(() => task.Execute(job, new Progress<int>(), TestContext.Current.CancellationToken));
         Assert.Single(store.ReviewCheckpoints(job.Id)); Assert.Single(store.BoundaryVersions(source.Id));
         var completed = store.ReviewCheckpoints(job.Id)[0]; fail = false;
         // A fresh repository and handler must recover the same checkpoint after restart.
         using var resumed = new Store(store.ActiveStoragePath);
-        var resumedTask = new BoundaryReviewTask(() => config, resumed, provider, strategy);
+        var resumedTask = new BoundaryReviewTask(_ => config, resumed, provider, strategy);
         job = resumed.GetJob(job.Id)!;
         if (changeConfiguration) { config.Model = "different-model"; job.Profile = resumedTask.Profile(job); resumed.SaveJob(job); }
         await resumedTask.Execute(job, new Progress<int>(), TestContext.Current.CancellationToken);
