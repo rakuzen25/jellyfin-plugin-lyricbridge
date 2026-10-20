@@ -54,16 +54,25 @@ public sealed class ImprovementTests : StorageFixture
         var root = Root;
         var store = Own(new Store(Path.Combine(root, "discovery")));
         var line = new OutcomeSource("QQ", new("[00:01.00]hello"), 20);
-        var word = new OutcomeSource("NetEase", new("[1000,1000](1000,500,0)hel(1500,500,0)lo"), 3200);
+        var releaseWord = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var word = new GatedOutcomeSource(new OutcomeSource("NetEase", new("[1000,1000](1000,500,0)hel(1500,500,0)lo"), 0), releaseWord.Task);
         var registry = ProviderRegistry.WithSources(line, word);
         var retrieval = new Retrieval(store, registry, NullLogger<Retrieval>.Instance);
         var discovery = Own(new Discovery(store, registry, retrieval));
         var item = Guid.NewGuid();
         var track = new TrackMultiArtistMetadata { Title = "title", Artists = ["artist"] };
-        discovery.Start(item, track);
-        await Task.Delay(2750, TestContext.Current.CancellationToken);
-        var early = discovery.Status(item);
-        Assert.True(early.Lyrics != null && !early.Complete, "first lyrics visible before all providers finish");
+        try
+        {
+            discovery.Start(item, track);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+            deadline.CancelAfter(TimeSpan.FromSeconds(10));
+            while (discovery.Status(item).Lyrics is null)
+                await Task.Delay(20, deadline.Token);
+            var early = discovery.Status(item);
+            Assert.False(early.Complete);
+            Assert.False(early.Lyrics!.WordTimed);
+        }
+        finally { releaseWord.TrySetResult(); }
         for (int i = 0; i < 40 && !discovery.Status(item).Complete; i++)
             await Task.Delay(100, TestContext.Current.CancellationToken);
         var complete = discovery.Status(item);
@@ -136,6 +145,17 @@ public sealed class ImprovementTests : StorageFixture
         for (int i = 0; i < 100 && !deadline.Status(deadlineItem).Complete; i++)
             await Task.Delay(100, TestContext.Current.CancellationToken);
         Assert.True(deadline.Status(deadlineItem).State == "failed" && deadline.Status(deadlineItem).Errors.Any(error => error.Code == "discovery_timeout"), "overall discovery deadline, distinct from empty searches");
+    }
+
+    private sealed class GatedOutcomeSource(ILyricSource source, Task release) : ILyricSource
+    {
+        public string Name => source.Name;
+        public async Task<List<Candidate>> Search(TrackMultiArtistMetadata track, CancellationToken token)
+        {
+            await release.WaitAsync(token);
+            return await source.Search(track, token);
+        }
+        public Task<RawLyrics?> Fetch(Candidate candidate, CancellationToken token) => source.Fetch(candidate, token);
     }
 }
 public sealed class OutcomeSource(string name, RawLyrics raw, int delay) : ILyricSource

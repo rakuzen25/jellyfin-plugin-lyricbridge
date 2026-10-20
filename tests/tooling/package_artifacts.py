@@ -1,45 +1,19 @@
-"""Validate built archives without loading code or contacting external services."""
+"""Lyric-specific renderer, dictionary and inherited-source acceptance."""
 
-import hashlib
 import io
-import json
 import tarfile
 import zipfile
 from pathlib import Path
 
-from scripts.common.release_metadata import load_release
-from scripts.common.source_inventory import source_files
+from jellyfin_plugin_toolkit.acceptance import inventory
+from jellyfin_plugin_toolkit.common.release_metadata import load_release
+from jellyfin_plugin_toolkit.context import Context
 
+inventory(Context.load())
 repository = Path(__file__).resolve().parents[2]
 root = repository / "dist"
-release = load_release(repository)
-version = release.version
-
-for line in (root / "SHA256SUMS").read_text().splitlines():
-    digest, name = line.split("  ", 1)
-    assert Path(name).name == name, "Unexpected checksum path"
-    assert hashlib.sha256((root / name).read_bytes()).hexdigest() == digest, name
+version = load_release(repository).version
 with zipfile.ZipFile(root / f"lyricbridge-{version}.zip") as archive:
-    metadata = json.loads(archive.read("meta.json"))
-    assert (metadata["guid"], metadata["version"], metadata["targetAbi"]) == (
-        release.guid,
-        release.jellyfin_version,
-        release.abi,
-    )
-    manifest = json.loads((root / "manifest.json").read_text())
-    assert manifest[0]["guid"] == release.guid
-    assert manifest[0]["versions"][0]["version"] == release.jellyfin_version
-    assert manifest[0]["versions"][0]["targetAbi"] == release.abi
-    inventory = json.loads(archive.read("dependency-inventory.json"))["files"]
-    assert {name for name in archive.namelist() if name.endswith(".dll")} <= {
-        entry["file"] for entry in inventory
-    }
-    for entry in inventory:
-        assert (
-            hashlib.sha256(archive.read(entry["file"])).hexdigest() == entry["sha256"]
-        ), entry["file"]
-        for notice in entry["notices"]:
-            assert archive.read(notice), notice
     with tarfile.open(
         fileobj=io.BytesIO(archive.read("notices/LIBNMECAB-SOURCE.tar.gz")), mode="r:gz"
     ) as source:
@@ -57,53 +31,11 @@ with zipfile.ZipFile(root / f"lyricbridge-{version}.zip") as archive:
         archive.read("notices/OPENCC-THIRD-PARTY-NOTICES.md")
         == (repository / "vendor/OPENCC-THIRD-PARTY-NOTICES.md").read_bytes()
     ), "Missing pinned OpenCC attribution"
-    assert not any(
-        name.startswith(
-            ("MediaBrowser.", "Microsoft.Data.Sqlite", "SQLitePCLRaw.", "Jellyfin.Api.")
-        )
-        for name in archive.namelist()
-    )
-    print(
-        f"PASS: {len(inventory)} binary/dictionary inventory entries, hashes and notices."
-    )
 with zipfile.ZipFile(root / f"lyricbridge-source-{version}.zip") as archive:
-    for source_path in source_files(repository):
-        assert (
-            archive.read(source_path.as_posix())
-            == (repository / source_path).read_bytes()
-        ), f"Missing or stale maintained source: {source_path}"
     for name in ("demo.html", "demo.wav"):
         assert archive.read("frontend/assets/" + name), (
             "Development demo missing from editable source"
         )
-    assert "scripts/build/package.py" in archive.namelist()
-    assert ".github/workflows/validate.yml" in archive.namelist()
-    for name in (
-        "package.json",
-        "pnpm-workspace.yaml",
-        "pnpm-lock.yaml",
-        "pyproject.toml",
-        "requirements-check.txt",
-        "eslint.config.mjs",
-        ".prettierrc.json",
-        ".prettierignore",
-        "knip.json",
-        "release-please-config.json",
-        ".release-please-manifest.json",
-        "version.txt",
-        ".python-version",
-        "docs/how-to/release.md",
-        "scripts/release/__main__.py",
-    ):
-        assert archive.read(name) == (repository / name).read_bytes(), (
-            f"Missing or stale validation/workspace input: {name}"
-        )
-    assert not any(name.endswith("package-lock.json") for name in archive.namelist()), (
-        "Obsolete npm lockfile packaged"
-    )
-    assert "frontend/bridge/transport/transport.ts" in archive.namelist()
-    assert "frontend/admin/config.ts" in archive.namelist()
-    assert "docs/explanation/architecture.md" in archive.namelist()
     for path in (repository / "frontend" / "renderer").rglob("*.ts"):
         if path.name.endswith(".test.ts"):
             continue
@@ -117,35 +49,6 @@ with zipfile.ZipFile(root / f"lyricbridge-source-{version}.zip") as archive:
         assert b"https://mozilla.org/MPL/2.0/" in archive.read(relative), (
             f"Missing derived-source notice: {relative}"
         )
-    for name in (
-        "frontend/renderer.ts",
-        "frontend/build.mjs",
-        "frontend/package.json",
-        "frontend/tsconfig.json",
-    ):
-        assert archive.read(name) == (repository / name).read_bytes(), (
-            f"Missing or stale source/build input: {name}"
-        )
-    for path in (repository / "frontend").rglob("*.ts"):
-        if "node_modules" in path.parts:
-            continue
-        relative = path.relative_to(repository).as_posix()
-        assert archive.read(relative) == path.read_bytes(), (
-            f"Missing or stale editable application source: {relative}"
-        )
-    assert not any(
-        name in archive.namelist()
-        for name in ("frontend/bridge.js", "frontend/renderer.js")
-    ), "Unchecked legacy application source retained"
-    assert not any(
-        "/node_modules/" in name or "/obj/" in name for name in archive.namelist()
-    )
-    assert not any(
-        name.startswith("tests/browser/results") for name in archive.namelist()
-    ), "Generated browser diagnostics shipped as source"
-    print(
-        "PASS: executable source scripts, typed modules and CI included; build caches excluded."
-    )
 with zipfile.ZipFile(root / f"lyricbridge-web-{version}.zip") as archive:
     assert not {"demo.html", "demo.wav"}.intersection(archive.namelist()), (
         "Development demos shipped in web release"

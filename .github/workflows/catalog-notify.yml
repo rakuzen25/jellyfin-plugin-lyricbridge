@@ -1,4 +1,4 @@
-name: Notify shared plugin catalog
+name: Notify configured plugin catalog
 on:
   release:
     types: [published]
@@ -6,32 +6,17 @@ on:
     inputs:
       tag:
         description: Published stable release tag to retry
-        required: true
         type: string
+        required: true
 permissions:
   contents: read
-concurrency:
-  group: catalog-notify-${{ github.repository }}-${{ github.event.release.id || inputs.tag }}
-  cancel-in-progress: false
 jobs:
   notify:
     if: github.event_name == 'workflow_dispatch' || (!github.event.release.draft && !github.event.release.prerelease)
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: app
-        with:
-          client-id: ${{ vars.PLUGIN_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PLUGIN_APP_PRIVATE_KEY }}
-          owner: rakuzen25
-          repositories: jellyfin-plugin-manifest
-          permission-contents: write
-      - name: Notify catalog (identity is revalidated by the receiver)
-        env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-          SOURCE_REPOSITORY: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
-        run: |
-          jq -n --arg repository "$SOURCE_REPOSITORY" --arg tag "$RELEASE_TAG" \
-            '{event_type: "plugin-published", client_payload: {repository: $repository, tag: $tag}}' \
-            | gh api --method POST repos/rakuzen25/jellyfin-plugin-manifest/dispatches --input -
+    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/catalog-notify.yml@27d7278b59bbee90be02046a235939317e487e56 # v0.1.1
+    with:
+      catalog_repository: rakuzen25/jellyfin-plugin-manifest
+      tag: ${{ github.event.release.tag_name || inputs.tag }}
+      app_client_id: ${{ vars.PLUGIN_APP_CLIENT_ID }}
+    secrets:
+      PLUGIN_APP_PRIVATE_KEY: ${{ secrets.PLUGIN_APP_PRIVATE_KEY }}

@@ -12,3 +12,4 @@ frontend/assets/demo.html
 pnpm-lock.yaml
 # Release Please owns changelog layout; local links are still checked.
 /CHANGELOG.md
+/.release-please-manifest.json

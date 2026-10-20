@@ -7,12 +7,12 @@
         "pnpm": "12.14.0"
     },
     "scripts": {
-        "bootstrap": "python3 -m scripts bootstrap",
-        "dev": "python3 -m scripts dev",
-        "build": "python3 -m scripts build",
-        "check": "python3 -m scripts check",
-        "format": "python3 -m scripts format",
-        "test": "python3 -m scripts test"
+        "bootstrap": "python3 plugin bootstrap",
+        "dev": "python3 plugin dev",
+        "build": "python3 plugin build",
+        "check": "python3 plugin check",
+        "format": "python3 plugin format",
+        "test": "python3 plugin test"
     },
     "devDependencies": {
         "@eslint/js": "10.0.1",

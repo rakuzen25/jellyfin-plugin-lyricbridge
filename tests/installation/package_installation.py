@@ -25,13 +25,15 @@ import wave
 import zipfile
 from pathlib import Path
 
-from scripts.common.release_metadata import load_release
+from jellyfin_plugin_toolkit.common.release_metadata import load_release
+from jellyfin_plugin_toolkit.context import Context
 
 RELEASE = load_release()
 VERSION = RELEASE.version
 HOST_VERSION = RELEASE.jellyfin_version
 
-from scripts.common.process import IMAGES
+
+IMAGES = Context.load().images
 
 IMAGE = IMAGES["jellyfin"]
 PLUGIN = RELEASE.guid

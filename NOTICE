@@ -1,3 +1,6 @@
+Original LyricBridge code: Copyright 2026 rakuzen25 and contributors; Apache-2.0.
+Compiled Jellyfin plugin distributions also comply with GPLv3; see GPL-3.0.txt.
+
 LyricBridge uses Lyricify-Lyrics-Helper (WXRIW), licensed under Apache License 2.0.
 The vendored helper has local changes for cancellable HTTP transport and QQ pronunciation retention.
 
@@ -6,7 +9,7 @@ Its editable TypeScript/CSS, generated JavaScript and original license notices a
 
 See vendor/UPSTREAM.md and the included license files for source revisions and notices.
 
-LyricBridge static companion UI icons use Lucide 1.55.0, licensed under ISC,
+LyricBridge static companion UI icons use Lucide 1.59.0, licensed under ISC,
 with inherited Feather icons under MIT. See LUCIDE-LICENSE for the complete
 upstream copyright and license notices. Icons are bundled locally without
 external fonts or network assets. The animated instrumental note remains
@@ -26,7 +29,7 @@ DYNAMIC-BACKGROUND-LICENSE and KAWARP-LICENSE, alongside the pinned LyricMotion
 third-party notices. Editable renderer sources accompany the built web assets
 in the distributed source archive.
 
-The matching editable source is lyricbridge-source-0.1.0.zip, distributed alongside
+The matching editable source is the matching versioned lyricbridge-source archive, distributed alongside
 the plugin and web archives. Renderer-derived source remains under MPL-2.0.
 LibNMeCab is dynamically linked under LGPL-2.1-or-later; its license and complete
 upstream source are in notices/LIBNMECAB-LGPL-LICENSE and

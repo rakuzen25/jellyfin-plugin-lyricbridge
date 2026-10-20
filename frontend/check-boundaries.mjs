@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import { bundleEntries } from "./build.mjs";
+import { createBuilder } from "../.build/toolkit/current/node/build.mjs";
 import { checkRendererContract, checkModuleBoundary, checkAcyclic } from "./contract-boundaries.mjs";
 const root = new URL(".", import.meta.url).pathname;
+const { bundleEntries } = await createBuilder(path.resolve(root, ".."));
 const configuration = ts.readConfigFile(path.join(root, "tsconfig.json"), ts.sys.readFile);
 const project = ts.parseJsonConfigFileContent(configuration.config, ts.sys, root);
 if (!project.options.strict || !project.options.noUncheckedIndexedAccess)

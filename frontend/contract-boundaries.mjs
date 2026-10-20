@@ -77,6 +77,12 @@ const featureApis = new Set([
 ]);
 
 export function checkModuleBoundary(file, target, typeOnly) {
+    if (
+        (file === "shared/lifecycle.ts" && target === "../.build/toolkit/current/ui/lifecycle.ts") ||
+        (file === "shared/feedback.ts" && target === "../.build/toolkit/current/ui/feedback.ts") ||
+        (file === "admin/ui/controls.ts" && target === "../.build/toolkit/current/ui/controls.ts")
+    )
+        return;
     const from = file.split("/"),
         to = target.split("/");
     if (from[0] === "contracts" && (to[0] !== "contracts" || !typeOnly))
