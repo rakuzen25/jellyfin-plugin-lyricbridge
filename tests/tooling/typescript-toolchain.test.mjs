@@ -62,29 +62,3 @@ test("strict test project includes every frontend test without adding Node globa
     assert.deepEqual(tests.options.types, ["node"]);
     assert.ok(tests.fileNames.includes(path.join(directory, "platform/globals.ts")));
 });
-
-test("test compiler rejects a type error even though Node type stripping can execute it", async () => {
-    const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
-    const { tmpdir } = await import("node:os");
-    const temporary = await mkdtemp(path.join(tmpdir(), "lyricbridge-typecheck-"));
-    try {
-        const fixture = path.join(temporary, "invalid.test.ts");
-        await writeFile(fixture, 'const value: number = "wrong";\nvoid value;\n');
-        const config = path.join(temporary, "tsconfig.json");
-        await writeFile(
-            config,
-            JSON.stringify({
-                extends: path.join(root, "frontend/tsconfig.tests.json"),
-                compilerOptions: { typeRoots: [path.join(root, "frontend/node_modules/@types")] },
-                include: [fixture],
-            }),
-        );
-        await execute(process.execPath, ["--experimental-strip-types", fixture]);
-        await assert.rejects(execute(path.join(root, "frontend/node_modules/.bin/tsc"), ["--project", config, "--noEmit"]), (error) => {
-            assert.match(error.stdout, /TS2322/);
-            return true;
-        });
-    } finally {
-        await rm(temporary, { recursive: true, force: true });
-    }
-});

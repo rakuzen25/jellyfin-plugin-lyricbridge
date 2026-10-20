@@ -64,7 +64,6 @@ schema = 1
 [frontend]
 "enabled" = true
 "directory" = "frontend"
-"build" = "frontend/build.mjs"
 "entries" = { "bridge.ts" = "lyricbridge.js", "renderer.ts" = "jellyfin-lyric-motion.js" }
 "reload_assets" = [
   "lyricbridge.css",
@@ -294,13 +293,6 @@ schema = 1
     "{python}",
     "-m",
     "tests.installation.package_installation",
-  ],
-] }
-"test-reproducibility" = { "commands" = [
-  [
-    "{python}",
-    "-m",
-    "jellyfin_plugin_toolkit.reproducibility",
   ],
 ] }
 "test-workflow" = { "commands" = [

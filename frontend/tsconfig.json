@@ -1,15 +1,9 @@
 {
+    "extends": "../.build/toolkit/current/configs/tsconfig.json",
     "compilerOptions": {
-        "target": "ES2022",
-        "module": "ESNext",
-        "moduleResolution": "bundler",
         "lib": ["ES2022", "DOM", "DOM.Iterable"],
-        "strict": true,
         "types": [],
-        "noUncheckedIndexedAccess": true,
-        "noEmit": true,
-        "verbatimModuleSyntax": true,
-        "allowImportingTsExtensions": true
+        "verbatimModuleSyntax": true
     },
     "include": ["**/*.ts"],
     "exclude": ["**/*.test.ts", "node_modules"]

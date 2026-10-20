@@ -7,13 +7,13 @@
             "ignoreDependencies": ["@taplo/cli"]
         },
         "frontend": {
-            "entry": ["bridge.ts", "renderer.ts", "admin/config.ts", "**/*.test.ts", "build.mjs", "check-boundaries.mjs"],
+            "entry": ["bridge.ts", "renderer.ts", "admin/config.ts", "**/*.test.ts", "check-boundaries.mjs"],
             "project": ["**/*.{ts,mjs}"],
             "ignoreDependencies": ["@typescript/native"]
         },
         "tests/browser": {
-            "entry": ["playwright.config.cjs", "**/*.spec.cjs", "compare-playback-performance.cjs", "check-image.mjs"],
-            "project": ["**/*.cjs", "**/*.mjs"]
+            "entry": ["playwright.config.cjs", "**/*.spec.cjs", "compare-playback-performance.cjs"],
+            "project": ["**/*.cjs"]
         }
     }
 }

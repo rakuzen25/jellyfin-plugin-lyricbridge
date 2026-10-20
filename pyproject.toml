@@ -1,4 +1,5 @@
 [tool.ruff]
+extend = ".build/toolkit/current/configs/ruff.toml"
 target-version = "py315"
 include = ["scripts/**/*.py", "tests/**/*.py"]
 

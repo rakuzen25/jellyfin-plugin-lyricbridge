@@ -26,12 +26,12 @@ import zipfile
 from pathlib import Path
 
 from jellyfin_plugin_toolkit.common.release_metadata import load_release
+from jellyfin_plugin_toolkit.context import Context
 
 RELEASE = load_release()
 VERSION = RELEASE.version
 HOST_VERSION = RELEASE.jellyfin_version
 
-from jellyfin_plugin_toolkit.context import Context
 
 IMAGES = Context.load().images
 

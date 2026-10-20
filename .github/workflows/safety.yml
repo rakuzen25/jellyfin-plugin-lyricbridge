@@ -8,7 +8,7 @@ permissions:
   actions: read
 jobs:
   safety:
-    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/validate.yml@991afcc828f7506e62ac7a640a260e815708912a # v0.1.0
+    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/validate.yml@27d7278b59bbee90be02046a235939317e487e56 # v0.1.1
     with:
       ref: ${{ github.sha }}
       scheduled: ${{ github.event_name == 'schedule' }}

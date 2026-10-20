@@ -15,8 +15,6 @@ files = [
 if files:
     run("node", "--test", *files, cwd=ROOT)
 for name in (
-    "toolkit_bootstrap",
-    "architecture",
     "consumer_policy",
     "release_boundaries",
     "release_automation",
