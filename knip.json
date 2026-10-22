@@ -4,7 +4,18 @@
         ".": {
             "entry": ["tests/tooling/**/*.test.mjs"],
             "project": ["*.mjs", "tests/tooling/**/*.mjs"],
-            "ignoreDependencies": ["@taplo/cli"]
+            "ignoreDependencies": [
+                "@taplo/cli",
+                "chokidar",
+                "http-proxy-middleware",
+                "remark-cli",
+                "remark-gfm",
+                "remark-lint",
+                "remark-lint-no-undefined-references",
+                "remark-validate-links",
+                "unist-util-visit",
+                "hast-util-from-html"
+            ]
         },
         "frontend": {
             "entry": ["bridge.ts", "renderer.ts", "admin/config.ts", "**/*.test.ts", "check-boundaries.mjs"],
@@ -15,5 +26,6 @@
             "entry": ["playwright.config.cjs", "**/*.spec.cjs", "compare-playback-performance.cjs"],
             "project": ["**/*.cjs"]
         }
-    }
+    },
+    "ignoreBinaries": ["uv"]
 }

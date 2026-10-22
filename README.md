@@ -50,4 +50,4 @@ renderer uses MPL 2.0. See [distribution licenses and source](docs/reference/dis
 dependency terms and corresponding-source requirements, and
 [upstream components](vendor/UPSTREAM.md) for pinned revisions and local modifications.
 
-Use `pnpm check` (or `./plugin check`) to verify formatting and linting across the frontend, C# backend, Python tooling, configuration and docs. Use `pnpm format` to apply formatting, or add a target such as `frontend`, `backend`, `tooling` or `docs`. Run `./plugin bootstrap` first; checks never install dependencies. CI runs these same checks and requires the aggregate `validation / validate` result.
+Use `pnpm check` (or `uv run jpt check`) to verify formatting and linting across the frontend, C# backend, Python tooling, configuration and docs. Use `pnpm format` to apply formatting, or add a target such as `frontend`, `backend`, `tooling` or `docs`. uv synchronizes Python dependencies automatically; run `uv run jpt bootstrap` first to prepare Node, .NET and Jellyfin integrations. CI runs these same checks and requires the aggregate `validation / validate` result.

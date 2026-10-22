@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const config = JSON.parse(readFileSync(new URL("../../renovate.json", import.meta.url), "utf8"));
-const preset = JSON.parse(readFileSync(new URL("../../.build/toolkit/current/default.json", import.meta.url), "utf8"));
+const preset = JSON.parse(readFileSync(new URL("../../.build/jpt/default.json", import.meta.url), "utf8"));
 function matches(pattern, name) {
     if (pattern.startsWith("!/") && pattern.endsWith("/")) return !new RegExp(pattern.slice(2, -1)).test(name);
     return pattern === name;
@@ -77,13 +77,25 @@ test("Playwright and its extracted versioned image share a patch-only automerge 
     assert.equal(config.ignoreTests, false);
 });
 
-test("Renovate, pnpm and pip enforce the same 24-hour release age", () => {
+test("third-party dependencies retain the 24-hour release age; toolkit releases are immediate", () => {
     assert.equal(config.minimumReleaseAge, "1 day");
     assert.equal(config.minimumReleaseAgeBuffer, "30 minutes");
     assert.equal(config.minimumReleaseAgeBehaviour, "timestamp-optional");
     assert.equal(config.internalChecksFilter, "strict");
+    const exceptions = config.packageRules.filter((rule) => Object.hasOwn(rule, "minimumReleaseAge"));
+    assert.equal(exceptions.length, 1);
+    const [toolkit] = exceptions;
+    assert.deepEqual(toolkit.matchPackageNames, ["rakuzen25/jellyfin-plugin-toolkit"]);
+    assert.deepEqual(toolkit.matchManagers, ["custom.regex"]);
+    assert.deepEqual(toolkit.matchDatasources, ["github-releases"]);
+    assert.deepEqual(toolkit.matchFileNames, ["pyproject.toml"]);
+    assert.equal(toolkit.enabled, true);
+    assert.equal(toolkit.minimumReleaseAge, null);
+    assert.equal(toolkit.minimumReleaseAgeBuffer, null);
     for (const rule of config.packageRules) {
-        for (const key of ["minimumReleaseAge", "minimumReleaseAgeBuffer", "minimumReleaseAgeBehaviour", "internalChecksFilter"]) {
+        const protectedKeys = ["minimumReleaseAgeBehaviour", "internalChecksFilter"];
+        if (rule !== toolkit) protectedKeys.push("minimumReleaseAge", "minimumReleaseAgeBuffer");
+        for (const key of protectedKeys) {
             assert.equal(Object.hasOwn(rule, key), false, `Package rule overrides ${key}`);
         }
     }
@@ -95,9 +107,8 @@ test("Renovate, pnpm and pip enforce the same 24-hour release age", () => {
     for (const line of (excludes || "").trim().split("\n").filter(Boolean)) {
         assert.match(line.trim(), /^- "?[^*]+@\d+\.\d+\.\d+"?$/, "Exceptions must pin exact versions");
     }
-    const tasks = readFileSync(new URL("../../.build/toolkit/current/jellyfin_plugin_toolkit/tasks.py", import.meta.url), "utf8");
-    assert.match(tasks, /["']--uploaded-prior-to=P1D["']/);
-    assert.match(tasks, /"jellyfin_plugin_toolkit\.checks\.check_pip"/);
-    const setup = readFileSync(new URL("../../.build/toolkit/current/.github/actions/setup/action.yml", import.meta.url), "utf8");
-    assert.match(setup, /--uploaded-prior-to=P1D/);
+    const project = readFileSync(new URL("../../pyproject.toml", import.meta.url), "utf8");
+    assert.match(project, /exclude-newer = "1 day"/);
+    const lock = readFileSync(new URL("../../uv.lock", import.meta.url), "utf8");
+    assert.match(lock, /exclude-newer-span = "P1D"/);
 });

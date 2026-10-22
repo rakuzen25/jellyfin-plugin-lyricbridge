@@ -746,4 +746,4 @@ core
 core.*
 
 # Source distributions embed this archive; development uses the locked release.
-/build-support/toolkit.tar.gz
+/build-support/

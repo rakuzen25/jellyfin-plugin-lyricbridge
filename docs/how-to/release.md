@@ -1,5 +1,7 @@
 # Release and publish LyricBridge
 
+All repository writes require the existing GitHub App; there is no workflow-token fallback. Release uploads use the App, while validation reads, CI artifacts, and attestations use the workflow token. After configuring the existing App credentials, dispatch **Set up connected GitHub App** and merge its reviewed configuration PR. Default-branch pushes also check setup. The workflow discovers the identity and manages its Renovate entry and ownership record; toolkit synchronization waits for that PR, while releases continue. Closing the PR pauses automatic retries until manual dispatch.
+
 Use release-please to prepare a draft, verify its artifacts, and publish to the shared Jellyfin catalog.
 Start with a working [development environment](develop.md) and understand the [distribution obligations](../reference/distribution.md).
 
@@ -25,7 +27,7 @@ Packaging reads the versioned changelog section and its date. Preserve their str
 
 ## Verify the shared release signer
 
-The catalog independently approves the toolkit repository, immutable source revision and reusable release workflow signer. The source ZIP contains the exact toolkit archive. A release receipt cannot reduce catalog-required assets or checks. Historical LyricBridge receipts remain supported under their existing policy.
+The catalog independently approves the toolkit repository, immutable source revision and reusable release workflow signer. The source ZIP contains the exact toolkit wheel, matching source distribution and `uv.lock`. A release receipt cannot reduce catalog-required assets or checks. Historical LyricBridge receipts remain supported under their existing policy.
 
 ## Verify and publish the draft
 

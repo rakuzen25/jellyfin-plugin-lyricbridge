@@ -1,107 +1,41 @@
+#:schema .build/jpt/configs/plugin.schema.json
 schema = 1
 
 [plugin]
-"id" = "lyricbridge"
-"name" = "LyricBridge"
-"guid" = "70a9d327-7e98-4201-88a5-724d39366c40"
-"assembly" = "Jellyfin.Plugin.LyricBridge"
-"repository" = "rakuzen25/jellyfin-plugin-lyricbridge"
-"owner" = "rakuzen25"
-"description" = "Follow your music with synchronized karaoke lyrics in Jellyfin Web.\n      Search multiple lyric providers, import lyrics, and save your preferred versions. Display\n      translations and pronunciation alongside the original lyrics, with optional tools to generate\n      missing language support or transcribe audio."
-"overview" = "Word-by-word karaoke lyrics, translations, and pronunciation for Jellyfin\n      Web."
-"category" = "Music"
+id = "lyricbridge"
+name = "LyricBridge"
+guid = "70a9d327-7e98-4201-88a5-724d39366c40"
+assembly = "Jellyfin.Plugin.LyricBridge"
+repository = "rakuzen25/jellyfin-plugin-lyricbridge"
+owner = "rakuzen25"
+description = "Follow your music with synchronized karaoke lyrics in Jellyfin Web.\n      Search multiple lyric providers, import lyrics, and save your preferred versions. Display\n      translations and pronunciation alongside the original lyrics, with optional tools to generate\n      missing language support or transcribe audio."
+overview = "Word-by-word karaoke lyrics, translations, and pronunciation for Jellyfin\n      Web."
+category = "Music"
 
 [host]
-"abi" = "12.2.0.0"
-"framework" = "net10.0"
-"platform" = "linux/amd64"
-"image" = "jellyfin/jellyfin@sha256:357724bf0ae27a672c7cbaa899db2d9abeb13dbd8657ccce750258a4c059d037"
-
-[images]
-"playwright" = "mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf"
-"actionlint" = "rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
+abi = "12.2.0.0"
+framework = "net10.0"
+platform = "linux/amd64"
+image = "jellyfin/jellyfin@sha256:357724bf0ae27a672c7cbaa899db2d9abeb13dbd8657ccce750258a4c059d037"
 
 [backend]
-"unmanaged_projects" = ["Lyricify.Lyrics.Helper"]
-"entry" = "src/Host/LyricBridge.csproj"
-"projects" = { "Core" = "src/Core/LyricBridge.Core.csproj", "Infrastructure" = "src/Infrastructure/LyricBridge.Infrastructure.csproj", "Host" = "src/Host/LyricBridge.csproj" }
-"project_assemblies" = ["LyricBridge.Core", "LyricBridge.Infrastructure"]
-"tests" = [
+entry = "src/Host/LyricBridge.csproj"
+project_assemblies = ["LyricBridge.Core", "LyricBridge.Infrastructure"]
+tests = [
   "tests/backend/Core/LyricBridge.Core.Tests.csproj",
   "tests/backend/Infrastructure/LyricBridge.Infrastructure.Tests.csproj",
   "tests/backend/Host/LyricBridge.Host.Tests.csproj",
 ]
-"source_roots" = ["src", "tests/backend"]
+source_roots = ["src", "tests/backend"]
+unmanaged_projects = ["Lyricify.Lyrics.Helper"]
 
-[architecture]
-"edges" = { "src/Core/LyricBridge.Core.csproj" = [
-], "src/Infrastructure/LyricBridge.Infrastructure.csproj" = [
-  "src/Core/LyricBridge.Core.csproj",
-  "vendor/Lyricify.Lyrics.Helper/Lyricify.Lyrics.Helper.csproj",
-], "src/Host/LyricBridge.csproj" = [
-  "src/Core/LyricBridge.Core.csproj",
-  "src/Infrastructure/LyricBridge.Infrastructure.csproj",
-  "vendor/Lyricify.Lyrics.Helper/Lyricify.Lyrics.Helper.csproj",
-], "tests/backend/Core/LyricBridge.Core.Tests.csproj" = [
-  "src/Core/LyricBridge.Core.csproj",
-], "tests/backend/Infrastructure/LyricBridge.Infrastructure.Tests.csproj" = [
-  "src/Infrastructure/LyricBridge.Infrastructure.csproj",
-], "tests/backend/Host/LyricBridge.Host.Tests.csproj" = [
-  "src/Host/LyricBridge.csproj",
-] }
-"forbidden" = { "src/Core" = [
-  "Microsoft.Data.Sqlite",
-  "MediaBrowser.",
-  "Jellyfin.",
-  "System.Net.Http",
-  "Plugin.Instance",
-], "src/Infrastructure" = [
-  "MediaBrowser.",
-  "Jellyfin.",
-  "Plugin.Instance",
-] }
-
-[frontend]
-"enabled" = true
-"directory" = "frontend"
-"entries" = { "bridge.ts" = "lyricbridge.js", "renderer.ts" = "jellyfin-lyric-motion.js" }
-"reload_assets" = [
-  "lyricbridge.css",
-  "jellyfin-lyric-motion.css",
-  "lyricbridge.js",
-  "jellyfin-lyric-motion.js",
-]
-"required_assets" = [
-  "config.html",
-  "lyricbridge.css",
-  "jellyfin-lyric-motion.css",
-  "lyricbridge.js",
-  "jellyfin-lyric-motion.js",
-]
-"version_symbol" = "__LYRICBRIDGE_VERSION__"
-"admin_entry" = "admin/config.ts"
-"admin_template" = "frontend/admin/config.html"
-"script_marker" = "<!-- LYRICBRIDGE_CONFIG_SCRIPT -->"
-"boundary_check" = "frontend/check-boundaries.mjs"
-"extra_assets" = [
-  { "source" = "NOTICE", "name" = "NOTICE.txt" },
-  { "source" = "vendor/LUCIDE-LICENSE", "name" = "LUCIDE-LICENSE.txt" },
-]
-"banners" = { "renderer.ts" = "/* Generated from maintained TypeScript sources. Renderer-derived files retain MPL-2.0; matching editable source accompanies this distribution. */" }
-
-[sandbox]
-"asset_prefix" = "/LyricBridge/assets/"
-"settings_page" = "lyricbridge"
-
-[browser]
-"directory" = "tests/browser"
-"groups" = "tests/browser/groups.json"
-
-[source]
-"roots" = ["src", "docs", "frontend", "vendor", "scripts", "tests", ".github"]
+[backend.projects]
+Core = "src/Core/LyricBridge.Core.csproj"
+Infrastructure = "src/Infrastructure/LyricBridge.Infrastructure.csproj"
+Host = "src/Host/LyricBridge.csproj"
 
 [validation]
-"groups" = [
+groups = [
   "metadata",
   "frontend",
   "backend",
@@ -111,125 +45,327 @@ schema = 1
   "performance",
   "artifacts",
 ]
-"check_targets" = ["frontend", "backend", "tooling", "docs"]
-"unit_groups" = ["frontend", "backend", "tooling"]
-"acceptance_groups" = [
+check_targets = ["frontend", "backend", "tooling", "docs"]
+unit_groups = ["frontend", "backend", "tooling"]
+acceptance_groups = [
   "workflow",
   "rendering",
   "performance",
   "installation",
   "reproducibility",
 ]
-"rules" = [
-  { "name" = "docs", "patterns" = [
-    "*.md",
-    "docs/**",
-  ], "groups" = [
-  ] },
-  { "name" = "build-policy", "patterns" = [
-    "build-support/**",
-    "plugin",
-    "plugin.toml",
-    "toolkit.lock.json",
-    "version.txt",
-    ".github/**",
-    "Directory.Build.*",
-    "global.json",
-    "package.json",
-    "pnpm-lock.yaml",
-    "pnpm-workspace.yaml",
-    ".node-version",
-    ".python-version",
-    "requirements-check.txt",
-    "eslint.config.mjs",
-    "knip.json",
-    ".prettier*",
-    "pyproject.toml",
-    ".editorconfig",
-    ".gitignore",
-    ".dockerignore",
-    "release-please-config.json",
-    ".release-please-manifest.json",
-    "LICENSE",
-    "NOTICE",
-    "GPL-3.0.txt",
-  ], "groups" = [
-    "metadata",
-    "frontend",
-    "backend",
-    "tooling",
-    "workflow",
-    "rendering",
-    "performance",
-    "artifacts",
-  ] },
-  { "name" = "backend", "patterns" = [
-    "src/**",
-    "vendor/**",
-    "tests/backend/**",
-  ], "groups" = [
-    "backend",
-    "tooling",
-    "workflow",
-    "rendering",
-    "performance",
-    "artifacts",
-  ] },
-  { "name" = "frontend", "patterns" = [
-    "frontend/**",
-    "tests/browser/**",
-  ], "groups" = [
-    "frontend",
-    "workflow",
-    "rendering",
-    "performance",
-    "artifacts",
-  ] },
-  { "name" = "tooling", "patterns" = [
-    "scripts/**",
-    "tests/tooling/**",
-    "tests/installation/**",
-    "tests/__init__.py",
-  ], "groups" = [
-    "tooling",
-    "artifacts",
-  ] },
-  { "name" = "automation", "patterns" = [
-    "renovate.json",
-  ], "groups" = [
-    "metadata",
-    "tooling",
-  ] },
+
+[[validation.rules]]
+name = "docs"
+patterns = ["*.md", "docs/**"]
+groups = []
+
+[[validation.rules]]
+name = "build-policy"
+patterns = [
+  "build-support/**",
+  "plugin.toml",
+  "uv.lock",
+  "version.txt",
+  ".github/**",
+  "Directory.Build.*",
+  "global.json",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  ".node-version",
+  ".python-version",
+  "eslint.config.mjs",
+  "knip.json",
+  ".prettier*",
+  "pyproject.toml",
+  ".editorconfig",
+  ".gitignore",
+  ".dockerignore",
+  "release-please-config.json",
+  ".release-please-manifest.json",
+  "LICENSE",
+  "NOTICE",
+  "GPL-3.0.txt",
+  "pyproject.toml",
 ]
-"job_names" = { "rendering" = [
+groups = [
+  "metadata",
+  "frontend",
+  "backend",
+  "tooling",
+  "workflow",
+  "rendering",
+  "performance",
+  "artifacts",
+]
+
+[[validation.rules]]
+name = "backend"
+patterns = ["src/**", "vendor/**", "tests/backend/**"]
+groups = [
+  "backend",
+  "tooling",
+  "workflow",
+  "rendering",
+  "performance",
+  "artifacts",
+]
+
+[[validation.rules]]
+name = "frontend"
+patterns = ["frontend/**", "tests/browser/**"]
+groups = ["frontend", "workflow", "rendering", "performance", "artifacts"]
+
+[[validation.rules]]
+name = "tooling"
+patterns = [
+  "scripts/**",
+  "tests/tooling/**",
+  "tests/installation/**",
+  "tests/__init__.py",
+]
+groups = ["tooling", "artifacts"]
+
+[[validation.rules]]
+name = "automation"
+patterns = ["renovate.json"]
+groups = ["metadata", "tooling"]
+
+[validation.job_names]
+rendering = [
   "rendering (chromium)",
   "rendering (mobile-chromium)",
   "rendering (firefox)",
   "rendering (webkit)",
-], "performance" = [
+]
+performance = [
   "performance (stress-chromium)",
   "performance (stress-mobile-chromium)",
-] }
+]
 
-[operations]
-"check-frontend" = { "commands" = [
-  [
-    "{pnpm}",
-    "exec",
-    "prettier",
-    "--check",
-    "frontend/**/*.{ts,mjs,json,css,html}",
-    "tests/browser/**/*.{cjs,mjs,json}",
-  ],
-  [
-    "{pnpm}",
-    "exec",
-    "eslint",
-    "frontend",
-    "tests/browser",
-    "--max-warnings",
-    "0",
-  ],
+[validation.browser_inputs.performance]
+files = [
+  "tests/browser/performance/**",
+  "tests/browser/fixtures/**",
+  "tests/browser/playwright.config.cjs",
+  "tests/browser/groups.json",
+  "tests/browser/package.json",
+]
+assets = [
+  "demo.html",
+  "lyricbridge.js",
+  "lyricbridge.css",
+  "jellyfin-lyric-motion.js",
+  "jellyfin-lyric-motion.css",
+]
+projects = ["stress-chromium", "stress-mobile-chromium"]
+workers = 1
+runner = "ubuntu-24.04"
+
+[images]
+playwright = "mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf"
+actionlint = "rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
+
+[architecture.edges]
+"src/Core/LyricBridge.Core.csproj" = []
+"src/Infrastructure/LyricBridge.Infrastructure.csproj" = [
+  "src/Core/LyricBridge.Core.csproj",
+  "vendor/Lyricify.Lyrics.Helper/Lyricify.Lyrics.Helper.csproj",
+]
+"src/Host/LyricBridge.csproj" = [
+  "src/Core/LyricBridge.Core.csproj",
+  "src/Infrastructure/LyricBridge.Infrastructure.csproj",
+  "vendor/Lyricify.Lyrics.Helper/Lyricify.Lyrics.Helper.csproj",
+]
+"tests/backend/Core/LyricBridge.Core.Tests.csproj" = [
+  "src/Core/LyricBridge.Core.csproj",
+]
+"tests/backend/Infrastructure/LyricBridge.Infrastructure.Tests.csproj" = [
+  "src/Infrastructure/LyricBridge.Infrastructure.csproj",
+]
+"tests/backend/Host/LyricBridge.Host.Tests.csproj" = [
+  "src/Host/LyricBridge.csproj",
+]
+
+[architecture.forbidden]
+"src/Core" = [
+  "Microsoft.Data.Sqlite",
+  "MediaBrowser.",
+  "Jellyfin.",
+  "System.Net.Http",
+  "Plugin.Instance",
+]
+"src/Infrastructure" = ["MediaBrowser.", "Jellyfin.", "Plugin.Instance"]
+
+[frontend]
+enabled = true
+directory = "frontend"
+admin_entry = "admin/config.ts"
+admin_template = "frontend/admin/config.html"
+boundary_check = "frontend/check-boundaries.mjs"
+script_marker = "<!-- LYRICBRIDGE_CONFIG_SCRIPT -->"
+version_symbol = "__LYRICBRIDGE_VERSION__"
+extra_assets = [
+  { source = "NOTICE", name = "NOTICE.txt" },
+  { source = "vendor/LUCIDE-LICENSE", name = "LUCIDE-LICENSE.txt" },
+]
+required_assets = [
+  "config.html",
+  "lyricbridge.css",
+  "jellyfin-lyric-motion.css",
+  "lyricbridge.js",
+  "jellyfin-lyric-motion.js",
+]
+reload_assets = [
+  "lyricbridge.css",
+  "jellyfin-lyric-motion.css",
+  "lyricbridge.js",
+  "jellyfin-lyric-motion.js",
+]
+
+[frontend.entries]
+"bridge.ts" = "lyricbridge.js"
+"renderer.ts" = "jellyfin-lyric-motion.js"
+
+[frontend.banners]
+"renderer.ts" = "/* Generated from maintained TypeScript sources. Renderer-derived files retain MPL-2.0; matching editable source accompanies this distribution. */"
+
+[browser]
+directory = "tests/browser"
+groups = "tests/browser/groups.json"
+
+[sandbox]
+asset_prefix = "/LyricBridge/assets/"
+settings_page = "lyricbridge"
+
+[source]
+roots = ["src", "docs", "frontend", "vendor", "scripts", "tests", ".github"]
+
+[distribution]
+web = true
+notices = [
+  { source = "vendor/DOTNET-LICENSE" },
+  { source = "vendor/DYNAMIC-BACKGROUND-LICENSE" },
+  { source = "vendor/KAWARP-LICENSE" },
+  { source = "vendor/KAWAZU-LICENSE" },
+  { source = "vendor/LIBNMECAB-LGPL-LICENSE" },
+  { source = "vendor/LIBNMECAB-LICENSE" },
+  { source = "vendor/LUCIDE-LICENSE" },
+  { source = "vendor/LYRICIFY-LICENSE" },
+  { source = "vendor/LYRICMOTION-LICENSE" },
+  { source = "vendor/NEWTONSOFT-LICENSE" },
+  { source = "vendor/OPENCC-DATA-LICENSE" },
+  { source = "vendor/OPENCC-LICENSE" },
+  { source = "vendor/QMC-LICENSE" },
+  { source = "vendor/SHARPZIPLIB-LICENSE" },
+  { source = "vendor/ZSTDSHARP-LICENSE" },
+  { source = "vendor/LIBNMECAB-SOURCE.tar.gz" },
+  { source = "vendor/DOTNET-THIRD-PARTY-NOTICES" },
+  { source = "vendor/LYRICMOTION-THIRD-PARTY-NOTICES.md" },
+  { source = "vendor/OPENCC-THIRD-PARTY-NOTICES.md" },
+  { source = "LICENSE" },
+  { source = "NOTICE" },
+  { source = "GPL-3.0.txt" },
+]
+web_notices = [
+  { source = "vendor/LYRICMOTION-LICENSE", name = "LICENSE" },
+  { source = "vendor/DYNAMIC-BACKGROUND-LICENSE", name = "DYNAMIC-BACKGROUND-LICENSE.txt" },
+  { source = "vendor/LYRICMOTION-THIRD-PARTY-NOTICES.md", name = "THIRD_PARTY_NOTICES.md" },
+  { source = "vendor/KAWARP-LICENSE", name = "KAWARP-LICENSE.txt" },
+  { source = "vendor/QMC-LICENSE", name = "QMC-LICENSE.txt" },
+]
+payload_notices = [
+  { source = "KawazuDictionary/COPYING", name = "IPADIC-COPYING" },
+]
+web_exclude = ["demo.html", "demo.wav"]
+
+[distribution.licenses."Jellyfin.Plugin.LyricBridge.dll"]
+license = "Apache-2.0"
+notices = [
+  "LICENSE",
+  "LYRICMOTION-LICENSE",
+  "LUCIDE-LICENSE",
+  "QMC-LICENSE",
+  "DYNAMIC-BACKGROUND-LICENSE",
+  "KAWARP-LICENSE",
+  "LYRICMOTION-THIRD-PARTY-NOTICES.md",
+  "GPL-3.0.txt",
+]
+package = "project-source"
+
+[distribution.licenses."LyricBridge.Core.dll"]
+license = "Apache-2.0"
+notices = ["LICENSE"]
+package = "project-source"
+
+[distribution.licenses."LyricBridge.Infrastructure.dll"]
+license = "Apache-2.0"
+notices = ["LICENSE"]
+package = "project-source"
+
+[distribution.licenses."Lyricify.Lyrics.Helper.dll"]
+license = "Apache-2.0"
+notices = ["LYRICIFY-LICENSE"]
+package = "project-source"
+version = "0.2.0"
+
+[distribution.licenses."Kawazu.dll"]
+license = "MIT"
+notices = ["KAWAZU-LICENSE"]
+package = "Kawazu"
+
+[distribution.licenses."LibNMeCab.dll"]
+license = "LGPL-2.1-or-later"
+notices = [
+  "LIBNMECAB-LICENSE",
+  "LIBNMECAB-LGPL-LICENSE",
+  "LIBNMECAB-SOURCE.tar.gz",
+]
+package = "LibNMeCab"
+
+[distribution.licenses."LibNMeCab.IpaDicBin.dll"]
+license = "LGPL-2.1-or-later"
+notices = [
+  "LIBNMECAB-LICENSE",
+  "LIBNMECAB-LGPL-LICENSE",
+  "IPADIC-COPYING",
+  "LIBNMECAB-SOURCE.tar.gz",
+]
+package = "LibNMeCab.IpaDicBin"
+
+[distribution.licenses."Newtonsoft.Json.dll"]
+license = "MIT"
+notices = ["NEWTONSOFT-LICENSE"]
+package = "Newtonsoft.Json"
+
+[distribution.licenses."ICSharpCode.SharpZipLib.dll"]
+license = "MIT"
+notices = ["SHARPZIPLIB-LICENSE"]
+package = "SharpZipLib"
+
+[distribution.licenses."OpenccNetLib.dll"]
+license = "MIT"
+notices = [
+  "OPENCC-LICENSE",
+  "OPENCC-DATA-LICENSE",
+  "OPENCC-THIRD-PARTY-NOTICES.md",
+]
+package = "OpenccNetLib"
+
+[distribution.licenses."ZstdSharp.dll"]
+license = "MIT"
+notices = ["ZSTDSHARP-LICENSE"]
+package = "ZstdSharp.Port"
+
+[[distribution.licensed_paths]]
+license = "LGPL-2.1-or-later AND LicenseRef-IPADIC"
+notices = ["IPADIC-COPYING"]
+package = "LibNMeCab.IpaDicBin"
+prefix = "KawazuDictionary/"
+
+[operations.check-frontend]
+after = [
   [
     "{pnpm}",
     "exec",
@@ -245,32 +381,24 @@ schema = 1
     "frontend",
     "exec",
     "tsc",
-    "--noEmit",
-  ],
-  [
-    "{pnpm}",
-    "--dir",
-    "frontend",
-    "exec",
-    "tsc",
     "--project",
     "tsconfig.tests.json",
     "--noEmit",
   ],
-] }
-"test-frontend" = { "commands" = [
+]
+
+[operations.test-frontend]
+after = [
   [
-    "{python}",
-    "-m",
-    "scripts.frontend_tests",
+    "node",
+    "--test",
+    "tests/tooling/renderer-contract.test.mjs",
+    "tests/tooling/typescript-toolchain.test.mjs",
   ],
-] }
-"check-tooling" = { "commands" = [
-  [
-    "{python}",
-    "-m",
-    "jellyfin_plugin_toolkit.checks.tooling",
-  ],
+]
+
+[operations.check-tooling]
+after = [
   [
     "{python}",
     "-m",
@@ -279,11 +407,17 @@ schema = 1
   [
     "{python}",
     "-m",
-    "jellyfin_plugin_toolkit.checks.architecture",
+    "jellyfin_plugin_toolkit",
+    "internal",
+    "architecture",
   ],
-] }
-"test-tooling" = { "commands" = [["{python}", "-m", "scripts.tooling_tests"]] }
-"test-installation" = { "commands" = [
+]
+
+[operations.test-tooling]
+commands = [["{python}", "-m", "scripts.tooling_tests"]]
+
+[operations.test-installation]
+commands = [
   [
     "{python}",
     "-m",
@@ -294,24 +428,32 @@ schema = 1
     "-m",
     "tests.installation.package_installation",
   ],
-] }
-"test-workflow" = { "commands" = [
+]
+
+[operations.test-workflow]
+commands = [
   [
     "{python}",
-    "plugin",
+    "-m",
+    "jellyfin_plugin_toolkit",
     "test",
     "browser",
+    "--",
     "--project",
     "workflow-chromium",
     "--workers=2",
   ],
-] }
-"test-rendering" = { "commands" = [
+]
+
+[operations.test-rendering]
+commands = [
   [
     "{python}",
-    "plugin",
+    "-m",
+    "jellyfin_plugin_toolkit",
     "test",
     "browser",
+    "--",
     "--project",
     "chromium",
     "--project",
@@ -322,97 +464,21 @@ schema = 1
     "webkit",
     "--workers=2",
   ],
-] }
-"test-performance" = { "commands" = [
+]
+
+[operations.test-performance]
+commands = [
   [
     "{python}",
-    "plugin",
+    "-m",
+    "jellyfin_plugin_toolkit",
     "test",
     "browser",
+    "--",
     "--project",
     "stress-chromium",
     "--project",
     "stress-mobile-chromium",
     "--workers=2",
   ],
-] }
-
-[distribution]
-"web" = true
-"notices" = [
-  { "source" = "vendor/DOTNET-LICENSE" },
-  { "source" = "vendor/DYNAMIC-BACKGROUND-LICENSE" },
-  { "source" = "vendor/KAWARP-LICENSE" },
-  { "source" = "vendor/KAWAZU-LICENSE" },
-  { "source" = "vendor/LIBNMECAB-LGPL-LICENSE" },
-  { "source" = "vendor/LIBNMECAB-LICENSE" },
-  { "source" = "vendor/LUCIDE-LICENSE" },
-  { "source" = "vendor/LYRICIFY-LICENSE" },
-  { "source" = "vendor/LYRICMOTION-LICENSE" },
-  { "source" = "vendor/NEWTONSOFT-LICENSE" },
-  { "source" = "vendor/OPENCC-DATA-LICENSE" },
-  { "source" = "vendor/OPENCC-LICENSE" },
-  { "source" = "vendor/QMC-LICENSE" },
-  { "source" = "vendor/SHARPZIPLIB-LICENSE" },
-  { "source" = "vendor/ZSTDSHARP-LICENSE" },
-  { "source" = "vendor/LIBNMECAB-SOURCE.tar.gz" },
-  { "source" = "vendor/DOTNET-THIRD-PARTY-NOTICES" },
-  { "source" = "vendor/LYRICMOTION-THIRD-PARTY-NOTICES.md" },
-  { "source" = "vendor/OPENCC-THIRD-PARTY-NOTICES.md" },
-  { "source" = "LICENSE" },
-  { "source" = "NOTICE" },
-  { "source" = "GPL-3.0.txt" },
-]
-"payload_notices" = [
-  { "source" = "KawazuDictionary/COPYING", "name" = "IPADIC-COPYING" },
-]
-"licenses" = { "Jellyfin.Plugin.LyricBridge.dll" = { "package" = "project-source", "notices" = [
-  "LICENSE",
-  "LYRICMOTION-LICENSE",
-  "LUCIDE-LICENSE",
-  "QMC-LICENSE",
-  "DYNAMIC-BACKGROUND-LICENSE",
-  "KAWARP-LICENSE",
-  "LYRICMOTION-THIRD-PARTY-NOTICES.md",
-  "GPL-3.0.txt",
-], "license" = "Apache-2.0" }, "LyricBridge.Core.dll" = { "package" = "project-source", "notices" = [
-  "LICENSE",
-], "license" = "Apache-2.0" }, "LyricBridge.Infrastructure.dll" = { "package" = "project-source", "notices" = [
-  "LICENSE",
-], "license" = "Apache-2.0" }, "Lyricify.Lyrics.Helper.dll" = { "package" = "project-source", "notices" = [
-  "LYRICIFY-LICENSE",
-], "license" = "Apache-2.0", "version" = "0.2.0" }, "Kawazu.dll" = { "package" = "Kawazu", "notices" = [
-  "KAWAZU-LICENSE",
-], "license" = "MIT" }, "LibNMeCab.dll" = { "package" = "LibNMeCab", "notices" = [
-  "LIBNMECAB-LICENSE",
-  "LIBNMECAB-LGPL-LICENSE",
-  "LIBNMECAB-SOURCE.tar.gz",
-], "license" = "LGPL-2.1-or-later" }, "LibNMeCab.IpaDicBin.dll" = { "package" = "LibNMeCab.IpaDicBin", "notices" = [
-  "LIBNMECAB-LICENSE",
-  "LIBNMECAB-LGPL-LICENSE",
-  "IPADIC-COPYING",
-  "LIBNMECAB-SOURCE.tar.gz",
-], "license" = "LGPL-2.1-or-later" }, "Newtonsoft.Json.dll" = { "package" = "Newtonsoft.Json", "notices" = [
-  "NEWTONSOFT-LICENSE",
-], "license" = "MIT" }, "ICSharpCode.SharpZipLib.dll" = { "package" = "SharpZipLib", "notices" = [
-  "SHARPZIPLIB-LICENSE",
-], "license" = "MIT" }, "OpenccNetLib.dll" = { "package" = "OpenccNetLib", "notices" = [
-  "OPENCC-LICENSE",
-  "OPENCC-DATA-LICENSE",
-  "OPENCC-THIRD-PARTY-NOTICES.md",
-], "license" = "MIT" }, "ZstdSharp.dll" = { "package" = "ZstdSharp.Port", "notices" = [
-  "ZSTDSHARP-LICENSE",
-], "license" = "MIT" } }
-"licensed_paths" = [
-  { "prefix" = "KawazuDictionary/", "package" = "LibNMeCab.IpaDicBin", "license" = "LGPL-2.1-or-later AND LicenseRef-IPADIC", "notices" = [
-    "IPADIC-COPYING",
-  ] },
-]
-"web_exclude" = ["demo.html", "demo.wav"]
-"web_notices" = [
-  { "source" = "vendor/LYRICMOTION-LICENSE", "name" = "LICENSE" },
-  { "source" = "vendor/DYNAMIC-BACKGROUND-LICENSE", "name" = "DYNAMIC-BACKGROUND-LICENSE.txt" },
-  { "source" = "vendor/LYRICMOTION-THIRD-PARTY-NOTICES.md", "name" = "THIRD_PARTY_NOTICES.md" },
-  { "source" = "vendor/KAWARP-LICENSE", "name" = "KAWARP-LICENSE.txt" },
-  { "source" = "vendor/QMC-LICENSE", "name" = "QMC-LICENSE.txt" },
 ]

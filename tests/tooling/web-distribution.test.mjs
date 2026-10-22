@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { createBuilder } from "../../.build/toolkit/current/node/build.mjs";
+import { createBuilder } from "../../.build/jpt/node/build.mjs";
 
 test("distributed lyric renderer preserves its public asset names and standalone administrator page", async () => {
     const root = fileURLToPath(new URL("../../", import.meta.url));

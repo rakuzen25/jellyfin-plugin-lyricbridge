@@ -10,13 +10,16 @@ on:
         description: Successful validation run whose immutable artifacts should be attached
         type: string
 permissions:
-  contents: write
+  contents: read
   actions: read
   id-token: write
   attestations: write
 jobs:
   release:
-    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/release.yml@27d7278b59bbee90be02046a235939317e487e56 # v0.1.1
+    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/release.yml@5afc0ada062c79016114bb4c88b6ee0d5fff3916 # v0.4.0
     with:
       tag: ${{ inputs.tag }}
       validated_run_id: ${{ inputs.validated_run_id }}
+      app_client_id: ${{ vars.PLUGIN_APP_CLIENT_ID }}
+    secrets:
+      PLUGIN_APP_PRIVATE_KEY: ${{ secrets.PLUGIN_APP_PRIVATE_KEY }}

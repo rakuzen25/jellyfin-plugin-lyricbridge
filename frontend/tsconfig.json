@@ -1,5 +1,5 @@
 {
-    "extends": "../.build/toolkit/current/configs/tsconfig.json",
+    "extends": "../.build/jpt/configs/tsconfig.json",
     "compilerOptions": {
         "lib": ["ES2022", "DOM", "DOM.Iterable"],
         "types": [],

@@ -1,1 +1,1 @@
-export * from "../../.build/toolkit/current/ui/feedback.ts";
+export * from "../../.build/jpt/ui/feedback.ts";

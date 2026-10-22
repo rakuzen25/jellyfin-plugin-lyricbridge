@@ -13,22 +13,17 @@
                 {
                     "type": "json",
                     "path": "src/Host/packages.lock.json",
-                    "jsonpath": "$..dependencies[?(@property === 'LyricBridge.Core' || @property === 'LyricBridge.Infrastructure')]"
-                },
-                {
-                    "type": "json",
-                    "path": "src/Infrastructure/packages.lock.json",
-                    "jsonpath": "$..dependencies[?(@property === 'LyricBridge.Core' || @property === 'LyricBridge.Infrastructure')]"
-                },
-                {
-                    "type": "json",
-                    "path": "tests/backend/Infrastructure/packages.lock.json",
-                    "jsonpath": "$..dependencies[?(@property === 'LyricBridge.Core' || @property === 'LyricBridge.Infrastructure')]"
+                    "jsonpath": "$['dependencies'][*][?(@.type === 'Project')]['dependencies'][?(@property === \"Jellyfin.Plugin.LyricBridge\" || @property === \"LyricBridge.Core\" || @property === \"LyricBridge.Infrastructure\")]"
                 },
                 {
                     "type": "json",
                     "path": "tests/backend/Host/packages.lock.json",
-                    "jsonpath": "$..dependencies[?(@property === 'LyricBridge.Core' || @property === 'LyricBridge.Infrastructure')]"
+                    "jsonpath": "$['dependencies'][*][?(@.type === 'Project')]['dependencies'][?(@property === \"Jellyfin.Plugin.LyricBridge\" || @property === \"LyricBridge.Core\" || @property === \"LyricBridge.Infrastructure\")]"
+                },
+                {
+                    "type": "json",
+                    "path": "tests/backend/Infrastructure/packages.lock.json",
+                    "jsonpath": "$['dependencies'][*][?(@.type === 'Project')]['dependencies'][?(@property === \"Jellyfin.Plugin.LyricBridge\" || @property === \"LyricBridge.Core\" || @property === \"LyricBridge.Infrastructure\")]"
                 }
             ]
         }

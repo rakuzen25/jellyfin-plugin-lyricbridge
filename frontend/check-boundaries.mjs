@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import { createBuilder } from "../.build/toolkit/current/node/build.mjs";
+import { createBuilder } from "../.build/jpt/node/build.mjs";
 import { checkRendererContract, checkModuleBoundary, checkAcyclic } from "./contract-boundaries.mjs";
 const root = new URL(".", import.meta.url).pathname;
 const { bundleEntries } = await createBuilder(path.resolve(root, ".."));

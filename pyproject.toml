@@ -1,5 +1,21 @@
+[project]
+name = "jellyfin-lyricbridge-tooling"
+version = "0.1.0"
+requires-python = ">=3.15,<3.16"
+dependencies = [
+    "jellyfin-plugin-toolkit",
+]
+
+[tool.uv]
+required-version = "==0.13.1"
+python-preference = "only-managed"
+exclude-newer = "1 day"
+
+[tool.uv.sources]
+jellyfin-plugin-toolkit = { url = "https://github.com/rakuzen25/jellyfin-plugin-toolkit/releases/download/v0.4.0/jellyfin_plugin_toolkit-0.4.0-py3-none-any.whl" }
+
 [tool.ruff]
-extend = ".build/toolkit/current/configs/ruff.toml"
+extend = ".build/jpt/configs/ruff.toml"
 target-version = "py315"
 include = ["scripts/**/*.py", "tests/**/*.py"]
 
@@ -8,4 +24,7 @@ python_version = "3.15"
 files = ["scripts", "tests"]
 check_untyped_defs = true
 warn_unused_ignores = true
-mypy_path = ".:.build/toolkit/current"
+mypy_path = "."
+
+[dependency-groups]
+dev = ["mypy>=2.4,<3", "ruff>=0.17.1,<0.18"]

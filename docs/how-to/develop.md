@@ -4,22 +4,23 @@ Run commands from the repository root. Read the [architecture rationale](../expl
 
 ## Prepare the toolchain
 
-Install the versions pinned by [.python-version](../../.python-version), [.node-version](../../.node-version), [package.json](../../package.json), and [global.json](../../global.json), plus Docker. Then run:
+Install uv at the version required by `pyproject.toml`, the Node and pnpm versions in [.node-version](../../.node-version) and [package.json](../../package.json), the .NET SDK in [global.json](../../global.json), and Docker. uv manages the Python version pinned by [.python-version](../../.python-version). Then run:
 
 ```sh
-pnpm bootstrap
+uv sync --locked
+uv run jpt bootstrap
 ```
 
-Bootstrap verifies installed tools, restores frozen workspace dependencies, prepares `.venv` with the check dependencies, extracts verified references from the pinned official Jellyfin image, and restores locked backend dependencies. It does not install system tools. Tooling checks run the pinned actionlint image through Docker; the first run needs access to pull that image.
-`JELLYFIN_PLUGIN_PYTHON`, `JELLYFIN_PLUGIN_DOTNET`, and `JELLYFIN_PLUGIN_PNPM` select alternate executable locations; `JELLYFIN_PLUGIN_REFERENCE_DIR` selects the references used by clean builds.
+uv creates and synchronizes the Python environment. Bootstrap verifies Node and .NET, restores frozen workspace and backend dependencies, and extracts verified references from the pinned official Jellyfin image. Tooling checks run the pinned actionlint image through Docker; the first run needs access to pull that image.
+`JELLYFIN_PLUGIN_DOTNET` and `JELLYFIN_PLUGIN_PNPM` select alternate executable locations; `JELLYFIN_PLUGIN_REFERENCE_DIR` selects the references used by clean builds.
 
 ## Consume the shared foundation
 
 `plugin.toml` declares plugin identity, capabilities, architecture policy, validation groups and shipped inventory. `version.txt` remains authoritative for the plugin version; native toolchain pins and dependency locks retain their existing authority.
 
-`toolkit.lock.json` selects a GitHub toolkit release and archive SHA-256. The standard-library `./plugin` launcher verifies it before activating an ignored cache. Existing pnpm commands delegate to this launcher. Development checkouts download the published release into the ignored `.build/toolkit/` cache. Source distributions include the exact archive at `build-support/toolkit.tar.gz` for offline rebuilding.
+`pyproject.toml` declares this repository's independent uv tooling project. `uv.lock` records the canonical GitHub release wheel URL, version, SHA256 and transitive Python dependencies. Run commands as `uv run jpt …`; pnpm scripts delegate to that interface. `jpt prepare` exports shared resources to `.build/jpt` for editors, Node, MSBuild and mounted browser containers. Toolkit operations prepare resources automatically.
 
-Reusable workflow SHAs and the versioned shared Renovate preset must match the toolkit archive's recorded source/version. Toolkit updates arrive as one manually merged Renovate PR; CI rejects partial updates. Common implementation and extension contracts live in the [toolkit repository](https://github.com/rakuzen25/jellyfin-plugin-toolkit).
+Reusable workflow SHAs and the versioned shared Renovate preset must match the locked toolkit release. Grouped update PRs use trusted synchronization to invoke uv and coordinate these references. Source distributions include the exact wheel, matching toolkit source distribution and Python lockfile; empty-cache reconstruction may require network access. Shared implementation and extension contracts live in the [toolkit repository](https://github.com/rakuzen25/jellyfin-plugin-toolkit).
 
 ## Run an interactive sandbox
 
@@ -51,7 +52,7 @@ Use `pnpm check`, `pnpm format`, and `pnpm test` for the whole project. Add `fro
 
 ## Upgrade dependencies deliberately
 
-Restore explicitly with frozen/locked dependencies; checks must not install implicitly.
+Local `uv run` commands synchronize Python dependencies automatically. Bootstrap prepares Node, .NET and Jellyfin integrations. CI runs `uv sync --locked`, then `uv run --no-sync jpt …`. Use `uv add` for Python dependency changes; the project enforces a 24-hour release-age cutoff.
 Keep browser packages, lockfiles, and the pinned acceptance image together. Review visual changes before updating screenshot baselines.
 
 Age gates reduce immediate exposure to new packages; do not bypass them to make an update pass.

@@ -19,7 +19,7 @@ class ConsumerPolicyTests(unittest.TestCase):
         context = Context.load()
         for path in [
             "plugin.toml",
-            "toolkit.lock.json",
+            "uv.lock",
             "Directory.Build.props",
             ".github/workflows/validate.yml",
         ]:

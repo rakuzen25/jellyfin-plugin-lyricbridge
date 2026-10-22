@@ -1,6 +1,6 @@
 {
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-    "extends": ["config:recommended", "github>rakuzen25/jellyfin-plugin-toolkit#v0.1.1"],
+    "extends": ["config:recommended", "github>rakuzen25/jellyfin-plugin-toolkit#v0.4.0"],
     "automergeType": "pr",
     "platformAutomerge": true,
     "automergeStrategy": "squash",
@@ -53,29 +53,15 @@
             "automerge": false,
             "groupName": null
         },
-        {
-            "matchPackageNames": ["xunit.v3", "xunit.analyzers"],
-            "groupName": "Backend test infrastructure"
-        },
-        {
-            "matchPackageNames": ["actions/upload-artifact", "actions/download-artifact"],
-            "groupName": "GitHub artifact actions"
-        },
+        { "matchPackageNames": ["xunit.v3", "xunit.analyzers"], "groupName": "Backend test infrastructure" },
+        { "matchPackageNames": ["actions/upload-artifact", "actions/download-artifact"], "groupName": "GitHub artifact actions" },
         {
             "matchPackageNames": ["playwright", "mcr.microsoft.com/playwright"],
             "groupName": "Playwright package and image",
             "separateMajorMinor": true
         },
-        {
-            "matchPackageNames": ["playwright", "mcr.microsoft.com/playwright"],
-            "matchUpdateTypes": ["minor", "major"],
-            "automerge": false
-        },
-        {
-            "description": "Native compiler updates stay on stable TypeScript 7.",
-            "matchPackageNames": ["typescript"],
-            "allowedVersions": ">=7 <8"
-        },
+        { "matchPackageNames": ["playwright", "mcr.microsoft.com/playwright"], "matchUpdateTypes": ["minor", "major"], "automerge": false },
+        { "description": "Native compiler updates stay on stable TypeScript 7.", "matchPackageNames": ["typescript"], "allowedVersions": ">=7 <8" },
         {
             "description": "Legacy compiler API updates stay on stable TypeScript 6.",
             "matchPackageNames": ["@typescript/typescript6"],
@@ -86,6 +72,26 @@
             "matchPackageNames": ["typescript"],
             "matchDepNames": ["@typescript/old"],
             "allowedVersions": ">=6 <7"
+        },
+        {
+            "description": ["Toolkit references are derived by trusted synchronization, never updated independently."],
+            "matchPackageNames": ["rakuzen25/jellyfin-plugin-toolkit", "rakuzen25/jellyfin-plugin-toolkit/**"],
+            "groupName": "Jellyfin plugin toolkit",
+            "groupSlug": "jellyfin-plugin-toolkit",
+            "automerge": false,
+            "separateMajorMinor": false,
+            "enabled": false
+        },
+        {
+            "description": ["Only the canonical toolkit wheel URL may select a new published release."],
+            "matchManagers": ["custom.regex"],
+            "matchDatasources": ["github-releases"],
+            "matchPackageNames": ["rakuzen25/jellyfin-plugin-toolkit"],
+            "matchFileNames": ["pyproject.toml"],
+            "enabled": true,
+            "minimumReleaseAge": null,
+            "minimumReleaseAgeBuffer": null
         }
-    ]
+    ],
+    "gitIgnoredAuthors": ["342669125+finchaser-3-0[bot]@users.noreply.github.com"]
 }

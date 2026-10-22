@@ -23,8 +23,8 @@ A newer matching failure prevents choosing an older success merely because it is
 Fork and unmerged-PR results cannot establish trusted release evidence.
 
 A partially failed workflow can contain a reusable successful group, while establishing a cumulative baseline requires complete coverage.
-Reuse chains must resolve to their original successful execution.
-The locked toolkit owns receipt fields and trust rules. Its archive digest, configuration and native toolchain pins participate in fingerprints. Consumer workflows supply event triggers and explicit permissions around immutable reusable-workflow references.
+Reuse records point directly to their original successful execution.
+The locked toolkit owns receipt fields and trust rules. Its locked wheel hash, configuration and native toolchain pins participate in fingerprints. Python dev-only lock changes do not invalidate fixture-only stress results when consumed assets and execution settings stay identical. Consumer workflows supply event triggers and explicit permissions around immutable reusable-workflow references.
 
 ## Keep release acceptance fresh
 

@@ -7,12 +7,12 @@
         "pnpm": "12.15.0"
     },
     "scripts": {
-        "bootstrap": "python3 plugin bootstrap",
-        "dev": "python3 plugin dev",
-        "build": "python3 plugin build",
-        "check": "python3 plugin check",
-        "format": "python3 plugin format",
-        "test": "python3 plugin test"
+        "bootstrap": "uv run jpt bootstrap",
+        "dev": "uv run jpt dev",
+        "build": "uv run jpt build",
+        "check": "uv run jpt check",
+        "format": "uv run jpt format",
+        "test": "uv run jpt test"
     },
     "devDependencies": {
         "@eslint/js": "10.0.1",
@@ -24,6 +24,15 @@
         "knip": "6.42.0",
         "prettier": "3.9.10",
         "typescript": "npm:@typescript/typescript6@6.0.2",
-        "typescript-eslint": "8.72.0"
+        "typescript-eslint": "8.72.0",
+        "chokidar": "5.0.0",
+        "http-proxy-middleware": "4.2.0",
+        "remark-cli": "12.0.1",
+        "remark-validate-links": "13.1.0",
+        "remark-lint": "10.0.1",
+        "remark-lint-no-undefined-references": "5.0.2",
+        "remark-gfm": "4.0.1",
+        "unist-util-visit": "5.1.0",
+        "hast-util-from-html": "2.0.3"
     }
 }
