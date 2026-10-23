@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.3.1...v0.3.2) (2026-10-23)
+
+
+### Miscellaneous Chores
+
+* bump version ([9b7cbe8](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/9b7cbe811cade738907336648f5cb54f5d2ca5aa))
+
 ## [0.3.1](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.3.0...v0.3.1) (2026-10-23)
 
 
