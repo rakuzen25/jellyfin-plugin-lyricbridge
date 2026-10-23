@@ -2,18 +2,26 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const config = JSON.parse(readFileSync(new URL("../../renovate.json", import.meta.url), "utf8"));
+const localConfig = JSON.parse(readFileSync(new URL("../../renovate.json", import.meta.url), "utf8"));
+const tooling = JSON.parse(readFileSync(new URL("../../.build/jpt/tooling.json", import.meta.url), "utf8"));
 const preset = JSON.parse(readFileSync(new URL("../../.build/jpt/default.json", import.meta.url), "utf8"));
+const config = {
+    ...tooling,
+    ...preset,
+    ...localConfig,
+    packageRules: [...tooling.packageRules, ...preset.packageRules, ...localConfig.packageRules],
+};
 function matches(pattern, name) {
     if (pattern.startsWith("!/") && pattern.endsWith("/")) return !new RegExp(pattern.slice(2, -1)).test(name);
     return pattern === name;
 }
-function policy(name, update, dependency = name) {
+function policy(name, update, dependency = name, manager = "npm") {
     return Object.assign(
         {},
-        ...[...preset.packageRules, ...config.packageRules].filter(
+        ...config.packageRules.filter(
             (rule) =>
                 (!rule.matchPackageNames || rule.matchPackageNames.some((pattern) => matches(pattern, name))) &&
+                (!rule.matchManagers || rule.matchManagers.includes(manager)) &&
                 (!rule.matchDepNames || rule.matchDepNames.includes(dependency)) &&
                 (!rule.matchUpdateTypes || rule.matchUpdateTypes.includes(update)),
         ),
@@ -82,7 +90,7 @@ test("third-party dependencies retain the 24-hour release age; toolkit releases 
     assert.equal(config.minimumReleaseAgeBuffer, "30 minutes");
     assert.equal(config.minimumReleaseAgeBehaviour, "timestamp-optional");
     assert.equal(config.internalChecksFilter, "strict");
-    const exceptions = config.packageRules.filter((rule) => Object.hasOwn(rule, "minimumReleaseAge"));
+    const exceptions = localConfig.packageRules.filter((rule) => Object.hasOwn(rule, "minimumReleaseAge"));
     assert.equal(exceptions.length, 1);
     const [toolkit] = exceptions;
     assert.deepEqual(toolkit.matchPackageNames, ["rakuzen25/jellyfin-plugin-toolkit"]);
@@ -92,7 +100,7 @@ test("third-party dependencies retain the 24-hour release age; toolkit releases 
     assert.equal(toolkit.enabled, true);
     assert.equal(toolkit.minimumReleaseAge, null);
     assert.equal(toolkit.minimumReleaseAgeBuffer, null);
-    for (const rule of config.packageRules) {
+    for (const rule of localConfig.packageRules) {
         const protectedKeys = ["minimumReleaseAgeBehaviour", "internalChecksFilter"];
         if (rule !== toolkit) protectedKeys.push("minimumReleaseAge", "minimumReleaseAgeBuffer");
         for (const key of protectedKeys) {

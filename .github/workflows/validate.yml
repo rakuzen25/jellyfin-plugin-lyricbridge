@@ -12,6 +12,6 @@ permissions:
   actions: read
 jobs:
   validation:
-    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/validate.yml@a08d44bb89bafe6635e7eb4c66e4c32b1bedc89b # v0.4.2
+    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/validate.yml@cfc551ea2eeee16984979a1b6e5c287f2b3a52d3 # v0.4.3
     with:
       full: ${{ inputs.full || false }}
