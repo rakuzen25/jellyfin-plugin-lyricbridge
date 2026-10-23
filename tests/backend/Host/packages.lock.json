@@ -183,8 +183,8 @@
       "Jellyfin.Plugin.LyricBridge": {
         "type": "Project",
         "dependencies": {
-          "LyricBridge.Core": "[0.2.2, )",
-          "LyricBridge.Infrastructure": "[0.2.2, )",
+          "LyricBridge.Core": "[0.3.0, )",
+          "LyricBridge.Infrastructure": "[0.3.0, )",
           "Lyricify.Lyrics.Helper": "[0.2.0, )"
         }
       },
@@ -195,7 +195,7 @@
         "type": "Project",
         "dependencies": {
           "Kawazu": "[1.1.4, )",
-          "LyricBridge.Core": "[0.2.2, )",
+          "LyricBridge.Core": "[0.3.0, )",
           "Lyricify.Lyrics.Helper": "[0.2.0, )"
         }
       },

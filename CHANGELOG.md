@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.3.0](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.2.2...v0.3.0) (2026-10-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* adopt shared toolkit ([#44](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/issues/44))
+* add upgrade path
+
+### Features
+
+* adopt shared toolkit ([#44](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/issues/44)) ([7ae664c](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/7ae664c3d92be8a08877bcb50090f9da6e690d8e))
+
+
+### Bug Fixes
+
+* fix services ordering ([834e742](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/834e742fdd1aca05d1e9c74ece9cda9b520271c1))
+* update toolkit version ([311eddc](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/311eddc8c838a4b5300903b5c6559f6ac2f4bbdf))
+
+
+### Code Refactoring
+
+* add upgrade path ([e773a26](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/e773a2686ef39fd766d4011f3abea0c264f74e93))
+
 ## [0.2.2](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.2.1...v0.2.2) (2026-10-19)
 
 
