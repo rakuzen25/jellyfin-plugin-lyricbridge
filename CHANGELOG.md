@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.3.0...v0.3.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **deps:** update routine dependency updates ([#46](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/issues/46)) ([02d79a0](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/02d79a03fef0326b07e706c021f9589e9c51e767))
+
 ## [0.3.0](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.2.2...v0.3.0) (2026-10-23)
 
 
