@@ -482,3 +482,6 @@ commands = [
     "--workers=2",
   ],
 ]
+
+[advisories]
+waivers = []
