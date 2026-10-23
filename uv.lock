@@ -93,7 +93,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "jellyfin-plugin-toolkit", url = "https://github.com/rakuzen25/jellyfin-plugin-toolkit/releases/download/v0.4.1/jellyfin_plugin_toolkit-0.4.1-py3-none-any.whl" }]
+requires-dist = [{ name = "jellyfin-plugin-toolkit", url = "https://github.com/rakuzen25/jellyfin-plugin-toolkit/releases/download/v0.4.2/jellyfin_plugin_toolkit-0.4.2-py3-none-any.whl" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -103,15 +103,15 @@ dev = [
 
 [[package]]
 name = "jellyfin-plugin-toolkit"
-version = "0.4.1"
-source = { url = "https://github.com/rakuzen25/jellyfin-plugin-toolkit/releases/download/v0.4.1/jellyfin_plugin_toolkit-0.4.1-py3-none-any.whl" }
+version = "0.4.2"
+source = { url = "https://github.com/rakuzen25/jellyfin-plugin-toolkit/releases/download/v0.4.2/jellyfin_plugin_toolkit-0.4.2-py3-none-any.whl" }
 dependencies = [
     { name = "pydantic" },
     { name = "tomli-w" },
     { name = "typer" },
 ]
 wheels = [
-    { url = "https://github.com/rakuzen25/jellyfin-plugin-toolkit/releases/download/v0.4.1/jellyfin_plugin_toolkit-0.4.1-py3-none-any.whl", hash = "sha256:152f4f3b731eafb1b55b3d51f98d241e01c6b5b51261e53b738f0e0a4d1c2d06" },
+    { url = "https://github.com/rakuzen25/jellyfin-plugin-toolkit/releases/download/v0.4.2/jellyfin_plugin_toolkit-0.4.2-py3-none-any.whl", hash = "sha256:7fde3ecdceb67707f7ab8f270b38f52691e3503cb54687470bb7978dc080df4f" },
 ]
 
 [package.metadata]
