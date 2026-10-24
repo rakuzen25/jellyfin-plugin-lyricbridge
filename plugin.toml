@@ -402,11 +402,6 @@ after = [
   [
     "{python}",
     "-m",
-    "mypy",
-  ],
-  [
-    "{python}",
-    "-m",
     "jellyfin_plugin_toolkit",
     "internal",
     "architecture",

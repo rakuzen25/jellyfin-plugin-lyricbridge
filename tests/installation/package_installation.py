@@ -24,10 +24,32 @@ import uuid
 import wave
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from jellyfin_plugin_toolkit.common.release_metadata import load_release
 from jellyfin_plugin_toolkit.context import Context
+
+
+class MediaTrack(TypedDict):
+    Id: str
+    Path: str
+
+
+class LibraryTypeOptions(TypedDict):
+    Type: str
+    MetadataFetchers: list[str]
+    ImageFetchers: list[str]
+
+
+class LibraryOptions(TypedDict):
+    PathInfos: list[dict[str, str]]
+    SaveLyricsWithMedia: bool
+    EnableRealtimeMonitor: bool
+    AutomaticRefreshIntervalDays: int
+    MetadataSavers: list[str]
+    DisabledLyricFetchers: list[str]
+    TypeOptions: list[LibraryTypeOptions]
+
 
 RELEASE = load_release()
 VERSION = RELEASE.version
@@ -52,7 +74,7 @@ class QuietFiles(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:
         if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
-            chunks = []
+            chunks: list[bytes] = []
             while length := int(self.rfile.readline().split(b";", 1)[0], 16):
                 chunks.append(self.rfile.read(length))
                 assert self.rfile.read(2) == b"\r\n"
@@ -139,7 +161,7 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
     base = f"http://127.0.0.1:{port}"
     token = None
     password = None
-    credentials = []
+    credentials: list[str] = []
     authorization = f'MediaBrowser Client="LyricBridgeTests", Device="Disposable", DeviceId="fixture", Version="{VERSION}"'
 
     def call(
@@ -517,7 +539,7 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         admin_token = token
         admin_preferences = call_json("/LyricBridge/preferences")
         for name in ("public", "restricted"):
-            options = {
+            options: LibraryOptions = {
                 "PathInfos": [{"Path": "/fixture-media/" + name}],
                 "SaveLyricsWithMedia": False,
                 "EnableRealtimeMonitor": False,
@@ -536,7 +558,7 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
                 "POST",
                 {"LibraryOptions": options},
             )
-        tracks = []
+        tracks: list[MediaTrack] = []
         for _ in range(120):
             tracks = call_json(
                 "/Items?Recursive=true&IncludeItemTypes=Audio&Fields=Path"
@@ -715,7 +737,7 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         preferences["originalSize"] = 51
         call("/LyricBridge/preferences", "PUT", preferences)
         assert call_json("/LyricBridge/preferences")["originalSize"] == 51
-        for path, method, body in [
+        cases_path_method_body: list[tuple[str, str, dict[str, Any] | None]] = [
             ("/LyricBridge/admin/settings", "GET", None),
             (
                 "/LyricBridge/admin/settings",
@@ -737,7 +759,8 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
             ("/LyricBridge/admin/web-renderer/repair", "POST", {}),
             ("/LyricBridge/admin/reset", "POST", {"confirmation": "RESET"}),
             (f"/Plugins/{PLUGIN}/Configuration", "POST", configuration),
-        ]:
+        ]
+        for path, method, body in cases_path_method_body:
             try:
                 call(path, method, body)
                 raise AssertionError("Ordinary user accepted by administrator endpoint")
