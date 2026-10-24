@@ -15,7 +15,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class ReleaseTests(unittest.TestCase):
-    def test_web_installation_accepts_frontend_only_and_archive_only_checkouts(self):
+    def test_web_installation_accepts_frontend_only_and_archive_only_checkouts(
+        self,
+    ) -> None:
         files = (
             "lyricbridge.js",
             "lyricbridge.css",
