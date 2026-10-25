@@ -45,7 +45,7 @@ test("routine updates automate while major and coupled toolchain changes require
         "OpenccNetLib",
     ]) {
         assert.equal(policy(name, "minor").automerge, false, name);
-        assert.equal(policy(name, "minor").groupName, null, name);
+        assert.equal(policy(name, "minor").groupName, name === "python" ? "Python toolchain" : null, name);
     }
     for (const [name, allowedVersions] of [
         ["typescript", ">=7 <8"],
@@ -119,4 +119,13 @@ test("third-party dependencies retain the 24-hour release age; toolkit releases 
     assert.match(project, /exclude-newer = "1 day"/);
     const lock = readFileSync(new URL("../../uv.lock", import.meta.url), "utf8");
     assert.match(lock, /exclude-newer-span = "P1D"/);
+});
+
+test("Python and uv share a dedicated group with patch-only automerge", () => {
+    for (const name of ["python", "uv", "astral-sh/uv"]) {
+        for (const update of ["patch", "minor", "major"]) {
+            assert.equal(policy(name, update).groupName, "Python toolchain");
+            assert.equal(policy(name, update).automerge, update === "patch");
+        }
+    }
 });
