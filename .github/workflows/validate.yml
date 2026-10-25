@@ -15,6 +15,6 @@ jobs:
   validation:
     name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata-event' || 'validation' }}
     if: github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null
-    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/validate.yml@5b40ac2f5d56620a30ddadeed23da8bd9df2bc72 # v0.5.1
+    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/validate.yml@1a5ba7079ec8220f5b1899987899eb08cc07c214 # v0.5.2
     with:
       full: ${{ inputs.full || false }}
