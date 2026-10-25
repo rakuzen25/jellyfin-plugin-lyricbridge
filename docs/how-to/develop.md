@@ -61,6 +61,8 @@ The executable update policy lives in [Renovate configuration](../../renovate.js
 Require the aggregate `validate` check and up-to-date branches on `main`; conditional jobs cannot serve as unconditional branch requirements.
 Review compiler, runtime, provider, and converter updates for behavior changes even when restoration succeeds.
 
+Python is installed and selected by uv using `.python-version`; the exact uv version is required by `pyproject.toml`. Both local development and CI require managed Python. Renovate groups Python and uv into a dedicated **Python toolchain** PR, separate from routine dependencies. Patch-only toolchain updates may automerge after required checks; Python or uv minor/major updates, including mixed groups, require review. Repository-specific package review restrictions remain. If uv cannot install the selected interpreter, update to a compatible Python/uv pair and retry `uv sync --locked`. Toolkit synchronization preserves these independently maintained pins.
+
 ## Next steps
 
 [Validate a change](validate.md), [integrate feedback](feedback.md), or [prepare a release](release.md).
