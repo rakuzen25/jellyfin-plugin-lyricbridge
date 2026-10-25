@@ -18,9 +18,9 @@ For frontend changes alone, `pnpm check frontend` runs lint, formatting, unused-
 For prose and link changes alone, run `pnpm check docs` for Markdown formatting and local links; review the text against the reader's task as well.
 The link checker cannot establish accuracy or writing quality.
 
-Use `pnpm check frontend`, `pnpm check backend`, or `pnpm check tooling` for targeted checks. Each verifies formatting; `pnpm format` applies formatting across maintained languages and Markdown.
+Use `pnpm check frontend`, `pnpm check backend`, `pnpm check tooling`, or `pnpm check automation` for targeted checks. Each verifies formatting; `pnpm format` applies formatting across maintained languages and Markdown.
 Use `pnpm format docs` for root Markdown and `docs/`. Vendored notices and the generated changelog retain their own formatting; changelog links are still checked.
-`pnpm check tooling` also checks TOML formatting and GitHub workflows with the pinned actionlint Docker image, including ShellCheck.
+`pnpm check tooling` checks tooling source formatting and linting. `pnpm check automation` checks automation metadata and TOML formatting, workflow syntax with the pinned actionlint Docker image (including ShellCheck), immutable toolkit pins, and Renovate configuration. `pnpm test frontend` runs tests; linting and formatting belong to `pnpm check frontend`.
 Workflow linting requires Docker; the repository mount is read-only and the container runs without network access.
 `pnpm test` runs frontend, backend, and tooling unit tests. Use a target to run one boundary, for example `pnpm test backend`. Backend runs reject accidental zero-test executions.
 Browser, installation, and reproducibility acceptance are explicit tasks.

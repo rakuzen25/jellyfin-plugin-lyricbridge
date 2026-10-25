@@ -24,9 +24,32 @@ import uuid
 import wave
 import zipfile
 from pathlib import Path
+from typing import Any, TypedDict
 
 from jellyfin_plugin_toolkit.common.release_metadata import load_release
 from jellyfin_plugin_toolkit.context import Context
+
+
+class MediaTrack(TypedDict):
+    Id: str
+    Path: str
+
+
+class LibraryTypeOptions(TypedDict):
+    Type: str
+    MetadataFetchers: list[str]
+    ImageFetchers: list[str]
+
+
+class LibraryOptions(TypedDict):
+    PathInfos: list[dict[str, str]]
+    SaveLyricsWithMedia: bool
+    EnableRealtimeMonitor: bool
+    AutomaticRefreshIntervalDays: int
+    MetadataSavers: list[str]
+    DisabledLyricFetchers: list[str]
+    TypeOptions: list[LibraryTypeOptions]
+
 
 RELEASE = load_release()
 VERSION = RELEASE.version
@@ -41,7 +64,7 @@ CONTAINER = "lyricbridge-package-test-" + uuid.uuid4().hex[:12]
 DIST = Path(__file__).resolve().parents[2] / "dist"
 
 
-def docker(*args):
+def docker(*args: str) -> str:
     return subprocess.check_output(["docker", *args], text=True).strip()
 
 
@@ -49,9 +72,9 @@ class QuietFiles(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         pass
 
-    def do_POST(self):
+    def do_POST(self) -> None:
         if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
-            chunks = []
+            chunks: list[bytes] = []
             while length := int(self.rfile.readline().split(b";", 1)[0], 16):
                 chunks.append(self.rfile.read(length))
                 assert self.rfile.read(2) == b"\r\n"
@@ -138,10 +161,12 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
     base = f"http://127.0.0.1:{port}"
     token = None
     password = None
-    credentials = []
+    credentials: list[str] = []
     authorization = f'MediaBrowser Client="LyricBridgeTests", Device="Disposable", DeviceId="fixture", Version="{VERSION}"'
 
-    def call(path, method="GET", body=None, anonymous=False):
+    def call(
+        path: str, method: str = "GET", body: Any = None, anonymous: bool = False
+    ) -> Any:
         headers = {"Authorization": authorization, "Content-Type": "application/json"}
         if token and not anonymous:
             headers["Authorization"] += f', Token="{token}"'
@@ -161,14 +186,16 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
             data = response.read()
             return json.loads(data) if data else None
 
-    def call_json(path, method="GET", body=None, anonymous=False):
+    def call_json(
+        path: str, method: str = "GET", body: Any = None, anonymous: bool = False
+    ) -> Any:
         """Require response content wherever the fixture consumes JSON."""
         result = call(path, method, body, anonymous)
         if result is None:
             raise AssertionError(f"Expected a JSON response from {method} {path}")
         return result
 
-    def ready():
+    def ready() -> None:
         for _ in range(120):
             try:
                 info = call_json("/System/Info/Public")
@@ -179,7 +206,7 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
             time.sleep(0.5)
         raise RuntimeError("Disposable Jellyfin did not become ready.")
 
-    def restart_server():
+    def restart_server() -> None:
         old = docker("exec", CONTAINER, "cat", "/tmp/lyricbridge-server.pid")
         docker(
             "exec",
@@ -418,11 +445,12 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
             call_json("/LyricBridge/admin/requests?group=finished")["items"], list
         )
 
-        def renderer_index():
+        def renderer_index() -> str:
             with urllib.request.urlopen(base + "/web/index.html") as response:
-                return response.read().decode()
+                data: bytes = response.read()
+                return data.decode()
 
-        def verify_renderer():
+        def verify_renderer() -> None:
             state = call_json("/LyricBridge/admin/web-renderer/repair", "POST", {})
             assert state["enabled"] and state["mechanism"] == "direct", state
             html = renderer_index()
@@ -511,7 +539,7 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         admin_token = token
         admin_preferences = call_json("/LyricBridge/preferences")
         for name in ("public", "restricted"):
-            options = {
+            options: LibraryOptions = {
                 "PathInfos": [{"Path": "/fixture-media/" + name}],
                 "SaveLyricsWithMedia": False,
                 "EnableRealtimeMonitor": False,
@@ -530,7 +558,7 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
                 "POST",
                 {"LibraryOptions": options},
             )
-        tracks = []
+        tracks: list[MediaTrack] = []
         for _ in range(120):
             tracks = call_json(
                 "/Items?Recursive=true&IncludeItemTypes=Audio&Fields=Path"
@@ -604,9 +632,9 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
                 connection["ApiKey"] = "fixture-transcription-key"
         call(f"/Plugins/{PLUGIN}/Configuration", "POST", configuration)
 
-        def completed(job):
+        def completed(job: dict[str, Any]) -> dict[str, Any]:
             for _ in range(200):
-                current = call_json("/LyricBridge/jobs/" + job["id"])
+                current: dict[str, Any] = call_json("/LyricBridge/jobs/" + job["id"])
                 if current["state"] == "complete":
                     return current
                 assert current["state"] not in (
@@ -709,7 +737,7 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
         preferences["originalSize"] = 51
         call("/LyricBridge/preferences", "PUT", preferences)
         assert call_json("/LyricBridge/preferences")["originalSize"] == 51
-        for path, method, body in [
+        cases_path_method_body: list[tuple[str, str, dict[str, Any] | None]] = [
             ("/LyricBridge/admin/settings", "GET", None),
             (
                 "/LyricBridge/admin/settings",
@@ -731,7 +759,8 @@ with tempfile.TemporaryDirectory(prefix="lyricbridge-catalog-") as directory:
             ("/LyricBridge/admin/web-renderer/repair", "POST", {}),
             ("/LyricBridge/admin/reset", "POST", {"confirmation": "RESET"}),
             (f"/Plugins/{PLUGIN}/Configuration", "POST", configuration),
-        ]:
+        ]
+        for path, method, body in cases_path_method_body:
             try:
                 call(path, method, body)
                 raise AssertionError("Ordinary user accepted by administrator endpoint")
