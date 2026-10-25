@@ -16,7 +16,7 @@ permissions:
   attestations: write
 jobs:
   release:
-    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/release.yml@1a5ba7079ec8220f5b1899987899eb08cc07c214 # v0.5.2
+    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/release.yml@d199cb44534bee72936ae2a007b0c0eda82131d1 # v0.5.3
     with:
       tag: ${{ inputs.tag }}
       validated_run_id: ${{ inputs.validated_run_id }}

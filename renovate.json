@@ -1,6 +1,6 @@
 {
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-    "extends": ["github>rakuzen25/jellyfin-plugin-toolkit:tooling#v0.5.2", "github>rakuzen25/jellyfin-plugin-toolkit#v0.5.2"],
+    "extends": ["github>rakuzen25/jellyfin-plugin-toolkit:tooling#v0.5.3", "github>rakuzen25/jellyfin-plugin-toolkit#v0.5.3"],
     "packageRules": [
         {
             "description": ["Pre-1.0 esbuild minor versions can break build behavior."],
