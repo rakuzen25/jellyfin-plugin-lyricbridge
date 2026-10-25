@@ -45,7 +45,7 @@ groups = [
   "performance",
   "artifacts",
 ]
-check_targets = ["frontend", "backend", "tooling", "docs"]
+check_targets = ["frontend", "backend", "tooling", "automation", "docs"]
 unit_groups = ["frontend", "backend", "tooling"]
 acceptance_groups = [
   "workflow",
