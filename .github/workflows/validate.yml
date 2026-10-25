@@ -1,6 +1,7 @@
 name: Validate release candidate
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   workflow_dispatch:
     inputs:
       full:
@@ -12,6 +13,8 @@ permissions:
   actions: read
 jobs:
   validation:
-    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/validate.yml@cfc551ea2eeee16984979a1b6e5c287f2b3a52d3 # v0.4.3
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata-event' || 'validation' }}
+    if: github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null
+    uses: rakuzen25/jellyfin-plugin-toolkit/.github/workflows/validate.yml@5b40ac2f5d56620a30ddadeed23da8bd9df2bc72 # v0.5.1
     with:
       full: ${{ inputs.full || false }}
