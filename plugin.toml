@@ -35,6 +35,7 @@ Infrastructure = "src/Infrastructure/LyricBridge.Infrastructure.csproj"
 Host = "src/Host/LyricBridge.csproj"
 
 [validation]
+renovate_tests = "tests/tooling/renovate-policy.mjs"
 groups = [
   "metadata",
   "frontend",
@@ -55,82 +56,6 @@ acceptance_groups = [
   "reproducibility",
 ]
 
-[[validation.rules]]
-name = "docs"
-patterns = ["*.md", "docs/**"]
-groups = []
-
-[[validation.rules]]
-name = "build-policy"
-patterns = [
-  "build-support/**",
-  "plugin.toml",
-  "uv.lock",
-  "version.txt",
-  ".github/**",
-  "Directory.Build.*",
-  "global.json",
-  "package.json",
-  "pnpm-lock.yaml",
-  "pnpm-workspace.yaml",
-  ".node-version",
-  ".python-version",
-  "eslint.config.mjs",
-  "knip.json",
-  ".prettier*",
-  "pyproject.toml",
-  ".editorconfig",
-  ".gitignore",
-  ".dockerignore",
-  "release-please-config.json",
-  ".release-please-manifest.json",
-  "LICENSE",
-  "NOTICE",
-  "GPL-3.0.txt",
-  "pyproject.toml",
-]
-groups = [
-  "metadata",
-  "frontend",
-  "backend",
-  "tooling",
-  "workflow",
-  "rendering",
-  "performance",
-  "artifacts",
-]
-
-[[validation.rules]]
-name = "backend"
-patterns = ["src/**", "vendor/**", "tests/backend/**"]
-groups = [
-  "backend",
-  "tooling",
-  "workflow",
-  "rendering",
-  "performance",
-  "artifacts",
-]
-
-[[validation.rules]]
-name = "frontend"
-patterns = ["frontend/**", "tests/browser/**"]
-groups = ["frontend", "workflow", "rendering", "performance", "artifacts"]
-
-[[validation.rules]]
-name = "tooling"
-patterns = [
-  "scripts/**",
-  "tests/tooling/**",
-  "tests/installation/**",
-  "tests/__init__.py",
-]
-groups = ["tooling", "artifacts"]
-
-[[validation.rules]]
-name = "automation"
-patterns = ["renovate.json"]
-groups = ["metadata", "tooling"]
 
 [validation.job_names]
 rendering = [
@@ -165,7 +90,6 @@ runner = "ubuntu-24.04"
 
 [images]
 playwright = "mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea"
-actionlint = "rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
 
 [architecture.edges]
 "src/Core/LyricBridge.Core.csproj" = []
