@@ -1,6 +1,6 @@
 {
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-    "extends": ["github>rakuzen25/jellyfin-plugin-toolkit:tooling#v0.5.3", "github>rakuzen25/jellyfin-plugin-toolkit#v0.5.3"],
+    "extends": ["github>rakuzen25/jellyfin-plugin-toolkit:tooling#v0.6.1", "github>rakuzen25/jellyfin-plugin-toolkit#v0.6.1"],
     "packageRules": [
         {
             "description": ["Pre-1.0 esbuild minor versions can break build behavior."],
@@ -49,25 +49,6 @@
             "matchPackageNames": ["typescript"],
             "matchDepNames": ["@typescript/old"],
             "allowedVersions": ">=6 <7"
-        },
-        {
-            "description": ["Toolkit references are derived by trusted synchronization, never updated independently."],
-            "matchPackageNames": ["rakuzen25/jellyfin-plugin-toolkit", "rakuzen25/jellyfin-plugin-toolkit/**"],
-            "groupName": "Jellyfin plugin toolkit",
-            "groupSlug": "jellyfin-plugin-toolkit",
-            "automerge": false,
-            "separateMajorMinor": false,
-            "enabled": false
-        },
-        {
-            "description": ["Only the canonical toolkit wheel URL may select a new published release."],
-            "matchManagers": ["custom.regex"],
-            "matchDatasources": ["github-releases"],
-            "matchPackageNames": ["rakuzen25/jellyfin-plugin-toolkit"],
-            "matchFileNames": ["pyproject.toml"],
-            "enabled": true,
-            "minimumReleaseAge": null,
-            "minimumReleaseAgeBuffer": null
         }
     ],
     "gitIgnoredAuthors": ["342669125+finchaser-3-0[bot]@users.noreply.github.com"]

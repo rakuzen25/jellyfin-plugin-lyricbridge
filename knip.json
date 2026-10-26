@@ -2,7 +2,7 @@
     "$schema": "https://unpkg.com/knip@6/schema.json",
     "workspaces": {
         ".": {
-            "entry": ["tests/tooling/**/*.test.mjs"],
+            "entry": ["tests/tooling/**/*.test.mjs", "tests/tooling/renovate-policy.mjs"],
             "project": ["*.mjs", "tests/tooling/**/*.mjs"],
             "ignoreDependencies": [
                 "@taplo/cli",
