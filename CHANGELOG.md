@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.3.2...v0.3.3) (2026-10-26)
+
+
+### Bug Fixes
+
+* **tooling:** adopt shared Python setup and dependency automation ([#60](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/issues/60)) ([a8c443d](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/a8c443d642295efeab5134a7b6350b5ac2d68a4d))
+
 ## [0.3.2](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.3.1...v0.3.2) (2026-10-23)
 
 
