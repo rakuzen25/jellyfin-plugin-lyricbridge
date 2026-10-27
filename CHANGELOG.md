@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.3.3...v0.3.4) (2026-10-27)
+
+
+### Bug Fixes
+
+* adopt public release receipt contract ([#65](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/issues/65)) ([93b0418](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/commit/93b041872d4b0060bf5201d08d69c13deb882d58))
+
 ## [0.3.3](https://github.com/rakuzen25/jellyfin-plugin-lyricbridge/compare/v0.3.2...v0.3.3) (2026-10-26)
 
 
