@@ -27,7 +27,7 @@ Packaging reads the versioned changelog section and its date. Preserve their str
 
 ## Verify the shared release signer
 
-The catalog independently approves the toolkit repository, immutable source revision and reusable release workflow signer. The source ZIP contains the exact toolkit wheel, matching source distribution and `uv.lock`. A release receipt cannot reduce catalog-required assets or checks. Historical LyricBridge receipts remain supported under their existing policy.
+The catalog independently approves the toolkit repository, immutable source revision and reusable release workflow signer. The source ZIP contains the exact toolkit wheel, matching source distribution and `uv.lock`. A release receipt cannot reduce catalog-required assets or checks. Public receipts use schema 7 independently of internal CI evidence versions; the catalog applies this public contract to every release.
 
 ## Verify and publish the draft
 
