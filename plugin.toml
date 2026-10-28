@@ -69,24 +69,9 @@ performance = [
   "performance (stress-mobile-chromium)",
 ]
 
-[validation.browser_inputs.performance]
-files = [
-  "tests/browser/performance/**",
-  "tests/browser/fixtures/**",
-  "tests/browser/playwright.config.cjs",
-  "tests/browser/groups.json",
-  "tests/browser/package.json",
-]
-assets = [
-  "demo.html",
-  "lyricbridge.js",
-  "lyricbridge.css",
-  "jellyfin-lyric-motion.js",
-  "jellyfin-lyric-motion.css",
-]
-projects = ["stress-chromium", "stress-mobile-chromium"]
-workers = 1
-runner = "ubuntu-24.04"
+# Use standard source fingerprints for performance validation. The optional
+# emitted-asset plan requires identical hosted runner image versions across jobs,
+# which GitHub does not guarantee during image rollouts.
 
 [images]
 playwright = "mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea"
