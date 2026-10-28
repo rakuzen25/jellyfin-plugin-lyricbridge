@@ -7,7 +7,7 @@ dependencies = [
 ]
 
 [tool.uv]
-required-version = "==0.13.5"
+required-version = "==0.13.6"
 python-preference = "only-managed"
 exclude-newer = "1 day"
 
