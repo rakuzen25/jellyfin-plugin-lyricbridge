@@ -18,21 +18,21 @@
         "@eslint/js": "10.0.1",
         "@taplo/cli": "0.7.0",
         "@typescript/native": "npm:typescript@7.0.2",
-        "eslint": "10.13.0",
+        "eslint": "10.15.0",
         "eslint-config-prettier": "10.1.8",
-        "globals": "17.13.0",
-        "knip": "6.43.0",
-        "prettier": "3.9.10",
+        "globals": "17.14.0",
+        "knip": "6.47.0",
+        "prettier": "3.10.1",
         "typescript": "npm:@typescript/typescript6@6.0.2",
         "typescript-eslint": "8.72.1",
         "chokidar": "6.0.0",
-        "http-proxy-middleware": "4.2.1",
+        "http-proxy-middleware": "4.2.2",
         "remark-cli": "12.0.1",
         "remark-validate-links": "13.1.0",
         "remark-lint": "10.0.1",
         "remark-lint-no-undefined-references": "5.0.2",
         "remark-gfm": "4.0.1",
         "unist-util-visit": "5.2.0",
-        "hast-util-from-html": "2.0.3"
+        "hast-util-from-html": "2.1.0"
     }
 }
