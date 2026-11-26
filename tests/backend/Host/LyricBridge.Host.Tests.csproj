@@ -23,6 +23,6 @@
     <Reference Include="$(JellyfinReferenceDir)/Jellyfin.Extensions.dll" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="xunit.v3" Version="4.0.2" PrivateAssets="all" />
+    <PackageReference Include="xunit.v3" Version="4.0.3" PrivateAssets="all" />
   </ItemGroup>
 </Project>
