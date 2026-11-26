@@ -8,6 +8,6 @@
   <ItemGroup>
     <Compile Include="../Support/ServiceFixtures.cs" Link="ServiceFixtures.cs" />
     <ProjectReference Include="../../../src/Core/LyricBridge.Core.csproj" />
-    <PackageReference Include="xunit.v3" Version="4.0.2" PrivateAssets="all" />
+    <PackageReference Include="xunit.v3" Version="4.0.3" PrivateAssets="all" />
   </ItemGroup>
 </Project>
